@@ -1,0 +1,12 @@
+{
+  "name": "super-lms-backend",
+  "version": "1.0.0",
+  "description": "Backend server for Super LMS",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
