@@ -2,10 +2,14 @@
 
 const express = require("express");
 const routes = require("./routes");
+const db = require("../database/db");
 
 const app = express();
 
 app.use(express.json());
+
+// Connect database
+db.connectDatabase();
 
 // Load API routes
 app.use("/api", routes);
