@@ -4,13 +4,12 @@ const router = express.Router();
 const userService = require("../services/user-service");
 const courseService = require("../services/course-service/course-service");
 const lessonService = require("../services/lesson-service/lesson-service");
-
+const enrollmentService = require("../services/enrollment-service/enrollment-service");
 
 // =========================
 // USER ROUTES
 // =========================
 
-// GET all users
 router.get("/users", async (req, res) => {
   try {
     const users = await userService.getAllUsers();
@@ -20,7 +19,6 @@ router.get("/users", async (req, res) => {
   }
 });
 
-// CREATE user
 router.post("/users", async (req, res) => {
   try {
     const newUser = await userService.createUser(req.body);
@@ -30,12 +28,10 @@ router.post("/users", async (req, res) => {
   }
 });
 
-
 // =========================
 // COURSE ROUTES
 // =========================
 
-// GET all courses
 router.get("/courses", async (req, res) => {
   try {
     const courses = await courseService.getAllCourses();
@@ -45,7 +41,6 @@ router.get("/courses", async (req, res) => {
   }
 });
 
-// CREATE course
 router.post("/courses", async (req, res) => {
   try {
     const newCourse = await courseService.createCourse(req.body);
@@ -55,12 +50,10 @@ router.post("/courses", async (req, res) => {
   }
 });
 
-
 // =========================
 // LESSON ROUTES
 // =========================
 
-// GET all lessons
 router.get("/lessons", async (req, res) => {
   try {
     const lessons = await lessonService.getAllLessons();
@@ -70,13 +63,34 @@ router.get("/lessons", async (req, res) => {
   }
 });
 
-// CREATE lesson
 router.post("/lessons", async (req, res) => {
   try {
     const newLesson = await lessonService.createLesson(req.body);
     res.json(newLesson);
   } catch (error) {
     res.status(500).json({ error: "Failed to create lesson" });
+  }
+});
+
+// =========================
+// ENROLLMENT ROUTES
+// =========================
+
+router.get("/enrollments", async (req, res) => {
+  try {
+    const enrollments = await enrollmentService.getAllEnrollments();
+    res.json(enrollments);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch enrollments" });
+  }
+});
+
+router.post("/enrollments", async (req, res) => {
+  try {
+    const newEnrollment = await enrollmentService.createEnrollment(req.body);
+    res.json(newEnrollment);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create enrollment" });
   }
 });
 
