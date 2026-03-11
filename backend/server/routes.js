@@ -7,6 +7,7 @@ const lessonService = require("../services/lesson-service/lesson-service");
 const enrollmentService = require("../services/enrollment-service/enrollment-service");
 const assignmentService = require("../services/assignment-service/assignment-service");
 const submissionService = require("../services/submission-service/submission-service");
+const gradingService = require("../services/grading-service/grading-service");
 
 // =========================
 // USER ROUTES
@@ -137,6 +138,28 @@ router.post("/submissions", async (req, res) => {
     res.json(newSubmission);
   } catch (error) {
     res.status(500).json({ error: "Failed to create submission" });
+  }
+});
+
+// =========================
+// GRADE ROUTES
+// =========================
+
+router.get("/grades", async (req, res) => {
+  try {
+    const grades = await gradingService.getAllGrades();
+    res.json(grades);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch grades" });
+  }
+});
+
+router.post("/grades", async (req, res) => {
+  try {
+    const newGrade = await gradingService.createGrade(req.body);
+    res.json(newGrade);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create grade" });
   }
 });
 
