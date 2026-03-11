@@ -1,20 +1,13 @@
 // User Service
 
-const users = [];
+const userModel = require("../database/users/user-model");
 
 function getAllUsers() {
-  return users;
+  return userModel.getUsers();
 }
 
 function createUser(user) {
-  const newUser = {
-    id: users.length + 1,
-    ...user
-  };
-
-  users.push(newUser);
-
-  return newUser;
+  return userModel.insertUser(user);
 }
 
 module.exports = {
