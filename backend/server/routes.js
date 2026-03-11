@@ -3,6 +3,8 @@ const router = express.Router();
 
 const userService = require("../services/user-service");
 const courseService = require("../services/course-service/course-service");
+const lessonService = require("../services/lesson-service/lesson-service");
+
 
 // =========================
 // USER ROUTES
@@ -50,6 +52,31 @@ router.post("/courses", async (req, res) => {
     res.json(newCourse);
   } catch (error) {
     res.status(500).json({ error: "Failed to create course" });
+  }
+});
+
+
+// =========================
+// LESSON ROUTES
+// =========================
+
+// GET all lessons
+router.get("/lessons", async (req, res) => {
+  try {
+    const lessons = await lessonService.getAllLessons();
+    res.json(lessons);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch lessons" });
+  }
+});
+
+// CREATE lesson
+router.post("/lessons", async (req, res) => {
+  try {
+    const newLesson = await lessonService.createLesson(req.body);
+    res.json(newLesson);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create lesson" });
   }
 });
 
