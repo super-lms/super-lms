@@ -6,6 +6,7 @@ const courseService = require("../services/course-service/course-service");
 const lessonService = require("../services/lesson-service/lesson-service");
 const enrollmentService = require("../services/enrollment-service/enrollment-service");
 const assignmentService = require("../services/assignment-service/assignment-service");
+const submissionService = require("../services/submission-service/submission-service");
 
 // =========================
 // USER ROUTES
@@ -114,6 +115,28 @@ router.post("/assignments", async (req, res) => {
     res.json(newAssignment);
   } catch (error) {
     res.status(500).json({ error: "Failed to create assignment" });
+  }
+});
+
+// =========================
+// SUBMISSION ROUTES
+// =========================
+
+router.get("/submissions", async (req, res) => {
+  try {
+    const submissions = await submissionService.getAllSubmissions();
+    res.json(submissions);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch submissions" });
+  }
+});
+
+router.post("/submissions", async (req, res) => {
+  try {
+    const newSubmission = await submissionService.createSubmission(req.body);
+    res.json(newSubmission);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create submission" });
   }
 });
 
