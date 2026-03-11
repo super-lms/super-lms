@@ -1,20 +1,23 @@
 // User Database Model
 
-let users = [];
+const { pool } = require("../db");
 
-function getUsers() {
-  return users;
+async function getUsers() {
+  const result = await pool.query("SELECT * FROM users ORDER BY id ASC");
+  return result.rows;
 }
 
-function insertUser(user) {
-  const newUser = {
-    id: users.length + 1,
-    ...user
-  };
+async function insertUser(user) {
+  const { first_name, last_name, email, password_hash, role, school_id } = user;
 
-  users.push(newUser);
+  const result = await pool.query(
+    `INSERT INTO users (first_name, last_name, email, password_hash, role, school_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING *`,
+    [first_name, last_name, email, password_hash, role, school_id]
+  );
 
-  return newUser;
+  return result.rows[0];
 }
 
 module.exports = {
