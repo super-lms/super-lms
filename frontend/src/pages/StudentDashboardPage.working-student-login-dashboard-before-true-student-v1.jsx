@@ -1,0 +1,1445 @@
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { useAuth } from "../AuthContext.jsx"
+
+function SectionHeader({ title, subtitle, action }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: "12px",
+        flexWrap: "wrap",
+        marginBottom: "16px",
+      }}
+    >
+      <div>
+        <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800 }}>{title}</h2>
+        {subtitle ? (
+          <p style={{ margin: "6px 0 0 0", fontSize: "0.95rem", lineHeight: 1.5, color: "#4b5563" }}>
+            {subtitle}
+          </p>
+        ) : null}
+      </div>
+      {action || null}
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, helper }) {
+  return (
+    <div style={summaryCardStyle}>
+      <div style={summaryLabelStyle}>{label}</div>
+      <div style={{ fontSize: "2rem", fontWeight: 800, lineHeight: 1 }}>{value}</div>
+      <div style={summaryHelperStyle}>{helper}</div>
+    </div>
+  )
+}
+
+function NoticeBox({ children, type = "info" }) {
+  const borderColor = type === "error" ? "#d1a1a1" : "#cfd8e3"
+  const background = type === "error" ? "#fff8f8" : "#f8fafc"
+
+  return (
+    <div style={{ border: `1px solid ${borderColor}`, borderRadius: "12px", padding: "14px 16px", background, lineHeight: 1.5 }}>
+      {children}
+    </div>
+  )
+}
+
+function ActionButton({ children, onClick, type = "button", quiet = false, disabled = false }) {
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} style={buttonStyle(quiet, disabled)}>
+      {children}
+    </button>
+  )
+}
+
+function DetailCard({ title, children }) {
+  return (
+    <div style={detailCardStyle}>
+      <div style={{ fontWeight: 800, marginBottom: "10px" }}>{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function CourseOverviewCard({ course, isSelected, onSelect }) {
+  return (
+    <button type="button" onClick={() => onSelect(String(course.id))} style={courseButtonStyle(isSelected)}>
+      <div style={{ fontWeight: 800, marginBottom: "6px" }}>{course.title || course.class_name || "Untitled Course"}</div>
+      <div style={{ fontSize: "0.95rem", lineHeight: 1.5, color: "#4b5563" }}>
+        {course.description || "No course description available."}
+      </div>
+    </button>
+  )
+}
+
+function AssignmentCard({ assignment, compact = false, footer = null, submissionStatus = "" }) {
+  const dueLabel = formatDueDate(assignment?.due_date)
+  const status = getAssignmentStatus(assignment?.due_date)
+
+  return (
+    <div style={assignmentCardStyle(compact)}>
+      <div style={assignmentHeaderStyle}>
+        <h3 style={{ margin: 0 }}>{assignment?.title || "Untitled Assignment"}</h3>
+        <div style={statusPillStyle}>{status}</div>
+      </div>
+
+      <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
+        {assignment?.description || "No assignment description available."}
+      </p>
+
+      <div style={assignmentMetaStyle}>
+        <div>
+          <strong>Due:</strong> {dueLabel}
+        </div>
+        {assignment?.points_possible !== undefined && assignment?.points_possible !== null ? (
+          <div>
+            <strong>Points:</strong> {assignment.points_possible}
+          </div>
+        ) : null}
+        {submissionStatus ? (
+          <div>
+            <strong>Submission:</strong> {submissionStatus}
+          </div>
+        ) : null}
+      </div>
+
+      {footer ? <div style={{ marginTop: "14px" }}>{footer}</div> : null}
+    </div>
+  )
+}
+
+function LessonCard({ lesson }) {
+  return (
+    <div style={lessonCardStyle}>
+      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{lesson.title || "Untitled Lesson"}</h3>
+      <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
+        {lesson.description || "No lesson description available."}
+      </p>
+    </div>
+  )
+}
+
+function ResultCard({ assignment, submissionState, onOpen }) {
+  const submission = submissionState?.submission || null
+  const submissionStatusLabel = formatSubmissionStatus(submissionState?.submission_status || "not_submitted")
+
+  return (
+    <div style={resultCardStyle}>
+      <div style={resultHeaderStyle}>
+        <h3 style={{ margin: 0 }}>{assignment?.title || "Untitled Assignment"}</h3>
+        <ActionButton quiet onClick={onOpen}>
+          View Submission
+        </ActionButton>
+      </div>
+
+      <div style={resultGridStyle}>
+        <DetailCard title="Due Date">
+          <div>{formatDueDate(assignment?.due_date)}</div>
+        </DetailCard>
+
+        <DetailCard title="Submission">
+          <div>{submissionStatusLabel}</div>
+        </DetailCard>
+
+        <DetailCard title="Score">
+          <div>{submission?.score === null || submission?.score === undefined ? "Not graded" : submission.score}</div>
+        </DetailCard>
+
+        <DetailCard title="Grade">
+          <div>{submission?.grade || "—"}</div>
+        </DetailCard>
+      </div>
+
+      <DetailCard title="Teacher Feedback">
+        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
+          {submission?.feedback || "No feedback yet."}
+        </div>
+      </DetailCard>
+    </div>
+  )
+}
+
+function SubmissionEditor({
+  assignment,
+  submissionState,
+  submissionLoading,
+  submissionSaving,
+  submissionSaveMessage,
+  submissionErrorText,
+  draftText,
+  onDraftChange,
+  onSave,
+  onClose,
+  onBackToLearningPaths,
+  attachments = [],
+  attachmentLoading = false,
+  attachmentUploading = false,
+  attachmentErrorText = "",
+  onAttachmentFileChange,
+}) {
+  const submissionStatusLabel = formatSubmissionStatus(submissionState?.submission_status || "not_submitted")
+  const existingFeedback = submissionState?.submission?.feedback || ""
+  const existingScore = submissionState?.submission?.score
+  const existingContent = submissionState?.submission?.content || ""
+
+  return (
+    <div style={submissionEditorStyle}>
+      <SectionHeader
+        title={assignment?.title || "Assignment Submission"}
+        subtitle="Review the assignment details, write your response, and save your work."
+        action={<ActionButton quiet onClick={onClose}>Close</ActionButton>}
+      />
+
+      <div style={submissionStatsGridStyle}>
+        <DetailCard title="Due Date">
+          <div>{formatDueDate(assignment?.due_date)}</div>
+        </DetailCard>
+
+        <DetailCard title="Submission Status">
+          <div>{submissionStatusLabel}</div>
+        </DetailCard>
+
+        <DetailCard title="Current Score">
+          <div>{existingScore === null || existingScore === undefined ? "Not graded" : existingScore}</div>
+        </DetailCard>
+      </div>
+
+      {assignment?.description ? (
+        <div style={{ marginBottom: "16px", color: "#4b5563", lineHeight: 1.5 }}>
+          <strong>Assignment Details:</strong> {assignment.description}
+        </div>
+      ) : null}
+
+      {submissionLoading ? (
+        <NoticeBox>Loading submission details...</NoticeBox>
+      ) : (
+        <>
+          {submissionErrorText ? <NoticeBox type="error">{submissionErrorText}</NoticeBox> : null}
+
+          {submissionSaveMessage ? (
+            <div style={{ marginTop: submissionErrorText ? "12px" : 0, marginBottom: "12px" }}>
+              <NoticeBox>{submissionSaveMessage}</NoticeBox>
+            </div>
+          ) : null}
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Your Response</label>
+            <p style={{ marginTop: "4px", marginBottom: "8px", color: "#4b5563", lineHeight: 1.5 }}>
+              Write your answer, reflection, notes, or draft below. You can update it and save again.
+            </p>
+            <textarea
+              rows="10"
+              value={draftText}
+              onChange={(e) => onDraftChange(e.target.value)}
+              style={textareaStyle}
+              placeholder="Write your response here."
+            />
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Attach Files</label>
+            <p style={{ marginTop: "4px", marginBottom: "8px", color: "#4b5563", lineHeight: 1.5 }}>
+              Add a document, image, or file that supports your submission.
+            </p>
+
+            <input
+              type="file"
+              onChange={onAttachmentFileChange}
+              disabled={attachmentUploading}
+              style={fileInputStyle}
+            />
+
+            {attachmentUploading ? (
+              <div style={{ marginTop: "10px" }}>
+                <NoticeBox>Uploading attachment...</NoticeBox>
+              </div>
+            ) : null}
+
+            {attachmentErrorText ? (
+              <div style={{ marginTop: "10px" }}>
+                <NoticeBox type="error">{attachmentErrorText}</NoticeBox>
+              </div>
+            ) : null}
+
+            <div style={{ marginTop: "12px" }}>
+              {attachmentLoading ? (
+                <NoticeBox>Loading attachments...</NoticeBox>
+              ) : attachments.length === 0 ? (
+                <NoticeBox>No files attached yet.</NoticeBox>
+              ) : (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {attachments.map((attachment) => (
+                    <a
+                      key={attachment.id}
+                      href={`http://localhost:3000${attachment.file_path}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={attachmentLinkStyle}
+                    >
+                      {attachment.original_name || "Attached file"}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+            <ActionButton onClick={onSave} disabled={submissionSaving || String(draftText || "").trim() === ""}>
+              {submissionSaving ? "Saving Submission..." : "Save Submission"}
+            </ActionButton>
+            <ActionButton quiet onClick={onClose}>
+              Done
+            </ActionButton>
+            <ActionButton quiet onClick={onBackToLearningPaths}>
+              Back to Learning Paths
+            </ActionButton>
+          </div>
+
+          <div style={submissionPreviewGridStyle}>
+            <DetailCard title="Saved Submission Preview">
+              <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
+                {existingContent || "No submission saved yet."}
+              </div>
+            </DetailCard>
+
+            <DetailCard title="Teacher Feedback">
+              <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
+                {existingFeedback || "No feedback yet."}
+              </div>
+            </DetailCard>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function getAssignmentCourseId(assignment) {
+  return assignment.class_id ?? assignment.course_id ?? assignment.courseId ?? ""
+}
+
+function getLessonCourseId(lesson) {
+  return lesson.course_id ?? lesson.courseId ?? lesson.class_id ?? ""
+}
+
+function formatDueDate(value) {
+  if (!value) return "No due date"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
+  return date.toLocaleDateString()
+}
+
+function getAssignmentStatus(dueDateValue) {
+  if (!dueDateValue) return "No due date"
+
+  const dueDate = new Date(dueDateValue)
+  if (Number.isNaN(dueDate.getTime())) return "Scheduled"
+
+  const now = new Date()
+  const dueOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate())
+  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffMs = dueOnly.getTime() - todayOnly.getTime()
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) return "Past due"
+  if (diffDays === 0) return "Due today"
+  if (diffDays <= 7) return "Due soon"
+  return "Upcoming"
+}
+
+function formatSubmissionStatus(value) {
+  if (value === "submitted") return "Submitted"
+  if (value === "not_submitted") return "Not submitted"
+  return "Unknown"
+}
+
+function formatAverage(value) {
+  if (value === null || value === undefined) return "—"
+  if (Number.isNaN(Number(value))) return "—"
+  return `${Number(value).toFixed(1)}%`
+}
+
+export default function StudentDashboardPage() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const submissionEditorRef = useRef(null)
+
+  const [courses, setCourses] = useState([])
+  const [lessons, setLessons] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [selectedCourseId, setSelectedCourseId] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [errorText, setErrorText] = useState("")
+
+  const [selectedSubmissionAssignmentId, setSelectedSubmissionAssignmentId] = useState("")
+  const [submissionStateByAssignmentId, setSubmissionStateByAssignmentId] = useState({})
+  const [submissionLoadingId, setSubmissionLoadingId] = useState("")
+  const [submissionSavingId, setSubmissionSavingId] = useState("")
+  const [submissionDraftText, setSubmissionDraftText] = useState("")
+  const [submissionErrorText, setSubmissionErrorText] = useState("")
+  const [submissionSaveMessage, setSubmissionSaveMessage] = useState("")
+  const [submissionAttachmentsByAssignmentId, setSubmissionAttachmentsByAssignmentId] = useState({})
+  const [attachmentLoadingId, setAttachmentLoadingId] = useState("")
+  const [attachmentUploadingId, setAttachmentUploadingId] = useState("")
+  const [attachmentErrorText, setAttachmentErrorText] = useState("")
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadStudentDashboard() {
+      const studentEmail = String(user?.email || "").trim().toLowerCase()
+
+      if (!studentEmail) {
+        if (!isMounted) return
+        setCourses([])
+        setLessons([])
+        setAssignments([])
+        setSelectedCourseId("")
+        setErrorText("Student email is missing from the current session.")
+        setLoading(false)
+        return
+      }
+
+      try {
+        const [coursesResponse, assignmentsResponse] = await Promise.all([
+          fetch("http://localhost:3000/api/classes"),
+          fetch("http://localhost:3000/api/assignments"),
+        ])
+
+        if (!coursesResponse.ok || !assignmentsResponse.ok) {
+          throw new Error("Could not load student learning data.")
+        }
+
+        const [coursesData, assignmentsData] = await Promise.all([
+          coursesResponse.json(),
+          assignmentsResponse.json(),
+        ])
+
+        const safeCourses = Array.isArray(coursesData) ? coursesData : []
+        const safeLessons = []
+        const safeAssignments = Array.isArray(assignmentsData) ? assignmentsData : []
+
+        const visibleCourses = []
+
+        for (const course of safeCourses) {
+          const rosterResponse = await fetch(`http://localhost:3000/api/class-roster/${course.id}`)
+
+          if (!rosterResponse.ok) {
+            continue
+          }
+
+          const rosterData = await rosterResponse.json()
+          const rosterStudents = Array.isArray(rosterData.students) ? rosterData.students : []
+
+          const isEnrolled = rosterStudents.some((student) => {
+            return String(student.email || "").trim().toLowerCase() === studentEmail
+          })
+
+          if (isEnrolled) {
+            visibleCourses.push(course)
+          }
+        }
+
+        if (!isMounted) return
+
+        const visibleCourseIds = new Set(visibleCourses.map((course) => String(course.id)))
+
+        const visibleLessons = safeLessons.filter((lesson) =>
+          visibleCourseIds.has(String(getLessonCourseId(lesson)))
+        )
+
+        const visibleAssignments = safeAssignments.filter((assignment) =>
+          visibleCourseIds.has(String(getAssignmentCourseId(assignment)))
+        )
+
+        setCourses(visibleCourses)
+        setLessons(visibleLessons)
+        setAssignments(visibleAssignments)
+        setErrorText("")
+        setLoading(false)
+
+        if (visibleCourses.length > 0) {
+          setSelectedCourseId((currentSelectedCourseId) => {
+            const currentStillVisible = visibleCourses.some(
+              (course) => String(course.id) === String(currentSelectedCourseId)
+            )
+
+            if (currentStillVisible) {
+              return currentSelectedCourseId
+            }
+
+            return String(visibleCourses[0].id)
+          })
+        } else {
+          setSelectedCourseId("")
+        }
+      } catch (err) {
+        console.error("Error loading student dashboard:", err)
+
+        if (!isMounted) return
+
+        setCourses([])
+        setLessons([])
+        setAssignments([])
+        setSelectedCourseId("")
+        setErrorText("Could not load student learning data.")
+        setLoading(false)
+      }
+    }
+
+    loadStudentDashboard()
+
+    return () => {
+      isMounted = false
+    }
+  }, [user?.email])
+
+  const selectedCourse = useMemo(() => {
+    return courses.find((course) => String(course.id) === String(selectedCourseId)) || null
+  }, [courses, selectedCourseId])
+
+  const filteredLessons = useMemo(() => {
+    if (!selectedCourseId) return []
+    return lessons.filter((lesson) => String(getLessonCourseId(lesson)) === String(selectedCourseId))
+  }, [lessons, selectedCourseId])
+
+  const filteredAssignments = useMemo(() => {
+    if (!selectedCourseId) return []
+    return assignments.filter((assignment) => String(getAssignmentCourseId(assignment)) === String(selectedCourseId))
+  }, [assignments, selectedCourseId])
+
+  const upcomingAssignments = useMemo(() => {
+    const list = selectedCourseId ? filteredAssignments : assignments
+
+    return [...list].sort((a, b) => {
+      const aTime = a?.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER
+      const bTime = b?.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER
+      return aTime - bTime
+    })
+  }, [assignments, filteredAssignments, selectedCourseId])
+
+  const recentLessons = useMemo(() => {
+    const list = selectedCourseId ? filteredLessons : lessons
+    return list.slice(0, 4)
+  }, [filteredLessons, lessons, selectedCourseId])
+
+  const dueSoonCount = useMemo(() => {
+    return upcomingAssignments.filter((assignment) => {
+      const status = getAssignmentStatus(assignment?.due_date)
+      return status === "Due today" || status === "Due soon"
+    }).length
+  }, [upcomingAssignments])
+
+  const submittedCount = useMemo(() => {
+    const list = selectedCourseId ? filteredAssignments : assignments
+
+    return list.filter((assignment) => {
+      const assignmentId = String(assignment.id)
+      const submissionState = submissionStateByAssignmentId[assignmentId]
+      return submissionState?.submission_status === "submitted"
+    }).length
+  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+
+  const gradedCount = useMemo(() => {
+    const list = selectedCourseId ? filteredAssignments : assignments
+
+    return list.filter((assignment) => {
+      const assignmentId = String(assignment.id)
+      const submissionState = submissionStateByAssignmentId[assignmentId]
+      const score = submissionState?.submission?.score
+      return score !== null && score !== undefined && !Number.isNaN(Number(score))
+    }).length
+  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+
+  const gradedAverage = useMemo(() => {
+    const list = selectedCourseId ? filteredAssignments : assignments
+
+    const gradedScores = list
+      .map((assignment) => {
+        const assignmentId = String(assignment.id)
+        const submissionState = submissionStateByAssignmentId[assignmentId]
+        return submissionState?.submission?.score
+      })
+      .filter((score) => score !== null && score !== undefined && !Number.isNaN(Number(score)))
+      .map((score) => Number(score))
+
+    if (gradedScores.length === 0) return null
+
+    const total = gradedScores.reduce((sum, score) => sum + score, 0)
+    return total / gradedScores.length
+  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+
+  const visibleAssignmentCount = selectedCourseId ? filteredAssignments.length : assignments.length
+  const notSubmittedCount = Math.max(visibleAssignmentCount - submittedCount, 0)
+  const progressCompletionPercent = visibleAssignmentCount > 0
+    ? Math.round((submittedCount / visibleAssignmentCount) * 100)
+    : 0
+
+  const selectedSubmissionAssignment = useMemo(() => {
+    if (!selectedSubmissionAssignmentId) return null
+    return assignments.find((assignment) => String(assignment.id) === String(selectedSubmissionAssignmentId)) || null
+  }, [assignments, selectedSubmissionAssignmentId])
+
+  const selectedSubmissionState = selectedSubmissionAssignmentId
+    ? submissionStateByAssignmentId[String(selectedSubmissionAssignmentId)] || null
+    : null
+
+  const selectedSubmissionAttachments = selectedSubmissionAssignmentId
+    ? submissionAttachmentsByAssignmentId[String(selectedSubmissionAssignmentId)] || []
+    : []
+
+  const resultAssignments = useMemo(() => {
+    const list = selectedCourseId ? filteredAssignments : assignments
+
+    return [...list].sort((a, b) => {
+      const aState = submissionStateByAssignmentId[String(a.id)]
+      const bState = submissionStateByAssignmentId[String(b.id)]
+      const aScore = aState?.submission?.score
+      const bScore = bState?.submission?.score
+      const aHasScore = aScore !== null && aScore !== undefined && !Number.isNaN(Number(aScore))
+      const bHasScore = bScore !== null && bScore !== undefined && !Number.isNaN(Number(bScore))
+
+      if (aHasScore && !bHasScore) return -1
+      if (!aHasScore && bHasScore) return 1
+
+      const aDue = a?.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER
+      const bDue = b?.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER
+
+      return aDue - bDue
+    })
+  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+
+  useEffect(() => {
+    let isCancelled = false
+
+    async function loadVisibleSubmissionStatuses() {
+      const studentEmail = String(user?.email || "").trim().toLowerCase()
+
+      if (!studentEmail) return
+
+      const visibleAssignments = selectedCourseId ? filteredAssignments : assignments
+
+      if (!Array.isArray(visibleAssignments) || visibleAssignments.length === 0) return
+
+      const assignmentsNeedingStatus = visibleAssignments.filter((assignment) => {
+        const assignmentId = String(assignment.id)
+        return !submissionStateByAssignmentId[assignmentId]
+      })
+
+      if (assignmentsNeedingStatus.length === 0) return
+
+      try {
+        const results = await Promise.all(
+          assignmentsNeedingStatus.map(async (assignment) => {
+            const assignmentId = String(assignment.id)
+            const response = await fetch(
+              `http://localhost:3000/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
+            )
+            const data = await response.json()
+
+            if (!response.ok) {
+              return { assignmentId, failed: true }
+            }
+
+            return { assignmentId, data, failed: false }
+          })
+        )
+
+        if (isCancelled) return
+
+        setSubmissionStateByAssignmentId((current) => {
+          const next = { ...current }
+
+          results.forEach((result) => {
+            if (!result.failed && result.data) {
+              next[result.assignmentId] = result.data
+            }
+          })
+
+          return next
+        })
+      } catch (err) {
+        console.error("Error loading visible submission statuses:", err)
+      }
+    }
+
+    loadVisibleSubmissionStatuses()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId, user?.email])
+
+  useEffect(() => {
+    if (!selectedSubmissionAssignmentId) return
+
+    const timeoutId = window.setTimeout(() => {
+      submissionEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [selectedSubmissionAssignmentId])
+
+  useEffect(() => {
+    const requestedAssignmentId = String(searchParams.get("assignmentId") || "").trim()
+
+    if (!requestedAssignmentId) return
+    if (loading) return
+    if (selectedSubmissionAssignmentId) return
+
+    const matchingAssignment = assignments.find((assignment) => {
+      return String(assignment.id) === requestedAssignmentId
+    })
+
+    if (!matchingAssignment) return
+
+    openSubmissionEditor(matchingAssignment)
+  }, [assignments, loading, searchParams, selectedSubmissionAssignmentId])
+
+  async function loadSubmissionAttachments(assignmentId, studentEmail) {
+    if (!assignmentId || !studentEmail) return
+
+    setAttachmentLoadingId(assignmentId)
+    setAttachmentErrorText("")
+
+    try {
+      const response = await fetch(
+        `http://localhost:3000/api/assignments/${assignmentId}/student-attachments?student_email=${encodeURIComponent(studentEmail)}`
+      )
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAttachmentErrorText(data.error || "Failed to load attachments.")
+        return
+      }
+
+      setSubmissionAttachmentsByAssignmentId((current) => ({
+        ...current,
+        [assignmentId]: Array.isArray(data.attachments) ? data.attachments : [],
+      }))
+    } catch (err) {
+      console.error("Error loading submission attachments:", err)
+      setAttachmentErrorText("Failed to load attachments.")
+    } finally {
+      setAttachmentLoadingId("")
+    }
+  }
+
+  async function openSubmissionEditor(assignment) {
+    const assignmentId = String(assignment.id)
+    const studentEmail = String(user?.email || "").trim().toLowerCase()
+
+    setSelectedSubmissionAssignmentId(assignmentId)
+    setSubmissionErrorText("")
+    setSubmissionSaveMessage("")
+    setAttachmentErrorText("")
+    setSubmissionLoadingId(assignmentId)
+
+    if (!studentEmail) {
+      setSubmissionDraftText("")
+      setSubmissionErrorText("Student email is missing from the current session.")
+      setSubmissionLoadingId("")
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:3000/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
+      )
+      const data = await response.json()
+
+      if (!response.ok) {
+        setSubmissionErrorText(data.error || "Failed to load submission details.")
+        setSubmissionDraftText("")
+        setSubmissionLoadingId("")
+        return
+      }
+
+      setSubmissionStateByAssignmentId((current) => ({
+        ...current,
+        [assignmentId]: data,
+      }))
+      setSubmissionDraftText(data?.submission?.content || "")
+      setSubmissionErrorText("")
+      await loadSubmissionAttachments(assignmentId, studentEmail)
+    } catch (err) {
+      console.error("Error loading student submission:", err)
+      setSubmissionErrorText("Failed to load submission details.")
+      setSubmissionDraftText("")
+    } finally {
+      setSubmissionLoadingId("")
+    }
+  }
+
+  async function handleAttachmentFileChange(event) {
+    const file = event.target.files?.[0] || null
+    const assignmentId = String(selectedSubmissionAssignmentId || "").trim()
+    const studentEmail = String(user?.email || "").trim().toLowerCase()
+
+    if (!file) return
+
+    if (!assignmentId) {
+      setAttachmentErrorText("Please choose an assignment first.")
+      event.target.value = ""
+      return
+    }
+
+    if (!studentEmail) {
+      setAttachmentErrorText("Student email is missing from the current session.")
+      event.target.value = ""
+      return
+    }
+
+    const formData = new FormData()
+    formData.append("student_email", studentEmail)
+    formData.append("attachment", file)
+
+    setAttachmentUploadingId(assignmentId)
+    setAttachmentErrorText("")
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/assignments/${assignmentId}/student-attachments`, {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAttachmentErrorText(data.error || "Failed to upload attachment.")
+        return
+      }
+
+      await loadSubmissionAttachments(assignmentId, studentEmail)
+    } catch (err) {
+      console.error("Error uploading submission attachment:", err)
+      setAttachmentErrorText("Failed to upload attachment.")
+    } finally {
+      setAttachmentUploadingId("")
+      event.target.value = ""
+    }
+  }
+
+  async function handleSaveSubmission() {
+    const assignmentId = String(selectedSubmissionAssignmentId || "").trim()
+    const studentName = String(user?.name || "Student").trim()
+    const studentEmail = String(user?.email || "").trim().toLowerCase()
+    const content = String(submissionDraftText || "").trim()
+
+    if (!assignmentId) {
+      setSubmissionErrorText("Please choose an assignment first.")
+      return
+    }
+
+    if (!studentEmail) {
+      setSubmissionErrorText("Student email is missing from the current session.")
+      return
+    }
+
+    if (!content) {
+      setSubmissionErrorText("Please enter submission text before saving.")
+      return
+    }
+
+    setSubmissionSavingId(assignmentId)
+    setSubmissionErrorText("")
+    setSubmissionSaveMessage("")
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/assignments/${assignmentId}/student-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_name: studentName,
+          student_email: studentEmail,
+          content,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setSubmissionErrorText(data.error || "Failed to save submission.")
+        setSubmissionSavingId("")
+        return
+      }
+
+      setSubmissionStateByAssignmentId((current) => ({
+        ...current,
+        [assignmentId]: data,
+      }))
+      setSubmissionDraftText(data?.submission?.content || "")
+      setSubmissionSaveMessage("Submission saved successfully.")
+    } catch (err) {
+      console.error("Error saving student submission:", err)
+      setSubmissionErrorText("Failed to save submission.")
+    } finally {
+      setSubmissionSavingId("")
+    }
+  }
+
+  function closeSubmissionEditor() {
+    setSelectedSubmissionAssignmentId("")
+    setSubmissionLoadingId("")
+    setSubmissionSavingId("")
+    setSubmissionDraftText("")
+    setSubmissionErrorText("")
+    setSubmissionSaveMessage("")
+    setAttachmentErrorText("")
+    setAttachmentLoadingId("")
+    setAttachmentUploadingId("")
+  }
+
+  function handleLogout() {
+    logout()
+    navigate("/login")
+  }
+
+  if (loading) {
+    return (
+      <div className="content-area">
+        <section className="panel">
+          <p>Loading student dashboard...</p>
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="topbar">
+        <h1>Student Portal</h1>
+        <p className="topbar-subtitle">
+          Welcome{user?.name ? `, ${user.name}` : ""}. Review your courses, assignments, lessons, and submissions in one place.
+        </p>
+      </div>
+
+      <div className="content-area">
+        <section className="panel">
+          <SectionHeader
+            title="Student Session"
+            subtitle="Use these actions to move through the student experience."
+            action={
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <ActionButton quiet onClick={() => navigate("/student-progress")}>
+                  Progress
+                </ActionButton>
+                <ActionButton quiet onClick={() => navigate("/student-learning-paths")}>
+                  Learning Paths
+                </ActionButton>
+                <ActionButton quiet onClick={() => navigate("/student-reports")}>
+                  Reports
+                </ActionButton>
+                <ActionButton onClick={handleLogout}>Logout</ActionButton>
+              </div>
+            }
+          />
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+            <DetailCard title="Student Name">
+              <div>{user?.name || "Student"}</div>
+            </DetailCard>
+
+            <DetailCard title="Email">
+              <div>{user?.email || "—"}</div>
+            </DetailCard>
+
+            <DetailCard title="Role">
+              <div>{user?.role || "student"}</div>
+            </DetailCard>
+          </div>
+        </section>
+
+        {errorText ? (
+          <section className="panel">
+            <NoticeBox type="error">{errorText}</NoticeBox>
+          </section>
+        ) : null}
+
+        <section className="panel">
+          <SectionHeader
+            title="My Progress Snapshot"
+            subtitle={selectedCourse ? `A quick view of your progress in ${selectedCourse.title || selectedCourse.class_name}.` : "Select a course to focus this snapshot on one class."}
+          />
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "14px" }}>
+            <DetailCard title="Current Average">
+              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{formatAverage(gradedAverage)}</div>
+              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
+                Based on returned graded work currently visible.
+              </div>
+            </DetailCard>
+
+            <DetailCard title="Submitted">
+              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{submittedCount} / {visibleAssignmentCount}</div>
+              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
+                {progressCompletionPercent}% of visible assignments submitted.
+              </div>
+            </DetailCard>
+
+            <DetailCard title="Not Submitted">
+              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{notSubmittedCount}</div>
+              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
+                Assignments still needing attention.
+              </div>
+            </DetailCard>
+
+            <DetailCard title="Graded">
+              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{gradedCount}</div>
+              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
+                Assignments with returned scores.
+              </div>
+            </DetailCard>
+
+            <DetailCard title="Due Soon">
+              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{dueSoonCount}</div>
+              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
+                Upcoming deadlines to watch.
+              </div>
+            </DetailCard>
+          </div>
+        </section>
+
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "16px" }}>
+          <SummaryCard label="Courses" value={courses.length} helper="Courses currently visible in the student portal." />
+          <SummaryCard
+            label="Due Soon"
+            value={dueSoonCount}
+            helper={selectedCourse ? `Assignments approaching due date in ${selectedCourse.title || selectedCourse.class_name}.` : "Assignments approaching due date across the portal."}
+          />
+          <SummaryCard
+            label="Submitted"
+            value={submittedCount}
+            helper={selectedCourseId ? "Assignments already submitted in the selected course." : "Assignments already submitted across the portal."}
+          />
+          <SummaryCard
+            label="Graded"
+            value={gradedCount}
+            helper={selectedCourseId ? "Assignments with returned scores in the selected course." : "Assignments with returned scores across the portal."}
+          />
+          <SummaryCard label="Average" value={formatAverage(gradedAverage)} helper="Average of graded assignment scores currently shown." />
+          <SummaryCard
+            label="Lessons"
+            value={selectedCourseId ? filteredLessons.length : lessons.length}
+            helper={selectedCourseId ? "Lessons for the selected course." : "Total lessons loaded into the student view."}
+          />
+          <SummaryCard
+            label="Assignments"
+            value={selectedCourseId ? filteredAssignments.length : assignments.length}
+            helper={selectedCourseId ? "Assignments for the selected course." : "Total assignments loaded into the student view."}
+          />
+        </section>
+
+        <section className="panel">
+          <SectionHeader title="My Courses" subtitle="Choose a course to focus the dashboard on that class." />
+
+          {courses.length === 0 ? (
+            <NoticeBox>No courses are currently available.</NoticeBox>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+              {courses.map((course) => (
+                <CourseOverviewCard
+                  key={course.id}
+                  course={course}
+                  isSelected={String(course.id) === String(selectedCourseId)}
+                  onSelect={setSelectedCourseId}
+                />
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: "18px", maxWidth: "460px" }}>
+            <label style={labelStyle}>Course</label>
+            <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} style={inputStyle}>
+              <option value="">Select Course</option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.title || course.class_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {selectedCourse ? (
+            <p style={{ marginTop: "16px", marginBottom: 0, color: "#4b5563" }}>
+              Viewing learning materials for <strong>{selectedCourse.title || selectedCourse.class_name}</strong>.
+            </p>
+          ) : (
+            <p style={{ marginTop: "16px", marginBottom: 0, color: "#4b5563" }}>
+              Select a course to load lessons and assignments.
+            </p>
+          )}
+        </section>
+
+        <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)", gap: "16px", alignItems: "start" }}>
+          <div className="panel">
+            <SectionHeader
+              title="Upcoming Assignments"
+              subtitle={selectedCourse ? `Assignments scheduled in ${selectedCourse.title || selectedCourse.class_name}.` : "Assignments scheduled across your visible courses."}
+            />
+
+            {!selectedCourseId ? (
+              <NoticeBox>Select a course above to view assignments.</NoticeBox>
+            ) : upcomingAssignments.length === 0 ? (
+              <NoticeBox>No assignments found for this course.</NoticeBox>
+            ) : (
+              <div style={{ display: "grid", gap: "14px" }}>
+                {upcomingAssignments.slice(0, 5).map((assignment) => {
+                  const cachedSubmissionState = submissionStateByAssignmentId[String(assignment.id)] || null
+
+                  return (
+                    <AssignmentCard
+                      key={assignment.id}
+                      assignment={assignment}
+                      submissionStatus={formatSubmissionStatus(cachedSubmissionState?.submission_status || "not_submitted")}
+                      footer={
+                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                          <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
+                            {String(selectedSubmissionAssignmentId) === String(assignment.id) ? "Open Submission" : "View / Submit Work"}
+                          </ActionButton>
+                        </div>
+                      }
+                    />
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="panel">
+            <SectionHeader title="Learning Snapshot" subtitle="A quick read of your current dashboard view." />
+
+            <div style={{ display: "grid", gap: "12px" }}>
+              <DetailCard title="Selected Course">
+                <div>{selectedCourse?.title || selectedCourse?.class_name || "No course selected"}</div>
+              </DetailCard>
+
+              <DetailCard title="Lessons Available">
+                <div>{selectedCourseId ? filteredLessons.length : 0}</div>
+              </DetailCard>
+
+              <DetailCard title="Assignments Available">
+                <div>{selectedCourseId ? filteredAssignments.length : 0}</div>
+              </DetailCard>
+
+              <DetailCard title="Assignments Submitted">
+                <div>{submittedCount}</div>
+              </DetailCard>
+
+              <DetailCard title="Assignments Graded">
+                <div>{gradedCount}</div>
+              </DetailCard>
+
+              <DetailCard title="Average Score">
+                <div>{formatAverage(gradedAverage)}</div>
+              </DetailCard>
+
+              <DetailCard title="Assignments Due Soon">
+                <div>{dueSoonCount}</div>
+              </DetailCard>
+            </div>
+          </div>
+        </section>
+
+        {selectedSubmissionAssignment ? (
+          <section className="panel" ref={submissionEditorRef}>
+            <SubmissionEditor
+              assignment={selectedSubmissionAssignment}
+              submissionState={selectedSubmissionState}
+              submissionLoading={String(submissionLoadingId) === String(selectedSubmissionAssignmentId)}
+              submissionSaving={String(submissionSavingId) === String(selectedSubmissionAssignmentId)}
+              submissionSaveMessage={submissionSaveMessage}
+              submissionErrorText={submissionErrorText}
+              draftText={submissionDraftText}
+              onDraftChange={setSubmissionDraftText}
+              onSave={handleSaveSubmission}
+              onClose={closeSubmissionEditor}
+              onBackToLearningPaths={() => navigate("/student-learning-paths")}
+              attachments={selectedSubmissionAttachments}
+              attachmentLoading={String(attachmentLoadingId) === String(selectedSubmissionAssignmentId)}
+              attachmentUploading={String(attachmentUploadingId) === String(selectedSubmissionAssignmentId)}
+              attachmentErrorText={attachmentErrorText}
+              onAttachmentFileChange={handleAttachmentFileChange}
+            />
+          </section>
+        ) : null}
+
+        <section className="panel">
+          <SectionHeader title="My Results" subtitle="See returned scores and teacher feedback for your visible assignments." />
+
+          {!selectedCourseId ? (
+            <NoticeBox>Select a course above to view results.</NoticeBox>
+          ) : resultAssignments.length === 0 ? (
+            <NoticeBox>No assignments found for this course.</NoticeBox>
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {resultAssignments.map((assignment) => {
+                const submissionState = submissionStateByAssignmentId[String(assignment.id)] || null
+
+                return (
+                  <ResultCard
+                    key={assignment.id}
+                    assignment={assignment}
+                    submissionState={submissionState}
+                    onOpen={() => openSubmissionEditor(assignment)}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <SectionHeader title="Recent Lessons" subtitle="Lessons available for the currently selected course." />
+
+          {!selectedCourseId ? (
+            <NoticeBox>Select a course above to view lessons.</NoticeBox>
+          ) : recentLessons.length === 0 ? (
+            <NoticeBox>No lessons found for this course.</NoticeBox>
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {recentLessons.map((lesson) => (
+                <LessonCard key={lesson.id} lesson={lesson} />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <SectionHeader title="All Course Assignments" subtitle="A complete list of assignments for the currently selected course." />
+
+          {!selectedCourseId ? (
+            <NoticeBox>Select a course above to view assignments.</NoticeBox>
+          ) : filteredAssignments.length === 0 ? (
+            <NoticeBox>No assignments found for this course.</NoticeBox>
+          ) : (
+            <div style={{ display: "grid", gap: "14px" }}>
+              {filteredAssignments.map((assignment) => {
+                const cachedSubmissionState = submissionStateByAssignmentId[String(assignment.id)] || null
+
+                return (
+                  <AssignmentCard
+                    key={assignment.id}
+                    assignment={assignment}
+                    compact
+                    submissionStatus={formatSubmissionStatus(cachedSubmissionState?.submission_status || "not_submitted")}
+                    footer={
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                        <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
+                          {String(selectedSubmissionAssignmentId) === String(assignment.id) ? "Open Submission" : "View / Submit Work"}
+                        </ActionButton>
+                      </div>
+                    }
+                  />
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </>
+  )
+}
+
+const summaryCardStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "14px",
+  padding: "18px",
+  background: "#ffffff",
+  boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+}
+
+const summaryLabelStyle = {
+  fontSize: "0.82rem",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  color: "#6b7280",
+  marginBottom: "10px",
+}
+
+const summaryHelperStyle = {
+  marginTop: "10px",
+  fontSize: "0.95rem",
+  lineHeight: 1.4,
+  color: "#4b5563",
+}
+
+function buttonStyle(quiet, disabled) {
+  return {
+    padding: "10px 14px",
+    borderRadius: "10px",
+    border: "1px solid #d7dce5",
+    background: quiet ? "#ffffff" : "#f3f4f6",
+    font: "inherit",
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.65 : 1,
+  }
+}
+
+const detailCardStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  padding: "14px",
+  background: "#ffffff",
+}
+
+function courseButtonStyle(isSelected) {
+  return {
+    width: "100%",
+    textAlign: "left",
+    border: "1px solid #d7dce5",
+    borderRadius: "12px",
+    padding: "16px",
+    background: isSelected ? "#f8fafc" : "#ffffff",
+    cursor: "pointer",
+    font: "inherit",
+  }
+}
+
+function assignmentCardStyle(compact) {
+  return {
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: compact ? "14px" : "18px",
+    background: "#f8fafc",
+  }
+}
+
+const assignmentHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "12px",
+  flexWrap: "wrap",
+  marginBottom: "8px",
+}
+
+const statusPillStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "999px",
+  padding: "4px 10px",
+  fontSize: "0.85rem",
+  fontWeight: 700,
+  background: "#ffffff",
+}
+
+const assignmentMetaStyle = {
+  marginTop: "12px",
+  display: "flex",
+  gap: "16px",
+  flexWrap: "wrap",
+  fontSize: "0.95rem",
+  color: "#4b5563",
+}
+
+const lessonCardStyle = {
+  border: "1px solid #e5e7eb",
+  borderRadius: "12px",
+  padding: "16px",
+  background: "#ffffff",
+}
+
+const resultCardStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  padding: "16px",
+  background: "#ffffff",
+}
+
+const resultHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "12px",
+  flexWrap: "wrap",
+  marginBottom: "10px",
+}
+
+const resultGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: "12px",
+  marginBottom: "14px",
+}
+
+const submissionEditorStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  padding: "16px",
+  background: "#ffffff",
+}
+
+const submissionStatsGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: "12px",
+  marginBottom: "16px",
+}
+
+const submissionPreviewGridStyle = {
+  borderTop: "1px solid #e5e7eb",
+  paddingTop: "16px",
+  display: "grid",
+  gap: "12px",
+}
+
+const labelStyle = {
+  display: "block",
+  marginBottom: "8px",
+  fontSize: "16px",
+  fontWeight: "600",
+}
+
+const inputStyle = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: "10px",
+  border: "1px solid #b7c4d6",
+  fontSize: "16px",
+  boxSizing: "border-box",
+  background: "#ffffff",
+}
+
+const fileInputStyle = {
+  display: "block",
+  width: "100%",
+  padding: "10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+  boxSizing: "border-box",
+}
+
+const attachmentLinkStyle = {
+  display: "block",
+  border: "1px solid #cfd8e3",
+  borderRadius: "10px",
+  padding: "10px 12px",
+  background: "#ffffff",
+  color: "#111827",
+  fontWeight: 800,
+  textDecoration: "none",
+}
+
+const textareaStyle = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: "10px",
+  border: "1px solid #b7c4d6",
+  fontSize: "16px",
+  boxSizing: "border-box",
+  background: "#ffffff",
+  font: "inherit",
+  lineHeight: 1.5,
+  resize: "vertical",
+}
