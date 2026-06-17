@@ -11,4 +11,7 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    allowedHosts: ["pretty-nourishment-production-7d3b.up.railway.app"],
+  },
 });
