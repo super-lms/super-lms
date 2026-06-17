@@ -1,15 +1,7 @@
 const express = require("express");
-const { Pool } = require("pg");
+const pool = require("../db");
 
 const router = express.Router();
-
-const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "postgres",
-  password: "",
-  port: 5432,
-});
 
 async function resetEnglish10Demo() {
   const client = await pool.connect();
