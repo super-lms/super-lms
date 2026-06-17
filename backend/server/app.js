@@ -1031,6 +1031,18 @@ async function buildRubricGradebookStudents(classId) {
 
 async function ensureLearningPathItemTables() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS learning_paths (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+      title TEXT NOT NULL DEFAULT 'Learning Path',
+      description TEXT DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS learning_path_items (
       id SERIAL PRIMARY KEY,
       learning_path_id INTEGER REFERENCES learning_paths(id) ON DELETE CASCADE,
