@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const authRoutes = require("../api/auth-api/routes");
 const demoRoutes = require("./routes/demoRoutes");
+const masterStudentRoutes = require("./routes/masterStudentRoutes");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
 
 const app = express();
@@ -27,6 +28,7 @@ const upload = multer({
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);
+app.use("/api/master-students", upload.single("file"), masterStudentRoutes);
 
 async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);

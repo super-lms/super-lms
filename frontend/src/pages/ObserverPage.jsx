@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 
@@ -27,7 +28,8 @@ function InfoLine({ label, value }) {
 }
 
 export default function ObserverPage() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -39,6 +41,11 @@ export default function ObserverPage() {
 
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("all")
+
+  function handleLogout() {
+    logout()
+    navigate("/login", { replace: true })
+  }
 
   useEffect(() => {
     async function loadObserverData() {
@@ -172,11 +179,17 @@ export default function ObserverPage() {
 
   return (
     <div className="page">
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ marginBottom: "6px" }}>Homeroom Observer Portal</h1>
-        <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-          Monitor linked students, courses, assignments, grades, feedback, and attachments.
-        </p>
+      <div style={topBarStyle}>
+        <div>
+          <h1 style={{ marginBottom: "6px" }}>Homeroom Observer Portal</h1>
+          <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
+            Monitor linked students, courses, assignments, grades, feedback, and attachments.
+          </p>
+        </div>
+
+        <button type="button" onClick={handleLogout} style={logoutButtonStyle}>
+          Logout
+        </button>
       </div>
 
       {loading ? <p>Loading homeroom observer dashboard...</p> : null}
@@ -361,6 +374,26 @@ export default function ObserverPage() {
       ) : null}
     </div>
   )
+}
+
+const topBarStyle = {
+  marginBottom: "24px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "16px",
+  flexWrap: "wrap",
+}
+
+const logoutButtonStyle = {
+  border: "1px solid #111",
+  background: "#ffffff",
+  color: "#111",
+  borderRadius: "10px",
+  padding: "10px 14px",
+  fontWeight: 800,
+  cursor: "pointer",
+  fontSize: "1rem",
 }
 
 const labelStyle = {

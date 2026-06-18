@@ -20,6 +20,7 @@ import ObserverPage from "./pages/ObserverPage.jsx";
 import ParentDashboardPage from "./pages/ParentDashboardPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import StudentDashboardPage from "./pages/StudentDashboardPage.jsx";
+import StudentImportPage from "./pages/StudentImportPage.jsx";
 import StudentLearningPathsPage from "./pages/StudentLearningPathsPage.jsx";
 import StudentProgressPage from "./pages/StudentProgressPage.jsx";
 import StudentReportsPage from "./pages/StudentReportsPage.jsx";
@@ -93,6 +94,7 @@ function App() {
         <Route path="/gradebook" element={<GradebookPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/timetable-builder" element={<TimetableBuilderPage />} />
+        <Route path="/student-import" element={<StudentImportPage />} />
         <Route path="/class-enrollment" element={<ClassEnrollmentPage />} />
         <Route path="/class-roster" element={<ClassRosterPage />} />
         <Route path="/enrolled-students" element={<EnrolledStudentsPage />} />

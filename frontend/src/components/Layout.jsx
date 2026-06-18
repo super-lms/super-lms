@@ -13,6 +13,7 @@ import {
   UserPlus,
   CalendarCheck,
   LogOut,
+  Upload,
 } from "lucide-react"
 
 export default function Layout() {
@@ -21,7 +22,8 @@ export default function Layout() {
 
   const [teacherCourses, setTeacherCourses] = useState([])
 
-  const isStudentRoute = location.pathname.startsWith("/student")
+  const isStudentRoute = location.pathname.startsWith("/student") &&
+    !location.pathname.startsWith("/student-import")
 
   useEffect(() => {
     if (isStudentRoute) {
@@ -117,6 +119,7 @@ export default function Layout() {
     }
     if (location.pathname === "/gradebook") return "Gradebook"
     if (location.pathname === "/reports") return "Reports"
+    if (location.pathname === "/student-import") return "Student Import"
     if (location.pathname === "/class-enrollment") return "Class Enrollment"
     if (location.pathname === "/class-roster") return "Class Roster"
     if (location.pathname === "/enrolled-students") return "Enrolled Students"
@@ -208,6 +211,18 @@ export default function Layout() {
             <NavItem to="/reports" style={getNavLinkStyle("/reports")} icon={BarChart3}>
               Reports
             </NavItem>
+
+            <div
+              style={{
+                borderTop: "1px solid #e5e7eb",
+                marginTop: "12px",
+                paddingTop: "12px",
+              }}
+            />
+
+            <NavItem to="/student-import" style={getNavLinkStyle("/student-import")} icon={Upload}>
+              Student Import
+            </NavItem>
             <NavItem to="/class-enrollment" style={getNavLinkStyle("/class-enrollment")} icon={UserPlus}>
               Class Enrollment
             </NavItem>
@@ -229,12 +244,7 @@ export default function Layout() {
               }}
             />
 
-            <button
-              type="button"
-              onClick={logout}
-              style={logoutButtonStyle}
-              title="Logout"
-            >
+            <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
               <LogOut size={18} />
               <span>Logout</span>
             </button>
@@ -261,12 +271,7 @@ export default function Layout() {
               }}
             />
 
-            <button
-              type="button"
-              onClick={logout}
-              style={logoutButtonStyle}
-              title="Logout"
-            >
+            <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
               <LogOut size={18} />
               <span>Logout</span>
             </button>
