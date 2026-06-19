@@ -3875,7 +3875,7 @@ app.post("/api/assignments/:assignmentId/export-kdu-rubric-docx", async (req, re
 });
 
 
-/* SET UP ENGLISH STUDIES 12 ASSESSMENT STRUCTURE */
+/* SET UP BLANK COURSE STRUCTURE */
 app.post("/api/courses/:courseId/setup-kdu-assessment-structure", async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
@@ -3912,29 +3912,10 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", async (req, re
 
     if (existingCount > 0 && !replaceExisting) {
       return res.status(409).json({
-        error: "This course already has assessment groups. Send replaceExisting: true to replace them.",
+        error: "This course already has a course structure. Use Force Reset only if you want to clear and rebuild it.",
         existing_count: existingCount,
       });
     }
-
-    const templateGroups = [
-      ["Literary Analysis Tier 1 Midterm", 10, 1],
-      ["Literary Analysis Tier 1.1 Final Exam Part 2", 8, 2],
-      ["Literary Analysis Tier 2", 10, 3],
-      ["Literary Analysis Tier 3 Daily", 2, 4],
-      ["Comparative & Synthesis Tier 1 Final Exam Essay", 8, 5],
-      ["Comparative & Synthesis Tier 2", 5, 6],
-      ["Comparative & Synthesis Tier 3 Daily", 2, 7],
-      ["Formal Writing Tier 1 Midterm", 10, 8],
-      ["Formal Writing Tier 2", 5, 9],
-      ["Media & Media Literacy Analysis Tier 1", 10, 10],
-      ["Media & Media Literacy Analysis Tier 2 Act Assessments", 8, 11],
-      ["Media & Media Literacy Tier 3 Daily", 2, 12],
-      ["Reflection and Collaboration Tier 1 Final Exam Part 1", 4, 13],
-      ["Reflection & Collaborative Tier 2", 10, 14],
-      ["Reflection & Collaborative Tier 3 Daily Annotations", 4, 15],
-      ["Reflection and Collaborative Competencies", 2, 16],
-    ];
 
     await pool.query("BEGIN");
 
@@ -3957,75 +3938,25 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", async (req, re
       );
     }
 
-    for (const [name, weightPercent, sortOrder] of templateGroups) {
-      const categoryResult = await pool.query(
-        `
-        INSERT INTO course_categories (course_id, name, weight_percent, sort_order)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id
-        `,
-        [courseId, name, weightPercent, sortOrder]
-      );
-
-      await pool.query(
-        `
-        INSERT INTO category_subcategories (
-          course_category_id,
-          name,
-          weight_percent_of_parent,
-          level_number,
-          sort_order
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        `,
-        [
-          categoryResult.rows[0].id,
-          "KDU Rubric Assessments",
-          100,
-          1,
-          sortOrder,
-        ]
-      );
-    }
-
     await pool.query("COMMIT");
-
-    const structureResult = await pool.query(
-      `
-      SELECT
-        cc.id AS category_id,
-        cc.name AS assessment_group,
-        cc.weight_percent,
-        cs.id AS subcategory_id,
-        cs.name AS assignment_bucket,
-        cs.weight_percent_of_parent
-      FROM course_categories cc
-      LEFT JOIN category_subcategories cs
-        ON cs.course_category_id = cc.id
-      WHERE cc.course_id = $1
-      ORDER BY cc.sort_order ASC, cc.id ASC
-      `,
-      [courseId]
-    );
 
     return res.json({
       success: true,
       course: courseResult.rows[0],
       replaced_existing: replaceExisting,
-      assessment_group_count: structureResult.rows.length,
-      total_weight: structureResult.rows.reduce(
-        (sum, row) => sum + Number(row.weight_percent || 0),
-        0
-      ),
-      assessment_groups: structureResult.rows,
+      blank_structure: true,
+      assessment_group_count: 0,
+      total_weight: 0,
+      message:
+        "Blank course structure is ready. Create a Learning Pathway, and SUPER LMS will automatically add Tier 1, Tier 2, and Tier 3.",
+      assessment_groups: [],
     });
   } catch (err) {
     await pool.query("ROLLBACK").catch(() => {});
     console.error("POST /api/courses/:courseId/setup-kdu-assessment-structure failed:", err);
-    return res.status(500).json({ error: "Failed to set up KDU assessment structure" });
+    return res.status(500).json({ error: "Failed to set up blank course structure" });
   }
 });
-
 
 
 /* COURSE STRUCTURE TEMPLATE API */
