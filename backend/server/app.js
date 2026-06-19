@@ -1708,9 +1708,42 @@ app.post("/api/courses/:courseId/categories", async (req, res) => {
       [courseId, name, weightPercent, sortOrder]
     );
 
+    const createdCategory = result.rows[0];
+
+    const defaultEvidenceTiers = [
+      ["Tier 1 — Practice / Foundational Evidence", 30, 1, 1],
+      ["Tier 2 — Application / Developing Evidence", 35, 2, 2],
+      ["Tier 3 — Mastery / Major Evidence", 35, 3, 3],
+    ];
+
+    for (const [tierName, tierWeight, tierLevel, tierSortOrder] of defaultEvidenceTiers) {
+      await client.query(
+        `
+        INSERT INTO category_subcategories (
+          course_category_id,
+          name,
+          weight_percent_of_parent,
+          level_number,
+          sort_order
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [
+          createdCategory.id,
+          tierName,
+          tierWeight,
+          tierLevel,
+          tierSortOrder,
+        ]
+      );
+    }
+
     await client.query("COMMIT");
 
-    return res.json(result.rows[0]);
+    return res.json({
+      ...createdCategory,
+      auto_created_evidence_tiers: defaultEvidenceTiers.length,
+    });
   } catch (err) {
     try {
       await client.query("ROLLBACK");
@@ -4896,9 +4929,9 @@ async function applyEnglishStudiesCompetencyTemplate(client, courseId) {
   ];
 
   const tiers = [
-    ["Tier 1 - Major Evidence", 40, 1, 1],
-    ["Tier 2 - Developing Evidence", 35, 2, 2],
-    ["Tier 3 - Daily / Process Evidence", 25, 3, 3],
+    ["Tier 1 — Practice / Foundational Evidence", 40, 1, 1],
+    ["Tier 2 — Application / Developing Evidence", 35, 2, 2],
+    ["Tier 3 — Mastery / Major Evidence", 25, 3, 3],
   ];
 
   const createdCategories = [];

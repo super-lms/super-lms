@@ -310,7 +310,7 @@ export default function CoursesPage() {
     const templateName = template?.template_name || "selected template"
 
     const replaceExisting = window.confirm(
-      `${courseName} may already have Assessment Pathways.\n\nClick OK to replace the existing structure with "${templateName}".\n\nClick Cancel to apply only if the course is blank.`
+      `${courseName} may already have Learning Pathways.\n\nClick OK to replace the existing structure with "${templateName}".\n\nClick Cancel to apply only if the course is blank.`
     )
 
     try {
@@ -384,8 +384,8 @@ export default function CoursesPage() {
 
     if (courseCompetencies.length === 0) {
       return {
-        title: "Add Assessment Pathways",
-        reason: `${courseName} needs Assessment Pathways before grades can be organized clearly.`,
+        title: "Add Learning Pathways",
+        reason: `${courseName} needs Learning Pathways before grades can be organized clearly.`,
         action: "Add the main learning areas for this course, such as Writing, Reading, Speaking, or Grammar.",
         target: "competencies",
         courseId: selectedCourse.id,
@@ -405,7 +405,7 @@ export default function CoursesPage() {
     if (totalEvidenceTiers === 0) {
       return {
         title: "Add Evidence Tiers",
-        reason: `${courseName} has Assessment Pathways. Now add the assignment types or evidence categories inside them.`,
+        reason: `${courseName} has Learning Pathways. Now add the assignment types or evidence categories inside them.`,
         action: "Use Add Evidence Tier to create the boxes where assignments will live.",
         target: "competencies",
         courseId: selectedCourse.id,
@@ -443,7 +443,7 @@ export default function CoursesPage() {
 
   async function moveLearningCategory(courseId, categoryId, direction) {
     if (!courseId || !categoryId || !["up", "down"].includes(direction)) {
-      setError("Valid course, assessment pathway, and move direction are required.")
+      setError("Valid course, learning pathway, and move direction are required.")
       setMessage("")
       return
     }
@@ -462,7 +462,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to reorder assessment pathway")
+        throw new Error(data.error || "Failed to reorder learning pathway")
       }
 
       setMessage(
@@ -474,7 +474,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to reorder assessment pathway")
+      setError(err.message || "Failed to reorder learning pathway")
     } finally {
       setMovingLearningCategoryId(null)
     }
@@ -527,7 +527,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to update assessment pathway")
+        throw new Error(data.error || "Failed to update learning pathway")
       }
 
       setMessage(`Assessment pathway updated: ${data.name || name}`)
@@ -536,17 +536,17 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to update assessment pathway")
+      setError(err.message || "Failed to update learning pathway")
     } finally {
       setSavingLearningCategoryId(null)
     }
   }
 
   async function deleteLearningCategory(courseId, category) {
-    const categoryName = String(category?.name || "this assessment pathway")
+    const categoryName = String(category?.name || "this learning pathway")
 
     const confirmed = window.confirm(
-      `Delete assessment pathway "${categoryName}"? This is only allowed when no evidence tiers remain.`
+      `Delete learning pathway "${categoryName}"? This is only allowed when no evidence tiers remain.`
     )
 
     if (!confirmed) return
@@ -563,7 +563,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to delete assessment pathway")
+        throw new Error(data.error || "Failed to delete learning pathway")
       }
 
       setMessage(`Assessment pathway deleted: ${data.deleted?.name || categoryName}`)
@@ -571,7 +571,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to delete assessment pathway")
+      setError(err.message || "Failed to delete learning pathway")
     } finally {
       setDeletingLearningCategoryId(null)
     }
@@ -579,18 +579,18 @@ export default function CoursesPage() {
 
   async function duplicateLearningCategory(courseId, category) {
     const categoryId = Number(category?.id || 0)
-    const categoryName = String(category?.name || "Assessment Pathway").trim()
+    const categoryName = String(category?.name || "Learning Pathway").trim()
     const duplicateName = categoryName.endsWith(" Copy") ? `${categoryName} 2` : `${categoryName} Copy`
     const categoryWeight = Number(category?.weight_percent || 0)
 
     if (!courseId || !categoryId) {
-      setError("Valid course and assessment pathway are required.")
+      setError("Valid course and learning pathway are required.")
       setMessage("")
       return
     }
 
     const confirmed = window.confirm(
-      `Duplicate assessment pathway "${categoryName}"?\n\nThis will copy the pathway weight and its Evidence Tiers.\n\nIt will not copy assignments, grades, submissions, rubric scores, or student work.`
+      `Duplicate learning pathway "${categoryName}"?\n\nThis will copy the pathway weight and its Evidence Tiers.\n\nIt will not copy assignments, grades, submissions, rubric scores, or student work.`
     )
 
     if (!confirmed) return
@@ -622,7 +622,7 @@ export default function CoursesPage() {
       const duplicatedCategory = await categoryRes.json()
 
       if (!categoryRes.ok) {
-        throw new Error(duplicatedCategory.error || "Failed to duplicate assessment pathway")
+        throw new Error(duplicatedCategory.error || "Failed to duplicate learning pathway")
       }
 
       for (const tier of tiersToCopy) {
@@ -660,7 +660,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to duplicate assessment pathway")
+      setError(err.message || "Failed to duplicate learning pathway")
     } finally {
       setDuplicatingLearningCategoryId(null)
     }
@@ -822,7 +822,7 @@ export default function CoursesPage() {
       : Number(tier.level_number)
 
     if (!courseId || !categoryId || !tierId) {
-      setError("Valid course, assessment pathway, and evidence tier are required.")
+      setError("Valid course, learning pathway, and evidence tier are required.")
       setMessage("")
       return
     }
@@ -959,7 +959,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to create assessment pathway")
+        throw new Error(data.error || "Failed to create learning pathway")
       }
 
       setNewLearningCategoryNameByCourseId((current) => ({ ...current, [courseId]: "" }))
@@ -969,7 +969,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to create assessment pathway")
+      setError(err.message || "Failed to create learning pathway")
     } finally {
       setCreatingLearningCategoryCourseId(null)
     }
@@ -991,7 +991,7 @@ export default function CoursesPage() {
       const categoriesData = await categoriesRes.json()
 
       if (!categoriesRes.ok) {
-        throw new Error(categoriesData.error || "Failed to load assessment pathways")
+        throw new Error(categoriesData.error || "Failed to load learning pathways")
       }
 
       const categories = Array.isArray(categoriesData)
@@ -1151,7 +1151,7 @@ export default function CoursesPage() {
     }
 
     const confirmed = window.confirm(
-      `Duplicate course "${currentTitle}" as "${title}"?\n\nThis will copy course structure, Assessment Pathways, Evidence Tiers, assignments, and exam sections.\n\nIt will not copy students, grades, submissions, rubric scores, or student work.`
+      `Duplicate course "${currentTitle}" as "${title}"?\n\nThis will copy course structure, Learning Pathways, Evidence Tiers, assignments, and exam sections.\n\nIt will not copy students, grades, submissions, rubric scores, or student work.`
     )
 
     if (!confirmed) return
@@ -1777,7 +1777,16 @@ export default function CoursesPage() {
         `KDU assessment structure created for ${data.course?.title || "course"}: ${data.assessment_group_count} groups, total weight ${data.total_weight}%.`
       )
 
+      window.localStorage.setItem("super-lms-last-course-id", String(courseId))
       await loadCourses()
+      await loadCompetencies(courseId, { forceOpen: true })
+
+      window.setTimeout(() => {
+        const target = document.getElementById(`course-${courseId}`)
+        if (target) {
+          target.scrollIntoView({ behavior: "auto", block: "start" })
+        }
+      }, 250)
     } catch (err) {
       setError(err.message || "Failed to set up KDU structure")
     } finally {
@@ -1808,7 +1817,16 @@ export default function CoursesPage() {
         `KDU assessment structure replaced for ${data.course?.title || "course"}: ${data.assessment_group_count} groups.`
       )
 
+      window.localStorage.setItem("super-lms-last-course-id", String(courseId))
       await loadCourses()
+      await loadCompetencies(courseId, { forceOpen: true })
+
+      window.setTimeout(() => {
+        const target = document.getElementById(`course-${courseId}`)
+        if (target) {
+          target.scrollIntoView({ behavior: "auto", block: "start" })
+        }
+      }, 250)
     } catch (err) {
       setError(err.message || "Failed to reset KDU structure")
     } finally {
@@ -1905,7 +1923,7 @@ export default function CoursesPage() {
                   <option value="custom_competency">Start Blank / Custom Course</option>
                 </select>
                 <div style={{ marginTop: "6px", fontSize: "0.9rem", color: "#4b5563", lineHeight: 1.45 }}>
-                  Template courses automatically create Assessment Pathways and Evidence Tiers. Blank courses let you build your own structure.
+                  Template courses automatically create Learning Pathways and Evidence Tiers. Blank courses let you build your own structure.
                 </div>
               </div>
 
@@ -2177,14 +2195,14 @@ export default function CoursesPage() {
 
                         <div style={{ display: "grid", gap: "6px", lineHeight: 1.45 }}>
                           <div><strong>Students:</strong> {displayedStudentCount}</div>
-                          <div><strong>Assessment Pathways:</strong> {courseCompetencies.length}</div>
+                          <div><strong>Learning Pathways:</strong> {courseCompetencies.length}</div>
                           <div><strong>Evidence Tiers:</strong> {totalEvidenceTiers}</div>
                           <div><strong>Assignments:</strong> {courseAssignments.length}</div>
                         </div>
 
                         <div style={{ marginTop: "12px", display: "grid", gap: "4px", lineHeight: 1.45 }}>
-                          <div> {hasAssessmentPathways ? "☑" : "☐"} Assessment Pathways Created</div>
-                          <div> {pathwaysComplete ? "☑" : "☐"} Assessment Pathways Total 100%</div>
+                          <div> {hasAssessmentPathways ? "☑" : "☐"} Learning Pathways Created</div>
+                          <div> {pathwaysComplete ? "☑" : "☐"} Learning Pathways Total 100%</div>
                           <div> {hasEvidenceTiers ? "☑" : "☐"} Evidence Tiers Created</div>
                           <div> {hasAssignments ? "☑" : "☐"} Assignments Created</div>
                           <div> {hasStudents ? "☑" : "☐"} Students Imported</div>
@@ -2236,24 +2254,24 @@ export default function CoursesPage() {
 
                           <div style={{ display: "grid", gap: "6px", lineHeight: 1.45 }}>
                             {!hasAssessmentPathways ? (
-                              <div>⚠ No Assessment Pathways yet. Create pathways or apply a template.</div>
+                              <div>⚠ No Learning Pathways yet. Create pathways or apply a template.</div>
                             ) : pathwaysComplete ? (
-                              <div>✓ Assessment Pathway weights total 100%.</div>
+                              <div>✓ Learning Pathway weights total 100%.</div>
                             ) : assessmentPathwayTotal < 100 ? (
                               <div>
-                                ⚠ Assessment Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
+                                ⚠ Learning Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
                                 Add {(100 - assessmentPathwayTotal).toFixed(2)}% more.
                               </div>
                             ) : (
                               <div>
-                                ⚠ Assessment Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
+                                ⚠ Learning Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
                                 Reduce by {(assessmentPathwayTotal - 100).toFixed(2)}%.
                               </div>
                             )}
 
                             {hasAssessmentPathways && courseCompetencies.some((category) => !Array.isArray(category.subcategories) || category.subcategories.length === 0) ? (
                               <div>
-                                ⚠ Some Assessment Pathways have no Evidence Tiers yet.
+                                ⚠ Some Learning Pathways have no Evidence Tiers yet.
                               </div>
                             ) : hasEvidenceTiers ? (
                               <div>✓ Evidence Tiers are created.</div>
@@ -2290,7 +2308,7 @@ export default function CoursesPage() {
 
                           <div style={{ display: "grid", gap: "8px", lineHeight: 1.5 }}>
                             <div>
-                              <strong>Step 1:</strong> Create Assessment Pathways. These are your major grading areas, such as Tests, Projects, Assignments, Exams, or KDU competency areas. Their weights should total 100%.
+                              <strong>Step 1:</strong> Create Learning Pathways. These are your major grading areas, such as Tests, Projects, Assignments, Exams, or KDU competency areas. Their weights should total 100%.
                             </div>
 
                             <div>
@@ -2306,7 +2324,7 @@ export default function CoursesPage() {
                             </div>
 
                             <div style={{ marginTop: "4px", fontWeight: 700 }}>
-                              Fast start: click Set Up KDU Structure to generate a default competency framework automatically.
+                              Fast start: click Set Up Course Structure to generate a default competency framework automatically.
                             </div>
                           </div>
                         </div>
@@ -2389,7 +2407,7 @@ export default function CoursesPage() {
                       disabled={competencyLoadingCourseId === course.id}
                       style={buttonStyle}
                     >
-                      {competencyLoadingCourseId === course.id ? "Loading Competencies..." : isCompetenciesOpen ? "Hide Competencies" : "View Competencies"}
+                      {competencyLoadingCourseId === course.id ? "Loading Course Structure..." : isCompetenciesOpen ? "Hide Course Structure" : "Course Structure"}
                     </button>
 
                     <button
@@ -2437,7 +2455,7 @@ export default function CoursesPage() {
                     </button>
 
                     <button type="button" onClick={() => setupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
-                      {settingUpCourseId === course.id ? "Setting up..." : "Set Up KDU Structure"}
+                      {settingUpCourseId === course.id ? "Setting up..." : "Set Up Course Structure"}
                     </button>
 
                     <button type="button" onClick={() => forceSetupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
@@ -2450,7 +2468,7 @@ export default function CoursesPage() {
                       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Template Library</h3>
 
                       <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                        Reuse a saved course structure. Templates copy Assessment Pathways,
+                        Reuse a saved course structure. Templates copy Learning Pathways,
                         Evidence Tiers, weights, and order. They do not copy students, grades,
                         submissions, or assignments.
                       </p>
@@ -2459,7 +2477,7 @@ export default function CoursesPage() {
                         <div>Loading templates...</div>
                       ) : courseStructureTemplates.length === 0 ? (
                         <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                          No saved templates yet. Use Save Structure as Template on a course that already has Assessment Pathways.
+                          No saved templates yet. Use Save Structure as Template on a course that already has Learning Pathways.
                         </div>
                       ) : (
                         <div style={{ display: "grid", gap: "12px" }}>
@@ -2484,7 +2502,7 @@ export default function CoursesPage() {
                               ) : null}
 
                               <div style={{ display: "grid", gap: "4px", color: "#111827", lineHeight: 1.45 }}>
-                                <div><strong>Assessment Pathways:</strong> {template.category_count || 0}</div>
+                                <div><strong>Learning Pathways:</strong> {template.category_count || 0}</div>
                                 <div><strong>Evidence Tiers:</strong> {template.subcategory_count || 0}</div>
                                 <div><strong>Created By:</strong> {template.created_by_teacher_email || "Unknown"}</div>
                               </div>
@@ -2537,7 +2555,7 @@ export default function CoursesPage() {
 
                                   {!Array.isArray(template.categories) || template.categories.length === 0 ? (
                                     <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                                      This template does not have Assessment Pathway details available.
+                                      This template does not have Learning Pathway details available.
                                     </div>
                                   ) : (
                                     <div style={{ display: "grid", gap: "10px" }}>
@@ -2588,11 +2606,11 @@ export default function CoursesPage() {
 
                   {isCompetenciesOpen ? (
                     <div style={learningPathBoxStyle}>
-                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Assessment Pathways</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Learning Pathways</h3>
 
                       <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                        Assessment Pathways are the weighted grading areas for your course.
-                        Create Assessment Pathways totaling 100%, then create Evidence Tiers inside each pathway.
+                        Learning Pathways are the weighted grading areas for your course.
+                        Create Learning Pathways totaling 100%, then create Evidence Tiers inside each pathway.
                         Assignments are placed inside Evidence Tiers and graded using KDU assessments.
                       </p>
 
@@ -2606,7 +2624,7 @@ export default function CoursesPage() {
                         }}
                       >
                         <h4 style={{ marginTop: 0, marginBottom: "10px" }}>
-                          Assessment Pathway Weight Check
+                          Learning Pathway Weight Check
                         </h4>
 
                         <div style={{ display: "grid", gap: "6px", color: "#111827", lineHeight: 1.45 }}>
@@ -2616,7 +2634,7 @@ export default function CoursesPage() {
 
                           {courseCompetencies.length === 0 ? (
                             <div style={{ color: "#4b5563" }}>
-                              Add assessment pathways until the course total reaches 100%.
+                              Add learning pathways until the course total reaches 100%.
                             </div>
                           ) : assessmentPathwayTotal === 100 ? (
                             <div style={{ color: "#166534", fontWeight: 800 }}>
@@ -2635,10 +2653,10 @@ export default function CoursesPage() {
                       </div>
 
                       <div style={{ border: "1px solid #d7dce5", borderRadius: "12px", padding: "14px", marginBottom: "14px", background: "#ffffff" }}>
-                        <h4 style={{ marginTop: 0, marginBottom: "10px" }}>Add Assessment Pathway</h4>
+                        <h4 style={{ marginTop: 0, marginBottom: "10px" }}>Add Learning Pathway</h4>
                         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 160px", gap: "10px" }}>
                           <div>
-                            <label style={labelStyle}>Assessment Pathway Name</label>
+                            <label style={labelStyle}>Learning Pathway Name</label>
                             <input
                               value={newLearningCategoryNameByCourseId[course.id] || ""}
                               onChange={(event) =>
@@ -2679,16 +2697,16 @@ export default function CoursesPage() {
                             disabled={creatingLearningCategoryCourseId === course.id}
                             style={primaryButtonStyle}
                           >
-                            {creatingLearningCategoryCourseId === course.id ? "Adding..." : "Add Assessment Pathway"}
+                            {creatingLearningCategoryCourseId === course.id ? "Adding..." : "Add Learning Pathway"}
                           </button>
                         </div>
                       </div>
 
                       {courseCompetencies.length === 0 ? (
                         <div style={emptyStateStyle}>
-                          <strong>No Assessment Pathways Yet</strong>
+                          <strong>No Learning Pathways Yet</strong>
                           <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                            This custom competency course is ready for teacher-created assessment pathways.
+                            This custom competency course is ready for teacher-created learning pathways.
                           </div>
                         </div>
                       ) : (
@@ -2742,7 +2760,7 @@ export default function CoursesPage() {
                                     <>
                                       <h4 style={{ marginTop: 0, marginBottom: "6px" }}>{category.name}</h4>
                                       <div style={{ color: "#4b5563" }}>
-                                        Assessment Pathway Weight: {category.weight_percent || "0.00"}%
+                                        Learning Pathway Weight: {category.weight_percent || "0.00"}%
                                       </div>
                                     </>
                                   )}
@@ -3001,6 +3019,15 @@ export default function CoursesPage() {
                                               <strong>{tier.name}</strong>
                                               <div style={{ color: "#4b5563", marginTop: "4px" }}>
                                                 Tier Weight: {tier.weight_percent_of_parent || "0.00"}%
+                                              </div>
+                                              <div style={{ color: "#4b5563", marginTop: "6px", lineHeight: 1.45 }}>
+                                                {String(tier.name || "").includes("Tier 1")
+                                                  ? "Use for practice work, skill checks, daily activities, and foundational evidence."
+                                                  : String(tier.name || "").includes("Tier 2")
+                                                    ? "Use for assignments, projects, case studies, and application of learning."
+                                                    : String(tier.name || "").includes("Tier 3")
+                                                      ? "Use for unit tests, major projects, midterms, finals, and mastery evidence."
+                                                      : "Use this tier to organize related assignments and evidence."}
                                               </div>
                                             </>
                                           )}
@@ -3541,16 +3568,16 @@ function FloatingTeacherCoach({
         {
           title: "Choose a setup method",
           body: "Use a template if you already saved one, or choose Start Blank / Custom Course if you want to build the structure yourself.",
-          action: "Open Template Library or View Competencies.",
+          action: "Open Template Library or Course Structure.",
         },
         {
-          title: "Create Assessment Pathways",
-          body: "Assessment Pathways are the major grading areas for the course. Their weights should add up to 100%. Examples: Tests, Projects, Assignments, Exams, or competency areas.",
-          action: "Click View Competencies, then add Assessment Pathways.",
+          title: "Create Learning Pathways",
+          body: "Learning Pathways are the major grading areas for the course. Their weights should add up to 100%. Examples: Tests, Projects, Assignments, Exams, or competency areas.",
+          action: "Click Course Structure, then add Learning Pathways.",
         },
         {
           title: "Create Evidence Tiers",
-          body: "Evidence Tiers sit inside Assessment Pathways. Assignments connect to Evidence Tiers so the gradebook knows where each mark belongs.",
+          body: "Evidence Tiers sit inside Learning Pathways. Assignments connect to Evidence Tiers so the gradebook knows where each mark belongs.",
           action: "Inside each pathway, add tiers such as Major Evidence, Developing Evidence, Daily Evidence, or KDU Rubric Assessments.",
         },
         {
@@ -3600,7 +3627,7 @@ function FloatingTeacherCoach({
       steps: [
         {
           title: "Save a strong course structure",
-          body: "Once a course has good Assessment Pathways and Evidence Tiers, save it as a template.",
+          body: "Once a course has good Learning Pathways and Evidence Tiers, save it as a template.",
           action: "Click Save Structure as Template on the course card.",
         },
         {
@@ -3611,7 +3638,7 @@ function FloatingTeacherCoach({
         {
           title: "Review before teaching",
           body: "After applying a template, check pathway weights and evidence tiers before adding assignments.",
-          action: "Open View Competencies and confirm the setup.",
+          action: "Open Course Structure and confirm the setup.",
         },
       ],
     },
