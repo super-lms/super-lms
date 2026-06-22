@@ -2456,21 +2456,29 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
       studentsResult = await pool.query(
         `
         SELECT
-          NULL::INTEGER AS student_user_id,
-          ms.display_name AS student_name,
-          ms.student_email,
-          ms.student_id,
-          ms.parent_email,
-          NULL::INTEGER AS class_id,
-          NULL::TEXT AS class_name
+          u.id AS student_user_id,
+          COALESCE(u.name, ms.display_name) AS student_name,
+          COALESCE(u.email, ms.student_email) AS student_email,
+          COALESCE(u.student_id, ms.student_id) AS student_id,
+          COALESCE(u.parent_email, ms.parent_email) AS parent_email,
+          c.id AS class_id,
+          c.title AS class_name
         FROM master_students ms
+        LEFT JOIN users u
+          ON LOWER(u.email) = LOWER(ms.student_email)
+         AND LOWER(COALESCE(u.role, '')) = 'student'
+        LEFT JOIN class_enrollments ce
+          ON ce.student_user_id = u.id
+        LEFT JOIN courses c
+          ON c.id = ce.class_id
         WHERE TRIM(ms.current_grade::TEXT) = '11'
-        ORDER BY ms.display_name ASC, ms.pen ASC
+          AND COALESCE(ms.student_email, '') <> ''
+        ORDER BY COALESCE(u.name, ms.display_name) ASC, c.title ASC NULLS LAST, ms.pen ASC
         `
       );
     }
 
-    const submissionsResult = await pool.query(
+    let submissionsResult = await pool.query(
       `
       SELECT
         s.id,
@@ -2521,6 +2529,64 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
       `,
       [observerEmail]
     );
+
+    if (submissionsResult.rows.length === 0) {
+      submissionsResult = await pool.query(
+        `
+        SELECT
+          s.id,
+          s.assignment_id,
+          a.title AS assignment_title,
+          c.id AS class_id,
+          c.title AS class_name,
+          COALESCE(u.name, ms.display_name) AS student_name,
+          COALESCE(u.email, ms.student_email) AS student_email,
+          s.content,
+          s.score,
+          s.grade,
+          s.feedback,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', sa.id,
+                'file_name', sa.original_name,
+                'file_path', sa.file_path
+              )
+            ) FILTER (WHERE sa.id IS NOT NULL),
+            '[]'
+          ) AS files
+        FROM master_students ms
+        LEFT JOIN users u
+          ON LOWER(u.email) = LOWER(ms.student_email)
+         AND LOWER(COALESCE(u.role, '')) = 'student'
+        JOIN submissions s
+          ON LOWER(s.student_email) = LOWER(COALESCE(u.email, ms.student_email))
+        JOIN assignments a
+          ON a.id = s.assignment_id
+        LEFT JOIN courses c
+          ON c.id = a.class_id
+        LEFT JOIN submission_attachments sa
+          ON sa.submission_id = s.id
+        WHERE TRIM(ms.current_grade::TEXT) = '11'
+          AND COALESCE(ms.student_email, '') <> ''
+        GROUP BY
+          s.id,
+          s.assignment_id,
+          a.title,
+          c.id,
+          c.title,
+          u.name,
+          u.email,
+          ms.display_name,
+          ms.student_email,
+          s.content,
+          s.score,
+          s.grade,
+          s.feedback
+        ORDER BY COALESCE(u.name, ms.display_name) ASC, c.title ASC, a.title ASC
+        `
+      );
+    }
 
     return res.json({
       observer: observerResult.rows[0] || {
