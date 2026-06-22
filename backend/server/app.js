@@ -2410,6 +2410,117 @@ app.get("/api/assignments", async (req, res) => {
   }
 });
 
+app.get("/api/observers/:email/dashboard", async (req, res) => {
+  try {
+    await ensureStudentInfoColumns();
+
+    const observerEmail = String(req.params.email || "").trim().toLowerCase();
+
+    if (!observerEmail) {
+      return res.status(400).json({ error: "Observer email is required" });
+    }
+
+    const observerResult = await pool.query(
+      `
+      SELECT id, name, email, role
+      FROM users
+      WHERE LOWER(email) = $1
+      LIMIT 1
+      `,
+      [observerEmail]
+    );
+
+    const studentsResult = await pool.query(
+      `
+      SELECT
+        u.id AS student_user_id,
+        u.name AS student_name,
+        u.email AS student_email,
+        u.student_id,
+        u.parent_email,
+        c.id AS class_id,
+        c.title AS class_name
+      FROM users u
+      LEFT JOIN class_enrollments ce
+        ON ce.student_user_id = u.id
+      LEFT JOIN courses c
+        ON c.id = ce.class_id
+      WHERE LOWER(COALESCE(u.parent_email, '')) = $1
+        AND LOWER(COALESCE(u.role, '')) = 'student'
+      ORDER BY u.name ASC, c.title ASC
+      `,
+      [observerEmail]
+    );
+
+    const submissionsResult = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.assignment_id,
+        a.title AS assignment_title,
+        c.id AS class_id,
+        c.title AS class_name,
+        u.name AS student_name,
+        u.email AS student_email,
+        s.content,
+        s.score,
+        s.grade,
+        s.feedback,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', sa.id,
+              'file_name', sa.original_name,
+              'file_path', sa.file_path
+            )
+          ) FILTER (WHERE sa.id IS NOT NULL),
+          '[]'
+        ) AS files
+      FROM users u
+      JOIN submissions s
+        ON LOWER(s.student_email) = LOWER(u.email)
+      JOIN assignments a
+        ON a.id = s.assignment_id
+      LEFT JOIN courses c
+        ON c.id = a.class_id
+      LEFT JOIN submission_attachments sa
+        ON sa.submission_id = s.id
+      WHERE LOWER(COALESCE(u.parent_email, '')) = $1
+        AND LOWER(COALESCE(u.role, '')) = 'student'
+      GROUP BY
+        s.id,
+        s.assignment_id,
+        a.title,
+        c.id,
+        c.title,
+        u.name,
+        u.email,
+        s.content,
+        s.score,
+        s.grade,
+        s.feedback
+      ORDER BY u.name ASC, c.title ASC, a.title ASC
+      `,
+      [observerEmail]
+    );
+
+    return res.json({
+      observer: observerResult.rows[0] || {
+        email: observerEmail,
+        name: "Homeroom Observer",
+        role: "observer",
+        relationship: "Homeroom Observer",
+      },
+      students: studentsResult.rows,
+      submissions: submissionsResult.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/observers/:email/dashboard failed:", err);
+    return res.status(500).json({ error: "Failed to load observer dashboard" });
+  }
+});
+
+
 /* CREATE ASSIGNMENT */
 app.post("/api/assignments", async (req, res) => {
   try {
