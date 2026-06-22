@@ -2430,7 +2430,7 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
       [observerEmail]
     );
 
-    const studentsResult = await pool.query(
+    let studentsResult = await pool.query(
       `
       SELECT
         u.id AS student_user_id,
@@ -2451,6 +2451,24 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
       `,
       [observerEmail]
     );
+
+    if (studentsResult.rows.length === 0) {
+      studentsResult = await pool.query(
+        `
+        SELECT
+          NULL::INTEGER AS student_user_id,
+          ms.display_name AS student_name,
+          ms.student_email,
+          ms.student_id,
+          ms.parent_email,
+          NULL::INTEGER AS class_id,
+          NULL::TEXT AS class_name
+        FROM master_students ms
+        WHERE TRIM(ms.current_grade::TEXT) = '11'
+        ORDER BY ms.display_name ASC, ms.pen ASC
+        `
+      );
+    }
 
     const submissionsResult = await pool.query(
       `
