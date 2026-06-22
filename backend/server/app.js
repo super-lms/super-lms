@@ -6519,10 +6519,12 @@ app.get("/api/teachers/:teacherId/dashboard", async (req, res) => {
 
     const coursesResult = await pool.query(
       `
-      SELECT *
-      FROM courses
-      WHERE teacher_id = $1
-      ORDER BY id ASC
+      SELECT DISTINCT c.*
+      FROM courses c
+      JOIN course_teachers ct
+        ON ct.course_id = c.id
+      WHERE ct.teacher_id = $1
+      ORDER BY c.id ASC
       `,
       [teacherId]
     );
