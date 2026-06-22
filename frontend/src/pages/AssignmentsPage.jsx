@@ -967,10 +967,47 @@ export default function AssignmentsPage() {
       })
   }
 
-  function beginDeleteAssignment(assignment) {
-    setDeleteTargetAssignment(assignment)
-    setError("")
-    setMessage("")
+  async function beginDeleteAssignment(assignment) {
+    const assignmentId = Number(assignment?.id || 0)
+    const assignmentTitle = String(assignment?.title || "this assignment")
+
+    if (!assignmentId) {
+      setError("Valid assignment is required.")
+      setMessage("")
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete assignment "${assignmentTitle}"?\n\nThis will remove the assignment from this class.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setDeleteSaving(true)
+      setDeleteTargetAssignment(null)
+      setError("")
+      setMessage("")
+
+      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}`, {
+        method: "DELETE",
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete assignment")
+      }
+
+      if (String(editingAssignmentId) === String(assignmentId)) resetEditState()
+
+      setMessage(`Assignment deleted: ${data.deleted?.title || assignmentTitle}`)
+      await loadAssignments()
+    } catch (err) {
+      setError(err.message || "Failed to delete assignment")
+    } finally {
+      setDeleteSaving(false)
+    }
   }
 
   function confirmDeleteAssignment() {
