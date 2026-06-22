@@ -1352,6 +1352,176 @@ app.get("/", (req, res) => {
   res.send("Super LMS backend running");
 });
 
+
+async function ensureLessonsTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lessons (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      content TEXT DEFAULT '',
+      order_index INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE lessons
+    ADD COLUMN IF NOT EXISTS course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE
+  `);
+
+  await pool.query(`
+    ALTER TABLE lessons
+    ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT 'Untitled Lesson'
+  `);
+
+  await pool.query(`
+    ALTER TABLE lessons
+    ADD COLUMN IF NOT EXISTS content TEXT DEFAULT ''
+  `);
+
+  await pool.query(`
+    ALTER TABLE lessons
+    ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0
+  `);
+
+  await pool.query(`
+    ALTER TABLE lessons
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()
+  `);
+
+  await pool.query(`
+    ALTER TABLE lessons
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()
+  `);
+}
+
+/* LESSONS API */
+app.get("/api/lessons", async (req, res) => {
+  try {
+    await ensureLessonsTables();
+
+    const result = await pool.query(`
+      SELECT
+        l.id,
+        l.course_id,
+        c.title AS course_title,
+        l.title,
+        l.content,
+        l.order_index,
+        l.created_at,
+        l.updated_at
+      FROM lessons l
+      LEFT JOIN courses c
+        ON c.id = l.course_id
+      ORDER BY c.title ASC NULLS LAST, l.order_index ASC, l.id ASC
+    `);
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/lessons failed:", err);
+    return res.status(500).json({ error: "Failed to fetch lessons" });
+  }
+});
+
+app.post("/api/lessons", async (req, res) => {
+  try {
+    await ensureLessonsTables();
+
+    const courseId = Number(req.body.course_id || 0);
+    const title = String(req.body.title || "").trim();
+    const content = String(req.body.content || "").trim();
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid course_id is required" });
+    }
+
+    if (!title) {
+      return res.status(400).json({ error: "Lesson title is required" });
+    }
+
+    const courseResult = await pool.query(
+      `
+      SELECT id
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const orderResult = await pool.query(
+      `
+      SELECT COALESCE(MAX(order_index), 0) + 1 AS next_order_index
+      FROM lessons
+      WHERE course_id = $1
+      `,
+      [courseId]
+    );
+
+    const orderIndex = Number(orderResult.rows[0]?.next_order_index || 1);
+
+    const result = await pool.query(
+      `
+      INSERT INTO lessons (
+        course_id,
+        title,
+        content,
+        order_index,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
+      RETURNING *
+      `,
+      [courseId, title, content, orderIndex]
+    );
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error("POST /api/lessons failed:", err);
+    return res.status(500).json({ error: "Failed to create lesson" });
+  }
+});
+
+app.delete("/api/lessons/:lessonId", async (req, res) => {
+  try {
+    await ensureLessonsTables();
+
+    const lessonId = Number(req.params.lessonId || 0);
+
+    if (!lessonId) {
+      return res.status(400).json({ error: "Valid lessonId is required" });
+    }
+
+    const result = await pool.query(
+      `
+      DELETE FROM lessons
+      WHERE id = $1
+      RETURNING id, course_id, title
+      `,
+      [lessonId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Lesson not found" });
+    }
+
+    return res.json({
+      success: true,
+      deleted: result.rows[0],
+    });
+  } catch (err) {
+    console.error("DELETE /api/lessons/:lessonId failed:", err);
+    return res.status(500).json({ error: "Failed to delete lesson" });
+  }
+});
+
 /* GET COURSES */
 app.get("/api/courses", async (req, res) => {
   try {
@@ -2194,8 +2364,19 @@ app.get("/api/assignments", async (req, res) => {
           )
         )::INTEGER AS ungraded_count
       FROM assignments a
-      LEFT JOIN category_subcategories cs
-        ON cs.id = a.subcategory_id
+      LEFT JOIN LATERAL (
+        SELECT
+          cs_inner.*
+        FROM category_subcategories cs_inner
+        LEFT JOIN course_categories cc_inner
+          ON cc_inner.id = cs_inner.course_category_id
+        WHERE cs_inner.id = a.subcategory_id
+        ORDER BY
+          CASE WHEN cc_inner.course_id = a.class_id THEN 0 ELSE 1 END,
+          cs_inner.course_category_id ASC,
+          cs_inner.id ASC
+        LIMIT 1
+      ) cs ON true
       LEFT JOIN course_categories cc
         ON cc.id = cs.course_category_id
       LEFT JOIN submissions s
@@ -4580,6 +4761,297 @@ app.post("/api/courses/:courseId/learning-paths", async (req, res) => {
   }
 });
 
+
+app.post("/api/learning-paths/:learningPathId/reorder", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureLearningPathItemTables();
+
+    const learningPathId = Number(req.params.learningPathId);
+    const direction = String(req.body.direction || "").trim().toLowerCase();
+
+    if (!learningPathId) {
+      return res.status(400).json({ error: "Valid learningPathId is required" });
+    }
+
+    if (!["up", "down"].includes(direction)) {
+      return res.status(400).json({ error: "Direction must be up or down" });
+    }
+
+    await client.query("BEGIN");
+
+    const currentResult = await client.query(
+      `
+      SELECT id, course_id, sort_order
+      FROM learning_paths
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [learningPathId]
+    );
+
+    if (currentResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Learning Path not found" });
+    }
+
+    const current = currentResult.rows[0];
+
+    await client.query(
+      `
+      WITH ordered AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (ORDER BY sort_order ASC, id ASC) AS new_sort_order
+        FROM learning_paths
+        WHERE course_id = $1
+      )
+      UPDATE learning_paths lp
+      SET sort_order = ordered.new_sort_order
+      FROM ordered
+      WHERE lp.id = ordered.id
+      `,
+      [current.course_id]
+    );
+
+    const refreshedCurrentResult = await client.query(
+      `
+      SELECT id, course_id, sort_order
+      FROM learning_paths
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [learningPathId]
+    );
+
+    const refreshedCurrent = refreshedCurrentResult.rows[0];
+
+    const neighborResult = await client.query(
+      direction === "up"
+        ? `
+          SELECT id, sort_order
+          FROM learning_paths
+          WHERE course_id = $1
+            AND sort_order < $2
+          ORDER BY sort_order DESC, id DESC
+          LIMIT 1
+          `
+        : `
+          SELECT id, sort_order
+          FROM learning_paths
+          WHERE course_id = $1
+            AND sort_order > $2
+          ORDER BY sort_order ASC, id ASC
+          LIMIT 1
+          `,
+      [refreshedCurrent.course_id, refreshedCurrent.sort_order]
+    );
+
+    if (neighborResult.rows.length === 0) {
+      await client.query("COMMIT");
+      return res.json({
+        success: true,
+        moved: false,
+        reason: direction === "up" ? "Already first" : "Already last",
+      });
+    }
+
+    const neighbor = neighborResult.rows[0];
+
+    await client.query(
+      `
+      UPDATE learning_paths
+      SET sort_order = CASE
+        WHEN id = $1 THEN $4
+        WHEN id = $3 THEN $2
+        ELSE sort_order
+      END,
+      updated_at = NOW()
+      WHERE id IN ($1, $3)
+      `,
+      [
+        refreshedCurrent.id,
+        refreshedCurrent.sort_order,
+        neighbor.id,
+        neighbor.sort_order,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      moved: true,
+      learning_path_id: refreshedCurrent.id,
+      swapped_with_learning_path_id: neighbor.id,
+      direction,
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("POST /api/learning-paths/:learningPathId/reorder rollback failed:", rollbackErr);
+    }
+
+    console.error("POST /api/learning-paths/:learningPathId/reorder failed:", err);
+    return res.status(500).json({ error: "Failed to reorder Learning Path" });
+  } finally {
+    client.release();
+  }
+});
+
+
+app.post("/api/learning-paths/:learningPathId/duplicate", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureLearningPathItemTables();
+
+    const learningPathId = Number(req.params.learningPathId);
+    const requestedTitle = String(req.body.title || "").trim();
+
+    if (!learningPathId) {
+      return res.status(400).json({ error: "Valid learningPathId is required" });
+    }
+
+    await client.query("BEGIN");
+
+    const sourceResult = await client.query(
+      `
+      SELECT id, course_id, title, description, is_published
+      FROM learning_paths
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [learningPathId]
+    );
+
+    if (sourceResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Learning Path not found" });
+    }
+
+    const source = sourceResult.rows[0];
+    const newTitle = requestedTitle || `${source.title} Copy`;
+
+    const sortResult = await client.query(
+      `
+      SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
+      FROM learning_paths
+      WHERE course_id = $1
+      `,
+      [source.course_id]
+    );
+
+    const nextSortOrder = Number(sortResult.rows[0]?.next_sort_order || 1);
+
+    const duplicatedPathResult = await client.query(
+      `
+      INSERT INTO learning_paths (
+        course_id,
+        title,
+        description,
+        sort_order,
+        is_published,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, false, NOW(), NOW())
+      RETURNING
+        id,
+        course_id,
+        title,
+        description,
+        sort_order,
+        is_published,
+        created_at,
+        updated_at
+      `,
+      [
+        source.course_id,
+        newTitle,
+        source.description || "",
+        nextSortOrder,
+      ]
+    );
+
+    const duplicatedPath = duplicatedPathResult.rows[0];
+
+    const sourceItemsResult = await client.query(
+      `
+      SELECT
+        item_type,
+        title,
+        description,
+        resource_url,
+        assignment_id,
+        sort_order,
+        is_required
+      FROM learning_path_items
+      WHERE learning_path_id = $1
+      ORDER BY sort_order ASC, id ASC
+      `,
+      [learningPathId]
+    );
+
+    let copiedItemCount = 0;
+
+    for (const item of sourceItemsResult.rows) {
+      await client.query(
+        `
+        INSERT INTO learning_path_items (
+          learning_path_id,
+          item_type,
+          title,
+          description,
+          resource_url,
+          assignment_id,
+          sort_order,
+          is_required,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        `,
+        [
+          duplicatedPath.id,
+          item.item_type || "lesson",
+          item.title || "Learning Path Item",
+          item.description || "",
+          item.resource_url || "",
+          item.assignment_id || null,
+          item.sort_order || copiedItemCount + 1,
+          item.is_required === false ? false : true,
+        ]
+      );
+
+      copiedItemCount += 1;
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      learning_path: duplicatedPath,
+      copied: {
+        items: copiedItemCount,
+      },
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("POST /api/learning-paths/:learningPathId/duplicate rollback failed:", rollbackErr);
+    }
+
+    console.error("POST /api/learning-paths/:learningPathId/duplicate failed:", err);
+    return res.status(500).json({ error: "Failed to duplicate Learning Path" });
+  } finally {
+    client.release();
+  }
+});
+
 app.delete("/api/learning-paths/:learningPathId", async (req, res) => {
   try {
     const learningPathId = Number(req.params.learningPathId);
@@ -4633,7 +5105,9 @@ app.get("/api/learning-paths/:learningPathId/items", async (req, res) => {
         lpi.description,
         lpi.resource_url,
         lpi.assignment_id,
+        lpi.lesson_id,
         a.title AS assignment_title,
+        les.title AS lesson_title,
         lpi.sort_order,
         lpi.is_required,
         lpi.created_at,
@@ -4641,6 +5115,8 @@ app.get("/api/learning-paths/:learningPathId/items", async (req, res) => {
       FROM learning_path_items lpi
       LEFT JOIN assignments a
         ON a.id = lpi.assignment_id
+      LEFT JOIN lessons les
+        ON les.id = lpi.lesson_id
       WHERE lpi.learning_path_id = $1
       ORDER BY lpi.sort_order ASC, lpi.id ASC
       `,
@@ -4750,6 +5226,426 @@ app.post("/api/learning-paths/:learningPathId/items", async (req, res) => {
   } catch (err) {
     console.error("POST /api/learning-paths/:learningPathId/items failed:", err);
     return res.status(500).json({ error: "Failed to create learning path item" });
+  }
+});
+
+
+
+app.post("/api/learning-paths/:learningPathId/create-lesson", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureLearningPathItemTables();
+    await ensureLessonsTables();
+
+    await client.query(`
+      ALTER TABLE learning_path_items
+      ADD COLUMN IF NOT EXISTS lesson_id INTEGER REFERENCES lessons(id) ON DELETE SET NULL
+    `);
+
+    const learningPathId = Number(req.params.learningPathId);
+    const title = String(req.body.title || "").trim();
+    const content = String(req.body.content || "").trim();
+
+    if (!learningPathId) {
+      return res.status(400).json({ error: "Valid learningPathId is required" });
+    }
+
+    if (!title) {
+      return res.status(400).json({ error: "Lesson title is required" });
+    }
+
+    await client.query("BEGIN");
+
+    const pathResult = await client.query(
+      `
+      SELECT id, course_id, title
+      FROM learning_paths
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [learningPathId]
+    );
+
+    if (pathResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Learning Path not found" });
+    }
+
+    const learningPath = pathResult.rows[0];
+
+    const lessonOrderResult = await client.query(
+      `
+      SELECT COALESCE(MAX(order_index), 0) + 1 AS next_order_index
+      FROM lessons
+      WHERE course_id = $1
+      `,
+      [learningPath.course_id]
+    );
+
+    const lessonOrderIndex = Number(lessonOrderResult.rows[0]?.next_order_index || 1);
+
+    const lessonResult = await client.query(
+      `
+      INSERT INTO lessons (
+        course_id,
+        title,
+        content,
+        order_index,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, NOW(), NOW())
+      RETURNING *
+      `,
+      [
+        learningPath.course_id,
+        title,
+        content,
+        lessonOrderIndex,
+      ]
+    );
+
+    const lesson = lessonResult.rows[0];
+
+    const itemSortResult = await client.query(
+      `
+      SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
+      FROM learning_path_items
+      WHERE learning_path_id = $1
+      `,
+      [learningPathId]
+    );
+
+    const itemSortOrder = Number(itemSortResult.rows[0]?.next_sort_order || 1);
+
+    const itemResult = await client.query(
+      `
+      INSERT INTO learning_path_items (
+        learning_path_id,
+        item_type,
+        title,
+        description,
+        resource_url,
+        lesson_id,
+        sort_order,
+        is_required,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, 'lesson', $2, $3, '', $4, $5, true, NOW(), NOW())
+      RETURNING *
+      `,
+      [
+        learningPathId,
+        lesson.title,
+        lesson.content || "",
+        lesson.id,
+        itemSortOrder,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      lesson,
+      learning_path_item: itemResult.rows[0],
+      learning_path: learningPath,
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("POST /api/learning-paths/:learningPathId/create-lesson rollback failed:", rollbackErr);
+    }
+
+    console.error("POST /api/learning-paths/:learningPathId/create-lesson failed:", err);
+    return res.status(500).json({ error: "Failed to create lesson from Learning Path" });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/learning-paths/:learningPathId/create-assignment", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureLearningPathItemTables();
+
+    const learningPathId = Number(req.params.learningPathId);
+    const title = String(req.body.title || "").trim();
+    const description = String(req.body.description || "").trim();
+    const dueDate = req.body.due_date || null;
+    const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
+    const teacherId = req.body.teacher_id ? Number(req.body.teacher_id) : null;
+
+    if (!learningPathId) {
+      return res.status(400).json({ error: "Valid learningPathId is required" });
+    }
+
+    if (!title) {
+      return res.status(400).json({ error: "Assignment title is required" });
+    }
+
+    if (!subcategoryId) {
+      return res.status(400).json({ error: "Evidence tier is required" });
+    }
+
+    await client.query("BEGIN");
+
+    const pathResult = await client.query(
+      `
+      SELECT id, course_id, title
+      FROM learning_paths
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [learningPathId]
+    );
+
+    if (pathResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Learning path not found" });
+    }
+
+    const learningPath = pathResult.rows[0];
+
+    const assignmentSortResult = await client.query(
+      `
+      SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
+      FROM assignments
+      WHERE class_id = $1
+      `,
+      [learningPath.course_id]
+    );
+
+    const assignmentSortOrder = Number(assignmentSortResult.rows[0]?.next_sort_order || 1);
+
+    const assignmentResult = await client.query(
+      `
+      INSERT INTO assignments (
+        class_id,
+        teacher_id,
+        title,
+        description,
+        due_date,
+        subcategory_id,
+        is_published,
+        sort_order
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, true, $7)
+      RETURNING *
+      `,
+      [
+        learningPath.course_id,
+        teacherId,
+        title,
+        description,
+        dueDate,
+        subcategoryId,
+        assignmentSortOrder,
+      ]
+    );
+
+    const assignment = assignmentResult.rows[0];
+
+    const itemSortResult = await client.query(
+      `
+      SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
+      FROM learning_path_items
+      WHERE learning_path_id = $1
+      `,
+      [learningPathId]
+    );
+
+    const itemSortOrder = Number(itemSortResult.rows[0]?.next_sort_order || 1);
+
+    const itemResult = await client.query(
+      `
+      INSERT INTO learning_path_items (
+        learning_path_id,
+        item_type,
+        title,
+        description,
+        resource_url,
+        assignment_id,
+        sort_order,
+        is_required,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, 'assignment', $2, $3, '', $4, $5, true, NOW(), NOW())
+      RETURNING *
+      `,
+      [
+        learningPathId,
+        assignment.title,
+        assignment.description || "",
+        assignment.id,
+        itemSortOrder,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      assignment,
+      learning_path_item: itemResult.rows[0],
+      learning_path: learningPath,
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("POST /api/learning-paths/:learningPathId/create-assignment rollback failed:", rollbackErr);
+    }
+
+    console.error("POST /api/learning-paths/:learningPathId/create-assignment failed:", err);
+    return res.status(500).json({ error: "Failed to create assignment from learning path" });
+  } finally {
+    client.release();
+  }
+});
+
+
+app.post("/api/learning-path-items/:itemId/reorder", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureLearningPathItemTables();
+
+    const itemId = Number(req.params.itemId);
+    const direction = String(req.body.direction || "").trim().toLowerCase();
+
+    if (!itemId) {
+      return res.status(400).json({ error: "Valid itemId is required" });
+    }
+
+    if (!["up", "down"].includes(direction)) {
+      return res.status(400).json({ error: "Direction must be up or down" });
+    }
+
+    await client.query("BEGIN");
+
+    const currentResult = await client.query(
+      `
+      SELECT id, learning_path_id, sort_order
+      FROM learning_path_items
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [itemId]
+    );
+
+    if (currentResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Learning Path item not found" });
+    }
+
+    const current = currentResult.rows[0];
+
+    await client.query(
+      `
+      WITH ordered AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (ORDER BY sort_order ASC, id ASC) AS new_sort_order
+        FROM learning_path_items
+        WHERE learning_path_id = $1
+      )
+      UPDATE learning_path_items lpi
+      SET sort_order = ordered.new_sort_order
+      FROM ordered
+      WHERE lpi.id = ordered.id
+      `,
+      [current.learning_path_id]
+    );
+
+    const refreshedCurrentResult = await client.query(
+      `
+      SELECT id, learning_path_id, sort_order
+      FROM learning_path_items
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [itemId]
+    );
+
+    const refreshedCurrent = refreshedCurrentResult.rows[0];
+
+    const neighborResult = await client.query(
+      direction === "up"
+        ? `
+          SELECT id, sort_order
+          FROM learning_path_items
+          WHERE learning_path_id = $1
+            AND sort_order < $2
+          ORDER BY sort_order DESC, id DESC
+          LIMIT 1
+          `
+        : `
+          SELECT id, sort_order
+          FROM learning_path_items
+          WHERE learning_path_id = $1
+            AND sort_order > $2
+          ORDER BY sort_order ASC, id ASC
+          LIMIT 1
+          `,
+      [refreshedCurrent.learning_path_id, refreshedCurrent.sort_order]
+    );
+
+    if (neighborResult.rows.length === 0) {
+      await client.query("COMMIT");
+      return res.json({
+        success: true,
+        moved: false,
+        reason: direction === "up" ? "Already first" : "Already last",
+      });
+    }
+
+    const neighbor = neighborResult.rows[0];
+
+    await client.query(
+      `
+      UPDATE learning_path_items
+      SET sort_order = CASE
+        WHEN id = $1 THEN $4
+        WHEN id = $3 THEN $2
+        ELSE sort_order
+      END,
+      updated_at = NOW()
+      WHERE id IN ($1, $3)
+      `,
+      [
+        refreshedCurrent.id,
+        refreshedCurrent.sort_order,
+        neighbor.id,
+        neighbor.sort_order,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      moved: true,
+      item_id: refreshedCurrent.id,
+      swapped_with_item_id: neighbor.id,
+      direction,
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("POST /api/learning-path-items/:itemId/reorder rollback failed:", rollbackErr);
+    }
+
+    console.error("POST /api/learning-path-items/:itemId/reorder failed:", err);
+    return res.status(500).json({ error: "Failed to reorder Learning Path item" });
+  } finally {
+    client.release();
   }
 });
 
@@ -5571,6 +6467,150 @@ app.post("/api/import/class-from-csv-text", async (req, res) => {
   } catch (err) {
     console.error("POST /api/import/class-from-csv-text failed:", err);
     return res.status(500).json({ error: err.message || "Import failed" });
+  }
+});
+
+
+/* ENROLL STUDENTS FROM MASTER DIRECTORY */
+app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureStudentInfoColumns();
+
+    const courseId = Number(req.params.courseId);
+    const currentGrade = req.body.current_grade === undefined || req.body.current_grade === ""
+      ? null
+      : Number(req.body.current_grade);
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    await client.query("BEGIN");
+
+    const courseResult = await client.query(
+      `
+      SELECT id, title
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const masterStudentsResult = await client.query(
+      currentGrade
+        ? `
+          SELECT
+            pen,
+            student_id,
+            display_name,
+            student_email,
+            parent_email
+          FROM master_students
+          WHERE current_grade = $1
+            AND LOWER(COALESCE(status, 'active')) = 'active'
+          ORDER BY display_name ASC, pen ASC
+          `
+        : `
+          SELECT
+            pen,
+            student_id,
+            display_name,
+            student_email,
+            parent_email
+          FROM master_students
+          WHERE LOWER(COALESCE(status, 'active')) = 'active'
+          ORDER BY current_grade ASC NULLS LAST, display_name ASC, pen ASC
+          `,
+      currentGrade ? [currentGrade] : []
+    );
+
+    let createdUsers = 0;
+    let updatedUsers = 0;
+    let enrolledStudents = 0;
+    let skippedMissingEmail = 0;
+
+    for (const student of masterStudentsResult.rows) {
+      const studentName = String(student.display_name || "").trim();
+      const studentEmail = String(student.student_email || "").trim().toLowerCase();
+      const parentEmail = String(student.parent_email || "").trim().toLowerCase();
+      const studentId = String(student.student_id || student.pen || "").trim();
+
+      if (!studentName || !studentEmail || !studentEmail.includes("@")) {
+        skippedMissingEmail += 1;
+        continue;
+      }
+
+      const userResult = await client.query(
+        `
+        INSERT INTO users (name, email, role, parent_email, student_id)
+        VALUES ($1, $2, 'student', $3, $4)
+        ON CONFLICT (email)
+        DO UPDATE
+        SET name = EXCLUDED.name,
+            role = 'student',
+            parent_email = EXCLUDED.parent_email,
+            student_id = EXCLUDED.student_id
+        RETURNING id, (xmax = 0) AS inserted
+        `,
+        [studentName, studentEmail, parentEmail, studentId]
+      );
+
+      const user = userResult.rows[0];
+
+      if (user.inserted) {
+        createdUsers += 1;
+      } else {
+        updatedUsers += 1;
+      }
+
+      const enrollmentResult = await client.query(
+        `
+        INSERT INTO class_enrollments (class_id, student_user_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        `,
+        [courseId, user.id]
+      );
+
+      if (enrollmentResult.rows.length > 0) {
+        enrolledStudents += 1;
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      course: courseResult.rows[0],
+      filter: {
+        current_grade: currentGrade,
+      },
+      processed_master_students: masterStudentsResult.rows.length,
+      created_users: createdUsers,
+      updated_users: updatedUsers,
+      enrolled_students: enrolledStudents,
+      skipped_missing_email: skippedMissingEmail,
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("POST /api/courses/:courseId/enroll-from-master-directory rollback failed:", rollbackErr);
+    }
+
+    console.error("POST /api/courses/:courseId/enroll-from-master-directory failed:", err);
+    return res.status(500).json({ error: "Failed to enroll students from master directory" });
+  } finally {
+    client.release();
   }
 });
 
