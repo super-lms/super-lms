@@ -724,7 +724,7 @@ export default function AssignmentsPage() {
     setError("")
     setMessage("")
 
-    fetch("${API_BASE}/api/assignments", {
+    fetch(`${API_BASE}/api/assignments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
