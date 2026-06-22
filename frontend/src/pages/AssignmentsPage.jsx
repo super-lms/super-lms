@@ -282,6 +282,7 @@ export default function AssignmentsPage() {
   const [duplicatingAssignmentId, setDuplicatingAssignmentId] = useState("")
   const [movingAssignmentId, setMovingAssignmentId] = useState("")
   const [deleteSaving, setDeleteSaving] = useState(false)
+  const [assignmentCreating, setAssignmentCreating] = useState(false)
 
   function toNumber(value) {
     const parsed = Number(value)
@@ -711,6 +712,8 @@ export default function AssignmentsPage() {
   function createAssignment(e) {
     e.preventDefault()
 
+    if (assignmentCreating) return
+
     if (!selectedClassId || !title.trim() || !user?.id) {
       setError("Missing required fields")
       return
@@ -723,6 +726,7 @@ export default function AssignmentsPage() {
 
     setError("")
     setMessage("")
+    setAssignmentCreating(true)
 
     fetch(`${API_BASE}/api/assignments`, {
       method: "POST",
@@ -754,6 +758,9 @@ export default function AssignmentsPage() {
       })
       .catch((err) => {
         setError(err.message || "Failed to create assignment")
+      })
+      .finally(() => {
+        setAssignmentCreating(false)
       })
   }
 
@@ -1614,8 +1621,8 @@ export default function AssignmentsPage() {
                           </InputBlock>
 
                           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                            <ActionButton type="submit" disabled={!classHasCategories}>
-                              Create Assignment
+                            <ActionButton type="submit" disabled={!classHasCategories || assignmentCreating}>
+                              {assignmentCreating ? "Creating..." : "Create Assignment"}
                             </ActionButton>
                             <ActionButton quiet onClick={resetTeacherFormState}>
                               Reset Form
