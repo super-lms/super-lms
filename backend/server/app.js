@@ -6141,7 +6141,11 @@ app.post("/api/courses", async (req, res) => {
     }
 
     console.error("POST /api/courses failed:", err);
-    return res.status(500).json({ error: "Failed to create course" });
+    return res.status(500).json({
+      error: "Failed to create course",
+      detail: err.message || String(err),
+      code: err.code || null,
+    });
   } finally {
     client.release();
   }
