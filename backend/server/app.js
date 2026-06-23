@@ -6055,6 +6055,7 @@ app.post("/api/courses", async (req, res) => {
         SELECT id
         FROM users
         WHERE LOWER(email) = $1
+          AND LOWER(role) IN ('teacher', 'admin')
         LIMIT 1
         `,
         [teacherEmail]
@@ -6063,6 +6064,13 @@ app.post("/api/courses", async (req, res) => {
       if (teacherResult.rows.length > 0) {
         teacherId = teacherResult.rows[0].id;
       }
+    }
+
+    if (!teacherId) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        error: "A valid teacher email is required to create a course.",
+      });
     }
 
     const result = await client.query(
@@ -6075,6 +6083,38 @@ app.post("/api/courses", async (req, res) => {
     );
 
     const course = result.rows[0];
+
+    await client.query(
+      `
+      INSERT INTO course_teachers (course_id, teacher_id, role)
+      VALUES ($1, $2, 'owner')
+      ON CONFLICT (course_id, teacher_id) DO UPDATE
+      SET role = 'owner'
+      `,
+      [course.id, teacherId]
+    );
+
+    const davidAdminResult = await client.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(email) = LOWER('davidbrecht@cbcschools.ca')
+      LIMIT 1
+      `
+    );
+
+    if (davidAdminResult.rows.length > 0) {
+      await client.query(
+        `
+        INSERT INTO course_teachers (course_id, teacher_id, role)
+        VALUES ($1, $2, 'admin')
+        ON CONFLICT (course_id, teacher_id) DO UPDATE
+        SET role = 'admin'
+        `,
+        [course.id, davidAdminResult.rows[0].id]
+      );
+    }
+
     let templateCategories = [];
 
     if (courseType === "english_11_template" || courseType === "english_12_template") {
