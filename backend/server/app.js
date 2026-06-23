@@ -2339,7 +2339,11 @@ app.get("/api/assignments", async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS sort_order INTEGER
+      ADD COLUMN IF NOT EXISTS sort_order INTEGER,
+      ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
+      ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
+      ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25
     `);
 
     await pool.query(`
@@ -2626,7 +2630,11 @@ app.post("/api/assignments", async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS sort_order INTEGER
+      ADD COLUMN IF NOT EXISTS sort_order INTEGER,
+      ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
+      ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
+      ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25
     `);
 
     const { class_id, teacher_id, title, description, due_date, subcategory_id } = req.body;
@@ -2819,7 +2827,11 @@ app.post("/api/assignments/:assignmentId/reorder", async (req, res) => {
 
     await client.query(`
       ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS sort_order INTEGER
+      ADD COLUMN IF NOT EXISTS sort_order INTEGER,
+      ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
+      ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
+      ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
+      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25
     `);
 
     const currentResult = await client.query(
@@ -2951,12 +2963,39 @@ app.put("/api/assignments/:assignmentId", async (req, res) => {
     const dueDate = req.body.due_date || null;
     const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
 
+    const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu"];
+    const scoringMethod = allowedScoringMethods.includes(String(req.body.scoring_method || "").trim())
+      ? String(req.body.scoring_method || "").trim()
+      : "rubric";
+
+    const singleScoreKnowPercent = Number(req.body.single_score_know_percent ?? 25);
+    const singleScoreDoPercent = Number(req.body.single_score_do_percent ?? 50);
+    const singleScoreUnderstandPercent = Number(req.body.single_score_understand_percent ?? 25);
+
+    const singleScoreTotal =
+      singleScoreKnowPercent + singleScoreDoPercent + singleScoreUnderstandPercent;
+
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
     }
 
     if (!title) {
       return res.status(400).json({ error: "Assignment title is required" });
+    }
+
+    if (
+      Number.isNaN(singleScoreKnowPercent) ||
+      Number.isNaN(singleScoreDoPercent) ||
+      Number.isNaN(singleScoreUnderstandPercent) ||
+      singleScoreKnowPercent < 0 ||
+      singleScoreDoPercent < 0 ||
+      singleScoreUnderstandPercent < 0
+    ) {
+      return res.status(400).json({ error: "Single Score KDU percentages must be valid positive numbers" });
+    }
+
+    if (Math.round(singleScoreTotal * 100) / 100 !== 100) {
+      return res.status(400).json({ error: "Single Score KDU percentages must total 100%" });
     }
 
     const existingAssignmentResult = await pool.query(
@@ -2987,11 +3026,25 @@ app.put("/api/assignments/:assignmentId", async (req, res) => {
           description = $2,
           due_date = $3,
           subcategory_id = $4,
+          scoring_method = $5,
+          single_score_know_percent = $6,
+          single_score_do_percent = $7,
+          single_score_understand_percent = $8,
           updated_at = NOW()
-      WHERE id = $5
+      WHERE id = $9
       RETURNING *
       `,
-      [title, description, dueDate, finalSubcategoryId, assignmentId]
+      [
+        title,
+        description,
+        dueDate,
+        finalSubcategoryId,
+        scoringMethod,
+        singleScoreKnowPercent,
+        singleScoreDoPercent,
+        singleScoreUnderstandPercent,
+        assignmentId,
+      ]
     );
 
     if (result.rows.length === 0) {

@@ -69,6 +69,11 @@ export default function EditAssignmentPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
 
+  const [scoringMethod, setScoringMethod] = useState("rubric");
+  const [singleScoreKnowPercent, setSingleScoreKnowPercent] = useState("25");
+  const [singleScoreDoPercent, setSingleScoreDoPercent] = useState("50");
+  const [singleScoreUnderstandPercent, setSingleScoreUnderstandPercent] = useState("25");
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -179,6 +184,10 @@ export default function EditAssignmentPage() {
           : ""
       );
       setGeneratedRubricTitle(`${foundAssignment.title || "Assignment"} KDU Rubric`);
+      setScoringMethod(foundAssignment.scoring_method || "rubric");
+      setSingleScoreKnowPercent(String(foundAssignment.single_score_know_percent ?? 25));
+      setSingleScoreDoPercent(String(foundAssignment.single_score_do_percent ?? 50));
+      setSingleScoreUnderstandPercent(String(foundAssignment.single_score_understand_percent ?? 25));
 
       await loadCategoriesForAssignment(foundAssignment);
       await loadKduRubric();
@@ -589,6 +598,10 @@ export default function EditAssignmentPage() {
           description: cleanDescription,
           due_date: cleanDueDate,
           subcategory_id: Number(selectedSubcategoryId),
+          scoring_method: scoringMethod,
+          single_score_know_percent: Number(singleScoreKnowPercent || 0),
+          single_score_do_percent: Number(singleScoreDoPercent || 0),
+          single_score_understand_percent: Number(singleScoreUnderstandPercent || 0),
         }),
       });
 
@@ -1247,7 +1260,53 @@ export default function EditAssignmentPage() {
             </div>
           </WorkflowStep>
 
-          <WorkflowStep number="3" title="KDU Rubric Builder">
+          <WorkflowStep number="3" title="Scoring Method">
+            <div style={{ display: "grid", gap: "14px" }}>
+              <p style={{ lineHeight: 1.5, color: "#4b5563", marginTop: 0 }}>
+                Choose how this assignment will be scored. Existing rubric and raw mark workflows remain available.
+              </p>
+
+              <div>
+                <EditAssignmentFieldLabel>Assignment Scoring Method</EditAssignmentFieldLabel>
+                <select value={scoringMethod} onChange={(e) => setScoringMethod(e.target.value)} style={inputStyle}>
+                  <option value="rubric">Rubric Assessment</option>
+                  <option value="raw_sections">Raw Mark Sections</option>
+                  <option value="single_score_kdu">Single Score KDU Split</option>
+                </select>
+              </div>
+
+              {scoringMethod === "single_score_kdu" ? (
+                <div style={{ display: "grid", gap: "12px" }}>
+                  <EditAssignmentNoticeBox>
+                    Enter one overall score later. SUPER LMS will distribute it into KNOW, DO, and UNDERSTAND using these percentages.
+                  </EditAssignmentNoticeBox>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+                    <div>
+                      <EditAssignmentFieldLabel>KNOW %</EditAssignmentFieldLabel>
+                      <input type="number" value={singleScoreKnowPercent} onChange={(e) => setSingleScoreKnowPercent(e.target.value)} style={inputStyle} />
+                    </div>
+
+                    <div>
+                      <EditAssignmentFieldLabel>DO %</EditAssignmentFieldLabel>
+                      <input type="number" value={singleScoreDoPercent} onChange={(e) => setSingleScoreDoPercent(e.target.value)} style={inputStyle} />
+                    </div>
+
+                    <div>
+                      <EditAssignmentFieldLabel>UNDERSTAND %</EditAssignmentFieldLabel>
+                      <input type="number" value={singleScoreUnderstandPercent} onChange={(e) => setSingleScoreUnderstandPercent(e.target.value)} style={inputStyle} />
+                    </div>
+                  </div>
+
+                  <EditAssignmentNoticeBox>
+                    Current total: {Number(singleScoreKnowPercent || 0) + Number(singleScoreDoPercent || 0) + Number(singleScoreUnderstandPercent || 0)}%
+                  </EditAssignmentNoticeBox>
+                </div>
+              ) : null}
+            </div>
+          </WorkflowStep>
+
+          <WorkflowStep number="4" title="KDU Rubric Builder">
             <div style={{ display: "grid", gap: "18px" }}>
               <p style={{ lineHeight: 1.5, color: "#4b5563", marginTop: 0 }}>
                 Build the grading criteria used by the gradebook, then generate a full six-level
