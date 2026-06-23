@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import * as XLSX from "xlsx"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
@@ -41,6 +42,7 @@ function getLearningPathItemLabel(type) {
 }
 
 export default function CoursesPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -110,6 +112,8 @@ export default function CoursesPage() {
   const [newLearningPathTitleByCourseId, setNewLearningPathTitleByCourseId] = useState({})
   const [newLearningPathDescriptionByCourseId, setNewLearningPathDescriptionByCourseId] = useState({})
   const [deletingLearningPathId, setDeletingLearningPathId] = useState(null)
+  const [duplicatingLearningPathId, setDuplicatingLearningPathId] = useState(null)
+  const [movingLearningPathKey, setMovingLearningPathKey] = useState(null)
 
   const [learningPathItemsByPathId, setLearningPathItemsByPathId] = useState({})
   const [loadingItemsPathId, setLoadingItemsPathId] = useState(null)
@@ -118,6 +122,7 @@ export default function CoursesPage() {
   const [editItemDraftById, setEditItemDraftById] = useState({})
   const [savingItemId, setSavingItemId] = useState(null)
   const [deletingItemId, setDeletingItemId] = useState(null)
+  const [movingLearningPathItemKey, setMovingLearningPathItemKey] = useState(null)
 
   const [allAssignments, setAllAssignments] = useState([])
   const [assignmentsLoading, setAssignmentsLoading] = useState(false)
@@ -195,7 +200,17 @@ export default function CoursesPage() {
         ? data.filter((course) => {
             if (userRole === "admin") return true
             if (userRole === "teacher") {
-              return currentTeacherId && Number(course.teacher_id || course.teacherId || 0) === currentTeacherId
+              const sharedTeacherIds = Array.isArray(course.shared_teacher_ids)
+                ? course.shared_teacher_ids.map((id) => Number(id || 0)).filter(Boolean)
+                : []
+
+              return (
+                currentTeacherId &&
+                (
+                  Number(course.teacher_id || course.teacherId || 0) === currentTeacherId ||
+                  sharedTeacherIds.includes(currentTeacherId)
+                )
+              )
             }
             return false
           })
@@ -310,7 +325,7 @@ export default function CoursesPage() {
     const templateName = template?.template_name || "selected template"
 
     const replaceExisting = window.confirm(
-      `${courseName} may already have Learning Pathways.\n\nClick OK to replace the existing structure with "${templateName}".\n\nClick Cancel to apply only if the course is blank.`
+      `${courseName} may already have Grading Pathways.\n\nClick OK to replace the existing structure with "${templateName}".\n\nClick Cancel to apply only if the course is blank.`
     )
 
     try {
@@ -384,8 +399,8 @@ export default function CoursesPage() {
 
     if (courseCompetencies.length === 0) {
       return {
-        title: "Add Learning Pathways",
-        reason: `${courseName} needs Learning Pathways before grades can be organized clearly.`,
+        title: "Add Grading Pathways",
+        reason: `${courseName} needs Grading Pathways before grades can be organized clearly.`,
         action: "Add the main learning areas for this course, such as Writing, Reading, Speaking, or Grammar.",
         target: "competencies",
         courseId: selectedCourse.id,
@@ -405,7 +420,7 @@ export default function CoursesPage() {
     if (totalEvidenceTiers === 0) {
       return {
         title: "Add Evidence Tiers",
-        reason: `${courseName} has Learning Pathways. Now add the assignment types or evidence categories inside them.`,
+        reason: `${courseName} has Grading Pathways. Now add the assignment types or evidence categories inside them.`,
         action: "Use Add Evidence Tier to create the boxes where assignments will live.",
         target: "competencies",
         courseId: selectedCourse.id,
@@ -443,7 +458,7 @@ export default function CoursesPage() {
 
   async function moveLearningCategory(courseId, categoryId, direction) {
     if (!courseId || !categoryId || !["up", "down"].includes(direction)) {
-      setError("Valid course, learning pathway, and move direction are required.")
+      setError("Valid course, grading pathway, and move direction are required.")
       setMessage("")
       return
     }
@@ -462,7 +477,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to reorder learning pathway")
+        throw new Error(data.error || "Failed to reorder grading pathway")
       }
 
       setMessage(
@@ -474,7 +489,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to reorder learning pathway")
+      setError(err.message || "Failed to reorder grading pathway")
     } finally {
       setMovingLearningCategoryId(null)
     }
@@ -527,7 +542,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to update learning pathway")
+        throw new Error(data.error || "Failed to update grading pathway")
       }
 
       setMessage(`Assessment pathway updated: ${data.name || name}`)
@@ -536,17 +551,17 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to update learning pathway")
+      setError(err.message || "Failed to update grading pathway")
     } finally {
       setSavingLearningCategoryId(null)
     }
   }
 
   async function deleteLearningCategory(courseId, category) {
-    const categoryName = String(category?.name || "this learning pathway")
+    const categoryName = String(category?.name || "this grading pathway")
 
     const confirmed = window.confirm(
-      `Delete learning pathway "${categoryName}"? This is only allowed when no evidence tiers remain.`
+      `Delete grading pathway "${categoryName}"? This is only allowed when no evidence tiers remain.`
     )
 
     if (!confirmed) return
@@ -563,7 +578,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to delete learning pathway")
+        throw new Error(data.error || "Failed to delete grading pathway")
       }
 
       setMessage(`Assessment pathway deleted: ${data.deleted?.name || categoryName}`)
@@ -571,7 +586,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to delete learning pathway")
+      setError(err.message || "Failed to delete grading pathway")
     } finally {
       setDeletingLearningCategoryId(null)
     }
@@ -579,18 +594,18 @@ export default function CoursesPage() {
 
   async function duplicateLearningCategory(courseId, category) {
     const categoryId = Number(category?.id || 0)
-    const categoryName = String(category?.name || "Learning Pathway").trim()
+    const categoryName = String(category?.name || "Grading Pathway").trim()
     const duplicateName = categoryName.endsWith(" Copy") ? `${categoryName} 2` : `${categoryName} Copy`
     const categoryWeight = Number(category?.weight_percent || 0)
 
     if (!courseId || !categoryId) {
-      setError("Valid course and learning pathway are required.")
+      setError("Valid course and grading pathway are required.")
       setMessage("")
       return
     }
 
     const confirmed = window.confirm(
-      `Duplicate learning pathway "${categoryName}"?\n\nThis will copy the pathway weight and its Evidence Tiers.\n\nIt will not copy assignments, grades, submissions, rubric scores, or student work.`
+      `Duplicate grading pathway "${categoryName}"?\n\nThis will copy the pathway weight and its Evidence Tiers.\n\nIt will not copy assignments, grades, submissions, rubric scores, or student work.`
     )
 
     if (!confirmed) return
@@ -622,7 +637,7 @@ export default function CoursesPage() {
       const duplicatedCategory = await categoryRes.json()
 
       if (!categoryRes.ok) {
-        throw new Error(duplicatedCategory.error || "Failed to duplicate learning pathway")
+        throw new Error(duplicatedCategory.error || "Failed to duplicate grading pathway")
       }
 
       for (const tier of tiersToCopy) {
@@ -660,7 +675,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to duplicate learning pathway")
+      setError(err.message || "Failed to duplicate grading pathway")
     } finally {
       setDuplicatingLearningCategoryId(null)
     }
@@ -822,7 +837,7 @@ export default function CoursesPage() {
       : Number(tier.level_number)
 
     if (!courseId || !categoryId || !tierId) {
-      setError("Valid course, learning pathway, and evidence tier are required.")
+      setError("Valid course, grading pathway, and evidence tier are required.")
       setMessage("")
       return
     }
@@ -959,7 +974,7 @@ export default function CoursesPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to create learning pathway")
+        throw new Error(data.error || "Failed to create grading pathway")
       }
 
       setNewLearningCategoryNameByCourseId((current) => ({ ...current, [courseId]: "" }))
@@ -969,7 +984,7 @@ export default function CoursesPage() {
       setActiveCompetencyCourseId(null)
       await loadCompetencies(courseId)
     } catch (err) {
-      setError(err.message || "Failed to create learning pathway")
+      setError(err.message || "Failed to create grading pathway")
     } finally {
       setCreatingLearningCategoryCourseId(null)
     }
@@ -991,7 +1006,7 @@ export default function CoursesPage() {
       const categoriesData = await categoriesRes.json()
 
       if (!categoriesRes.ok) {
-        throw new Error(categoriesData.error || "Failed to load learning pathways")
+        throw new Error(categoriesData.error || "Failed to load grading pathways")
       }
 
       const categories = Array.isArray(categoriesData)
@@ -1151,7 +1166,7 @@ export default function CoursesPage() {
     }
 
     const confirmed = window.confirm(
-      `Duplicate course "${currentTitle}" as "${title}"?\n\nThis will copy course structure, Learning Pathways, Evidence Tiers, assignments, and exam sections.\n\nIt will not copy students, grades, submissions, rubric scores, or student work.`
+      `Duplicate course "${currentTitle}" as "${title}"?\n\nThis will copy course structure, Grading Pathways, Evidence Tiers, assignments, and exam sections.\n\nIt will not copy students, grades, submissions, rubric scores, or student work.`
     )
 
     if (!confirmed) return
@@ -1426,6 +1441,52 @@ export default function CoursesPage() {
     }
   }
 
+
+  async function enrollFromMasterDirectory(course, currentGrade = 11) {
+    const courseId = Number(course?.id || 0)
+    const courseName = course?.title || "this course"
+
+    if (!courseId) {
+      setError("Valid course is required.")
+      setMessage("")
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Enroll current Grade ${currentGrade} students from the Master Directory into ${courseName}?\\n\\nThis will create/update student user accounts and add them to this course roster.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setCourseImportingCourseId(courseId)
+      setMessage("")
+      setError("")
+
+      const res = await fetch(`${API_BASE}/api/courses/${courseId}/enroll-from-master-directory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_grade: currentGrade }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to enroll students from Master Directory")
+      }
+
+      setMessage(
+        `Master Directory enrollment complete: processed ${data.processed_master_students || 0}, created ${data.created_users || 0} users, updated ${data.updated_users || 0} users, enrolled ${data.enrolled_students || 0} students, skipped ${data.skipped_missing_email || 0} missing/invalid emails.`
+      )
+
+      await loadRoster(courseId)
+    } catch (err) {
+      setError(err.message || "Failed to enroll students from Master Directory")
+    } finally {
+      setCourseImportingCourseId(null)
+    }
+  }
+
   async function importCourseRoster(course) {
     try {
       setCourseImportingCourseId(course.id)
@@ -1579,6 +1640,106 @@ export default function CoursesPage() {
     }
   }
 
+
+
+  async function duplicateLearningPath(courseId, learningPath) {
+    const learningPathId = Number(learningPath?.id || 0)
+    const currentTitle = String(learningPath?.title || "Learning Path").trim()
+    const defaultTitle = currentTitle.endsWith(" Copy") ? `${currentTitle} 2` : `${currentTitle} Copy`
+
+    if (!courseId || !learningPathId) {
+      setError("Valid course and Learning Path are required.")
+      setMessage("")
+      return
+    }
+
+    const requestedTitle = window.prompt("New duplicated Learning Path name:", defaultTitle)
+
+    if (requestedTitle === null) {
+      return
+    }
+
+    const title = String(requestedTitle || "").trim()
+
+    if (!title) {
+      setError("Duplicated Learning Path name is required.")
+      setMessage("")
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Duplicate Learning Path "${currentTitle}" as "${title}"?\n\nThis will copy the Learning Path and its items.\n\nLinked assignments will stay connected to the same assignment records.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setDuplicatingLearningPathId(learningPathId)
+      setMessage("")
+      setError("")
+
+      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to duplicate Learning Path")
+      }
+
+      setMessage(
+        `Learning Path duplicated: ${data.learning_path?.title || title}. Copied ${data.copied?.items || 0} item${Number(data.copied?.items || 0) === 1 ? "" : "s"}.`
+      )
+
+      await loadLearningPaths(courseId, { forceOpen: true })
+    } catch (err) {
+      setError(err.message || "Failed to duplicate Learning Path")
+    } finally {
+      setDuplicatingLearningPathId(null)
+    }
+  }
+
+  async function moveLearningPath(courseId, learningPathId, direction) {
+    if (!courseId || !learningPathId || !["up", "down"].includes(direction)) {
+      setError("Valid Learning Path and move direction are required.")
+      setMessage("")
+      return
+    }
+
+    try {
+      setMovingLearningPathKey(`${learningPathId}-${direction}`)
+      setMessage("")
+      setError("")
+
+      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to move Learning Path")
+      }
+
+      setMessage(
+        data.moved
+          ? `Learning Path moved ${direction}.`
+          : data.reason || "Learning Path order unchanged."
+      )
+
+      await loadLearningPaths(courseId, { forceOpen: true })
+    } catch (err) {
+      setError(err.message || "Failed to move Learning Path")
+    } finally {
+      setMovingLearningPathKey(null)
+    }
+  }
+
   async function deleteLearningPath(courseId, learningPath) {
     const confirmDelete = window.confirm(`Delete the Learning Path "${learningPath.title}"?`)
     if (!confirmDelete) return
@@ -1643,6 +1804,185 @@ export default function CoursesPage() {
       await loadLearningPathItems(learningPath.id)
     } catch (err) {
       setError(err.message || "Failed to create Learning Path item")
+    } finally {
+      setCreatingItemKey(null)
+    }
+  }
+
+
+
+  async function createLearningPathLesson(course, learningPath) {
+    const courseId = Number(course?.id || 0)
+    const learningPathId = Number(learningPath?.id || 0)
+
+    if (!courseId || !learningPathId) {
+      setError("Valid course and Learning Path are required.")
+      setMessage("")
+      return
+    }
+
+    try {
+      setCreatingItemKey(`${learningPathId}-lesson`)
+      setMessage("")
+      setError("")
+
+      const title = window.prompt("Lesson title:", "New Learning Path Lesson")
+
+      if (title === null) {
+        return
+      }
+
+      const cleanTitle = String(title || "").trim()
+
+      if (!cleanTitle) {
+        setError("Lesson title is required.")
+        setMessage("")
+        return
+      }
+
+      const content = window.prompt("Optional lesson content:", "") || ""
+
+      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/create-lesson`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cleanTitle,
+          content: String(content || "").trim(),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create Learning Path lesson")
+      }
+
+      await loadLearningPathItems(learningPathId)
+
+      setMessage(`Lesson created and linked to Learning Path: ${data.lesson?.title || cleanTitle}`)
+
+      window.location.href = "/lessons"
+    } catch (err) {
+      setError(err.message || "Failed to create Learning Path lesson")
+    } finally {
+      setCreatingItemKey(null)
+    }
+  }
+
+  async function createLearningPathAssignment(course, learningPath) {
+    const courseId = Number(course?.id || 0)
+    const learningPathId = Number(learningPath?.id || 0)
+
+    if (!courseId || !learningPathId) {
+      setError("Valid course and Learning Path are required.")
+      setMessage("")
+      return
+    }
+
+    try {
+      setCreatingItemKey(`${learningPathId}-assignment`)
+      setMessage("")
+      setError("")
+
+      const title = window.prompt("Assignment title:", "New Learning Path Assignment")
+
+      if (title === null) {
+        return
+      }
+
+      const cleanTitle = String(title || "").trim()
+
+      if (!cleanTitle) {
+        setError("Assignment title is required.")
+        setMessage("")
+        return
+      }
+
+      const categoriesRes = await fetch(`${API_BASE}/api/courses/${courseId}/categories`)
+      const categoriesData = await categoriesRes.json()
+
+      if (!categoriesRes.ok) {
+        throw new Error(categoriesData.error || "Failed to load grading pathways")
+      }
+
+      const categories = Array.isArray(categoriesData) ? categoriesData : []
+      const tierOptions = []
+
+      for (const category of categories) {
+        const tiersRes = await fetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
+        const tiersData = await tiersRes.json()
+
+        if (!tiersRes.ok) {
+          throw new Error(tiersData.error || "Failed to load evidence tiers")
+        }
+
+        const tiers = Array.isArray(tiersData) ? tiersData : []
+
+        tiers.forEach((tier) => {
+          tierOptions.push({
+            id: tier.id,
+            label: `${category.name || "Assessment Pathway"} → ${tier.name || "Evidence Tier"}`,
+          })
+        })
+      }
+
+      if (tierOptions.length === 0) {
+        setError("Create at least one Grading Pathway and Evidence Tier before adding a Learning Path assignment.")
+        setMessage("")
+        return
+      }
+
+      const tierList = tierOptions
+        .map((tier, index) => `${index + 1}. ${tier.label}`)
+        .join("\n")
+
+      const selectedText = window.prompt(
+        `Choose the Evidence Tier number for this assignment:\n\n${tierList}`,
+        "1"
+      )
+
+      if (selectedText === null) {
+        return
+      }
+
+      const selectedIndex = Number(selectedText) - 1
+      const selectedTier = tierOptions[selectedIndex]
+
+      if (!selectedTier) {
+        setError("Valid Evidence Tier number is required.")
+        setMessage("")
+        return
+      }
+
+      const description = window.prompt("Optional assignment description:", "") || ""
+
+      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/create-assignment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cleanTitle,
+          description: String(description || "").trim(),
+          subcategory_id: selectedTier.id,
+          teacher_id: user?.id || null,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create Learning Path assignment")
+      }
+
+      await loadAssignments()
+      await loadLearningPathItems(learningPathId)
+
+      setMessage(`Assignment created and linked to Learning Path: ${data.assignment?.title || cleanTitle}`)
+
+      if (data.assignment?.id) {
+        window.location.href = `/assignments/${data.assignment.id}/edit`
+      }
+    } catch (err) {
+      setError(err.message || "Failed to create Learning Path assignment")
     } finally {
       setCreatingItemKey(null)
     }
@@ -1731,6 +2071,45 @@ export default function CoursesPage() {
       setError(err.message || "Failed to save Learning Path item")
     } finally {
       setSavingItemId(null)
+    }
+  }
+
+
+  async function moveLearningPathItem(learningPathId, itemId, direction) {
+    if (!learningPathId || !itemId || !["up", "down"].includes(direction)) {
+      setError("Valid Learning Path item and move direction are required.")
+      setMessage("")
+      return
+    }
+
+    try {
+      setMovingLearningPathItemKey(`${itemId}-${direction}`)
+      setMessage("")
+      setError("")
+
+      const res = await fetch(`${API_BASE}/api/learning-path-items/${itemId}/reorder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to move Learning Path item")
+      }
+
+      setMessage(
+        data.moved
+          ? `Learning Path item moved ${direction}.`
+          : data.reason || "Learning Path item order unchanged."
+      )
+
+      await loadLearningPathItems(learningPathId)
+    } catch (err) {
+      setError(err.message || "Failed to move Learning Path item")
+    } finally {
+      setMovingLearningPathItemKey(null)
     }
   }
 
@@ -1923,7 +2302,7 @@ export default function CoursesPage() {
                   <option value="custom_competency">Start Blank / Custom Course</option>
                 </select>
                 <div style={{ marginTop: "6px", fontSize: "0.9rem", color: "#4b5563", lineHeight: 1.45 }}>
-                  Template courses automatically create Learning Pathways and Evidence Tiers. Blank courses let you build your own structure.
+                  Template courses automatically create Grading Pathways and Evidence Tiers. Blank courses let you build your own structure.
                 </div>
               </div>
 
@@ -1939,10 +2318,10 @@ export default function CoursesPage() {
                   Assessment Structure Setup
                 </h3>
                 <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
-                  After creating the course, build the grading structure using Learning Pathways and Evidence Tiers.
+                  After creating the course, build the grading structure using Grading Pathways and Evidence Tiers.
                 </p>
                 <div style={{ display: "grid", gap: "6px", color: "#111827", lineHeight: 1.45 }}>
-                  <div><strong>Learning Pathways</strong> hold the main weighted areas of the course.</div>
+                  <div><strong>Grading Pathways</strong> hold the main weighted areas of the course.</div>
                   <div><strong>Evidence Tiers</strong> hold the assignment buckets inside each pathway.</div>
                   <div><strong>Assignments</strong> are created inside a pathway and evidence tier.</div>
                 </div>
@@ -2195,14 +2574,14 @@ export default function CoursesPage() {
 
                         <div style={{ display: "grid", gap: "6px", lineHeight: 1.45 }}>
                           <div><strong>Students:</strong> {displayedStudentCount}</div>
-                          <div><strong>Learning Pathways:</strong> {courseCompetencies.length}</div>
+                          <div><strong>Grading Pathways:</strong> {courseCompetencies.length}</div>
                           <div><strong>Evidence Tiers:</strong> {totalEvidenceTiers}</div>
                           <div><strong>Assignments:</strong> {courseAssignments.length}</div>
                         </div>
 
                         <div style={{ marginTop: "12px", display: "grid", gap: "4px", lineHeight: 1.45 }}>
-                          <div> {hasAssessmentPathways ? "☑" : "☐"} Learning Pathways Created</div>
-                          <div> {pathwaysComplete ? "☑" : "☐"} Learning Pathways Total 100%</div>
+                          <div> {hasAssessmentPathways ? "☑" : "☐"} Grading Pathways Created</div>
+                          <div> {pathwaysComplete ? "☑" : "☐"} Grading Pathways Total 100%</div>
                           <div> {hasEvidenceTiers ? "☑" : "☐"} Evidence Tiers Created</div>
                           <div> {hasAssignments ? "☑" : "☐"} Assignments Created</div>
                           <div> {hasStudents ? "☑" : "☐"} Students Imported</div>
@@ -2254,24 +2633,24 @@ export default function CoursesPage() {
 
                           <div style={{ display: "grid", gap: "6px", lineHeight: 1.45 }}>
                             {!hasAssessmentPathways ? (
-                              <div>⚠ No Learning Pathways yet. Create pathways or apply a template.</div>
+                              <div>⚠ No Grading Pathways yet. Create pathways or apply a template.</div>
                             ) : pathwaysComplete ? (
-                              <div>✓ Learning Pathway weights total 100%.</div>
+                              <div>✓ Grading Pathway weights total 100%.</div>
                             ) : assessmentPathwayTotal < 100 ? (
                               <div>
-                                ⚠ Learning Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
+                                ⚠ Grading Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
                                 Add {(100 - assessmentPathwayTotal).toFixed(2)}% more.
                               </div>
                             ) : (
                               <div>
-                                ⚠ Learning Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
+                                ⚠ Grading Pathway weights total {assessmentPathwayTotal.toFixed(2)}%.
                                 Reduce by {(assessmentPathwayTotal - 100).toFixed(2)}%.
                               </div>
                             )}
 
                             {hasAssessmentPathways && courseCompetencies.some((category) => !Array.isArray(category.subcategories) || category.subcategories.length === 0) ? (
                               <div>
-                                ⚠ Some Learning Pathways have no Evidence Tiers yet.
+                                ⚠ Some Grading Pathways have no Evidence Tiers yet.
                               </div>
                             ) : hasEvidenceTiers ? (
                               <div>✓ Evidence Tiers are created.</div>
@@ -2308,7 +2687,7 @@ export default function CoursesPage() {
 
                           <div style={{ display: "grid", gap: "8px", lineHeight: 1.5 }}>
                             <div>
-                              <strong>Step 1:</strong> Create Learning Pathways. These are your major grading areas, such as Tests, Projects, Assignments, Exams, or KDU competency areas. Their weights should total 100%.
+                              <strong>Step 1:</strong> Create Grading Pathways. These are your major grading areas, such as Tests, Projects, Assignments, Exams, or KDU competency areas. Their weights should total 100%.
                             </div>
 
                             <div>
@@ -2333,18 +2712,93 @@ export default function CoursesPage() {
                   )}
 
                   <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "4px" }}>
+                      Main Teacher Workflow
+                    </div>
+
                     <button
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        beginEditCourse(course)
+                        loadLearningPaths(course.id)
                       }}
-                      disabled={savingCourseId === course.id}
+                      disabled={learningPathLoadingCourseId === course.id}
                       style={buttonStyle}
                     >
-                      Edit Course
+                      {learningPathLoadingCourseId === course.id ? "Loading Paths..." : isLearningPathsOpen ? "Hide Learning Paths" : "Learning Paths"}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        loadCompetencies(course.id)
+                      }}
+                      disabled={competencyLoadingCourseId === course.id}
+                      style={buttonStyle}
+                    >
+                      {competencyLoadingCourseId === course.id ? "Loading Assessment Pathways..." : isCompetenciesOpen ? "Hide Assessment Pathways" : "Open Assessment Pathways"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/course-assignments/${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Current Assignments
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/gradebook?classId=${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Gradebook
+                    </button>
+
+                    <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "10px" }}>
+                      Setup & Creation
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        window.location.href = `/assignments?classId=${course.id}&section=create`
+                      }}
+                      style={buttonStyle}
+                    >
+                      + Create Assignment
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        loadCompetencies(course.id, { forceOpen: true })
+                      }}
+                      disabled={competencyLoadingCourseId === course.id}
+                      style={buttonStyle}
+                    >
+                      + Add Evidence Tier
+                    </button>
+
+                    <button type="button" onClick={() => setupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
+                      {settingUpCourseId === course.id ? "Setting up..." : "Set Up Course Structure"}
+                    </button>
+
+                    <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "10px" }}>
+                      Students & Templates
+                    </div>
 
                     <button type="button" onClick={() => {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
@@ -2364,85 +2818,6 @@ export default function CoursesPage() {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadLearningPaths(course.id)
-                      }}
-                      disabled={learningPathLoadingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      {learningPathLoadingCourseId === course.id ? "Loading Paths..." : isLearningPathsOpen ? "Hide Learning Paths" : "Learning Paths"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.location.href = `/assignments?classId=${course.id}&section=create`
-                      }}
-                      style={buttonStyle}
-                    >
-                      + Create Assignment
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.location.href = `/course-assignments/${course.id}`
-                      }}
-                      style={buttonStyle}
-                    >
-                      Current Assignments
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadCompetencies(course.id)
-                      }}
-                      disabled={competencyLoadingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      {competencyLoadingCourseId === course.id ? "Loading Course Structure..." : isCompetenciesOpen ? "Hide Course Structure" : "Course Structure"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadCompetencies(course.id, { forceOpen: true })
-                      }}
-                      disabled={competencyLoadingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      + Add Evidence Tier
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => duplicateCourse(course)}
-                      disabled={duplicatingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      {duplicatingCourseId === course.id ? "Duplicating Course..." : "Duplicate Course"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => saveCourseStructureAsTemplate(course)}
-                      disabled={savingTemplateCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      {savingTemplateCourseId === course.id ? "Saving Template..." : "Save Structure as Template"}
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={() => loadTemplateLibrary(course.id)}
                       disabled={templateLibraryLoading && activeTemplateLibraryCourseId === course.id}
                       style={buttonStyle}
@@ -2454,8 +2829,39 @@ export default function CoursesPage() {
                           : "Template Library"}
                     </button>
 
-                    <button type="button" onClick={() => setupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
-                      {settingUpCourseId === course.id ? "Setting up..." : "Set Up Course Structure"}
+                    <button
+                      type="button"
+                      onClick={() => saveCourseStructureAsTemplate(course)}
+                      disabled={savingTemplateCourseId === course.id}
+                      style={buttonStyle}
+                    >
+                      {savingTemplateCourseId === course.id ? "Saving Template..." : "Save Structure as Template"}
+                    </button>
+
+                    <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "10px" }}>
+                      Course Admin
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        beginEditCourse(course)
+                      }}
+                      disabled={savingCourseId === course.id}
+                      style={buttonStyle}
+                    >
+                      Edit Course
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => duplicateCourse(course)}
+                      disabled={duplicatingCourseId === course.id}
+                      style={buttonStyle}
+                    >
+                      {duplicatingCourseId === course.id ? "Duplicating Course..." : "Duplicate Course"}
                     </button>
 
                     <button type="button" onClick={() => forceSetupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
@@ -2468,7 +2874,7 @@ export default function CoursesPage() {
                       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Template Library</h3>
 
                       <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                        Reuse a saved course structure. Templates copy Learning Pathways,
+                        Reuse a saved course structure. Templates copy Grading Pathways,
                         Evidence Tiers, weights, and order. They do not copy students, grades,
                         submissions, or assignments.
                       </p>
@@ -2477,7 +2883,7 @@ export default function CoursesPage() {
                         <div>Loading templates...</div>
                       ) : courseStructureTemplates.length === 0 ? (
                         <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                          No saved templates yet. Use Save Structure as Template on a course that already has Learning Pathways.
+                          No saved templates yet. Use Save Structure as Template on a course that already has Grading Pathways.
                         </div>
                       ) : (
                         <div style={{ display: "grid", gap: "12px" }}>
@@ -2502,7 +2908,7 @@ export default function CoursesPage() {
                               ) : null}
 
                               <div style={{ display: "grid", gap: "4px", color: "#111827", lineHeight: 1.45 }}>
-                                <div><strong>Learning Pathways:</strong> {template.category_count || 0}</div>
+                                <div><strong>Grading Pathways:</strong> {template.category_count || 0}</div>
                                 <div><strong>Evidence Tiers:</strong> {template.subcategory_count || 0}</div>
                                 <div><strong>Created By:</strong> {template.created_by_teacher_email || "Unknown"}</div>
                               </div>
@@ -2555,7 +2961,7 @@ export default function CoursesPage() {
 
                                   {!Array.isArray(template.categories) || template.categories.length === 0 ? (
                                     <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                                      This template does not have Learning Pathway details available.
+                                      This template does not have Grading Pathway details available.
                                     </div>
                                   ) : (
                                     <div style={{ display: "grid", gap: "10px" }}>
@@ -2606,11 +3012,11 @@ export default function CoursesPage() {
 
                   {isCompetenciesOpen ? (
                     <div style={learningPathBoxStyle}>
-                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Learning Pathways</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Grading Pathways</h3>
 
                       <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                        Learning Pathways are the weighted grading areas for your course.
-                        Create Learning Pathways totaling 100%, then create Evidence Tiers inside each pathway.
+                        Grading Pathways are the weighted grading areas for your course.
+                        Create Grading Pathways totaling 100%, then create Evidence Tiers inside each pathway.
                         Assignments are placed inside Evidence Tiers and graded using KDU assessments.
                       </p>
 
@@ -2624,7 +3030,7 @@ export default function CoursesPage() {
                         }}
                       >
                         <h4 style={{ marginTop: 0, marginBottom: "10px" }}>
-                          Learning Pathway Weight Check
+                          Grading Pathway Weight Check
                         </h4>
 
                         <div style={{ display: "grid", gap: "6px", color: "#111827", lineHeight: 1.45 }}>
@@ -2634,7 +3040,7 @@ export default function CoursesPage() {
 
                           {courseCompetencies.length === 0 ? (
                             <div style={{ color: "#4b5563" }}>
-                              Add learning pathways until the course total reaches 100%.
+                              Add grading pathways until the course total reaches 100%.
                             </div>
                           ) : assessmentPathwayTotal === 100 ? (
                             <div style={{ color: "#166534", fontWeight: 800 }}>
@@ -2653,10 +3059,10 @@ export default function CoursesPage() {
                       </div>
 
                       <div style={{ border: "1px solid #d7dce5", borderRadius: "12px", padding: "14px", marginBottom: "14px", background: "#ffffff" }}>
-                        <h4 style={{ marginTop: 0, marginBottom: "10px" }}>Add Learning Pathway</h4>
+                        <h4 style={{ marginTop: 0, marginBottom: "10px" }}>Add Grading Pathway</h4>
                         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 160px", gap: "10px" }}>
                           <div>
-                            <label style={labelStyle}>Learning Pathway Name</label>
+                            <label style={labelStyle}>Grading Pathway Name</label>
                             <input
                               value={newLearningCategoryNameByCourseId[course.id] || ""}
                               onChange={(event) =>
@@ -2697,16 +3103,16 @@ export default function CoursesPage() {
                             disabled={creatingLearningCategoryCourseId === course.id}
                             style={primaryButtonStyle}
                           >
-                            {creatingLearningCategoryCourseId === course.id ? "Adding..." : "Add Learning Pathway"}
+                            {creatingLearningCategoryCourseId === course.id ? "Adding..." : "Add Grading Pathway"}
                           </button>
                         </div>
                       </div>
 
                       {courseCompetencies.length === 0 ? (
                         <div style={emptyStateStyle}>
-                          <strong>No Learning Pathways Yet</strong>
+                          <strong>No Grading Pathways Yet</strong>
                           <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                            This custom competency course is ready for teacher-created learning pathways.
+                            This custom competency course is ready for teacher-created grading pathways.
                           </div>
                         </div>
                       ) : (
@@ -2760,7 +3166,7 @@ export default function CoursesPage() {
                                     <>
                                       <h4 style={{ marginTop: 0, marginBottom: "6px" }}>{category.name}</h4>
                                       <div style={{ color: "#4b5563" }}>
-                                        Learning Pathway Weight: {category.weight_percent || "0.00"}%
+                                        Grading Pathway Weight: {category.weight_percent || "0.00"}%
                                       </div>
                                     </>
                                   )}
@@ -3193,7 +3599,7 @@ export default function CoursesPage() {
                                           <button
                                             key={itemType}
                                             type="button"
-                                            onClick={() => createLearningPathItem(course.id, pathItem, itemType)}
+                                            onClick={() => itemType === "assignment" ? createLearningPathAssignment(course, pathItem) : itemType === "lesson" ? createLearningPathLesson(course, pathItem) : createLearningPathItem(course.id, pathItem, itemType)}
                                             disabled={creatingItemKey === key}
                                             style={buttonStyle}
                                           >
@@ -3222,6 +3628,7 @@ export default function CoursesPage() {
                                           const isEditing = editingItemId === item.id
                                           const draft = editItemDraftById[item.id] || {}
                                           const linkedAssignmentTitle = item.assignment_id ? getAssignmentTitle(item.assignment_id) : ""
+                                          const linkedLessonTitle = item.lesson_id && String(itemType || "").toLowerCase() === "lesson" ? title : ""
 
                                           return (
                                             <div key={item.id || `${pathItem.id}-${index}`} style={itemRowStyle}>
@@ -3319,7 +3726,43 @@ export default function CoursesPage() {
                                                   <div style={{ fontWeight: 800 }}>{title}</div>
 
                                                   {linkedAssignmentTitle ? (
-                                                    <div style={linkedAssignmentStyle}>Linked assignment: {linkedAssignmentTitle}</div>
+                                                    <div style={{ display: "grid", gap: "8px" }}>
+                                                      <div style={linkedAssignmentStyle}>Linked assignment: {linkedAssignmentTitle}</div>
+
+                                                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => { window.location.href = `/assignments/${item.assignment_id}/edit` }}
+                                                          style={buttonStyle}
+                                                        >
+                                                          Open Edit Page
+                                                        </button>
+
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => { window.location.href = `/assignments/${item.assignment_id}/grade` }}
+                                                          style={buttonStyle}
+                                                        >
+                                                          Open Speed Grading
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  ) : null}
+
+                                                  {linkedLessonTitle ? (
+                                                    <div style={{ display: "grid", gap: "8px" }}>
+                                                      <div style={linkedAssignmentStyle}>Linked lesson: {linkedLessonTitle}</div>
+
+                                                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => { window.location.href = "/lessons" }}
+                                                          style={buttonStyle}
+                                                        >
+                                                          Open Lessons Page
+                                                        </button>
+                                                      </div>
+                                                    </div>
                                                   ) : null}
 
                                                   {item.description ? (
@@ -3333,6 +3776,24 @@ export default function CoursesPage() {
                                                   ) : null}
 
                                                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => moveLearningPathItem(pathItem.id, item.id, "up")}
+                                                      disabled={movingLearningPathItemKey === `${item.id}-up`}
+                                                      style={buttonStyle}
+                                                    >
+                                                      {movingLearningPathItemKey === `${item.id}-up` ? "Moving..." : "↑ Move Up"}
+                                                    </button>
+
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => moveLearningPathItem(pathItem.id, item.id, "down")}
+                                                      disabled={movingLearningPathItemKey === `${item.id}-down`}
+                                                      style={buttonStyle}
+                                                    >
+                                                      {movingLearningPathItemKey === `${item.id}-down` ? "Moving..." : "↓ Move Down"}
+                                                    </button>
+
                                                     <button type="button" onClick={() => startEditingLearningPathItem(item)} style={buttonStyle}>
                                                       Edit
                                                     </button>
@@ -3356,14 +3817,43 @@ export default function CoursesPage() {
                                   </div>
                                 </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => deleteLearningPath(course.id, pathItem)}
-                                  disabled={deletingLearningPathId === pathItem.id}
-                                  style={buttonStyle}
-                                >
-                                  {deletingLearningPathId === pathItem.id ? "Deleting..." : "Delete"}
-                                </button>
+                                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "flex-start" }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveLearningPath(course.id, pathItem.id, "up")}
+                                    disabled={movingLearningPathKey === `${pathItem.id}-up`}
+                                    style={buttonStyle}
+                                  >
+                                    {movingLearningPathKey === `${pathItem.id}-up` ? "Moving..." : "↑ Move Up"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => moveLearningPath(course.id, pathItem.id, "down")}
+                                    disabled={movingLearningPathKey === `${pathItem.id}-down`}
+                                    style={buttonStyle}
+                                  >
+                                    {movingLearningPathKey === `${pathItem.id}-down` ? "Moving..." : "↓ Move Down"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => duplicateLearningPath(course.id, pathItem)}
+                                    disabled={duplicatingLearningPathId === pathItem.id}
+                                    style={buttonStyle}
+                                  >
+                                    {duplicatingLearningPathId === pathItem.id ? "Duplicating..." : "Duplicate"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteLearningPath(course.id, pathItem)}
+                                    disabled={deletingLearningPathId === pathItem.id}
+                                    style={buttonStyle}
+                                  >
+                                    {deletingLearningPathId === pathItem.id ? "Deleting..." : "Delete"}
+                                  </button>
+                                </div>
                               </div>
                             )
                           })}
@@ -3386,6 +3876,25 @@ export default function CoursesPage() {
                         <strong>student_name, student_email</strong>
                         <br />
                         Optional: <strong>parent_email, student_id</strong>
+                      </div>
+
+                      <div style={{ border: "1px solid #d7dce5", borderRadius: "12px", padding: "12px", background: "#f8fafc", marginTop: "12px", marginBottom: "12px" }}>
+                        <div style={{ fontWeight: 900, marginBottom: "6px" }}>
+                          Enroll From Master Directory
+                        </div>
+
+                        <div style={{ color: "#4b5563", lineHeight: 1.5, marginBottom: "10px" }}>
+                          Use this after importing the Master Student Directory. For Pre-Calculus 11, this will enroll current Grade 11 students into this course roster.
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => enrollFromMasterDirectory(course, 11)}
+                          disabled={courseImportingCourseId === course.id}
+                          style={primaryButtonStyle}
+                        >
+                          {courseImportingCourseId === course.id ? "Enrolling..." : "Enroll Grade 11 From Master Directory"}
+                        </button>
                       </div>
 
                       <input
@@ -3571,13 +4080,13 @@ function FloatingTeacherCoach({
           action: "Open Template Library or Course Structure.",
         },
         {
-          title: "Create Learning Pathways",
-          body: "Learning Pathways are the major grading areas for the course. Their weights should add up to 100%. Examples: Tests, Projects, Assignments, Exams, or competency areas.",
-          action: "Click Course Structure, then add Learning Pathways.",
+          title: "Create Grading Pathways",
+          body: "Grading Pathways are the major grading areas for the course. Their weights should add up to 100%. Examples: Tests, Projects, Assignments, Exams, or competency areas.",
+          action: "Click Course Structure, then add Grading Pathways.",
         },
         {
           title: "Create Evidence Tiers",
-          body: "Evidence Tiers sit inside Learning Pathways. Assignments connect to Evidence Tiers so the gradebook knows where each mark belongs.",
+          body: "Evidence Tiers sit inside Grading Pathways. Assignments connect to Evidence Tiers so the gradebook knows where each mark belongs.",
           action: "Inside each pathway, add tiers such as Major Evidence, Developing Evidence, Daily Evidence, or KDU Rubric Assessments.",
         },
         {
@@ -3627,7 +4136,7 @@ function FloatingTeacherCoach({
       steps: [
         {
           title: "Save a strong course structure",
-          body: "Once a course has good Learning Pathways and Evidence Tiers, save it as a template.",
+          body: "Once a course has good Grading Pathways and Evidence Tiers, save it as a template.",
           action: "Click Save Structure as Template on the course card.",
         },
         {
@@ -3833,60 +4342,60 @@ function NoticeBox({ children, error = false }) {
 
 const teacherCoachShellStyle = {
   position: "fixed",
-  right: "20px",
-  bottom: "20px",
+  right: "16px",
+  bottom: "16px",
   zIndex: 1000,
   display: "grid",
-  gap: "10px",
+  gap: "8px",
   justifyItems: "end",
 }
 
 const teacherCoachPanelStyle = {
-  width: "min(420px, calc(100vw - 40px))",
+  width: "min(340px, calc(100vw - 32px))",
   border: "2px solid #111827",
-  borderRadius: "16px",
-  padding: "16px",
+  borderRadius: "14px",
+  padding: "12px",
   background: "#ffffff",
-  boxShadow: "0 18px 40px rgba(0, 0, 0, 0.22)",
+  boxShadow: "0 14px 32px rgba(0, 0, 0, 0.2)",
 }
 
 const teacherCoachHeaderStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: "12px",
+  gap: "10px",
 }
 
 const teacherCoachStepStyle = {
   border: "1px solid #d7dce5",
-  borderRadius: "12px",
-  padding: "14px",
-  marginTop: "12px",
+  borderRadius: "10px",
+  padding: "10px",
+  marginTop: "10px",
   background: "#ffffff",
 }
 
 const teacherCoachFooterStyle = {
   display: "flex",
-  gap: "10px",
+  gap: "8px",
   flexWrap: "wrap",
   justifyContent: "space-between",
-  marginTop: "12px",
+  marginTop: "10px",
 }
 
 const teacherCoachButtonStyle = {
-  padding: "12px 16px",
+  padding: "10px 14px",
   borderRadius: "999px",
   border: "2px solid #111827",
   background: "#ffffff",
   color: "#111827",
   fontWeight: 900,
   cursor: "pointer",
-  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.22)",
+  boxShadow: "0 8px 20px rgba(0, 0, 0, 0.2)",
 }
 
 const teacherCoachSmallButtonStyle = {
-  padding: "8px 10px",
-  borderRadius: "10px",
+  padding: "7px 9px",
+  borderRadius: "9px",
   border: "1px solid #d7dce5",
   background: "#ffffff",
   fontWeight: 800,

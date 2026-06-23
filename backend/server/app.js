@@ -1567,16 +1567,32 @@ app.get("/api/classes", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        id,
-        title AS class_name,
-        title,
-        description,
-        teacher_id,
-        school_id,
-        term_id,
-        created_at
-      FROM courses
-      ORDER BY id ASC
+        c.id,
+        c.title AS class_name,
+        c.title,
+        c.description,
+        c.teacher_id,
+        c.school_id,
+        c.term_id,
+        c.created_at,
+        COALESCE(
+          json_agg(
+            DISTINCT ct.teacher_id
+          ) FILTER (WHERE ct.teacher_id IS NOT NULL),
+          '[]'
+        ) AS shared_teacher_ids
+      FROM courses c
+      LEFT JOIN course_teachers ct
+        ON ct.course_id = c.id
+      GROUP BY
+        c.id,
+        c.title,
+        c.description,
+        c.teacher_id,
+        c.school_id,
+        c.term_id,
+        c.created_at
+      ORDER BY c.id ASC
     `);
 
     return res.json(result.rows);
