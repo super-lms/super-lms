@@ -3731,7 +3731,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
 
     const userResult = await pool.query(
       `
-      SELECT name
+      SELECT id, name
       FROM users
       WHERE LOWER(email) = $1
       LIMIT 1
@@ -3739,8 +3739,15 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
       [studentEmail]
     );
 
+    const studentUserId =
+      userResult.rows.length > 0 ? userResult.rows[0].id : null;
+
     const studentName =
       userResult.rows.length > 0 ? userResult.rows[0].name : studentEmail;
+
+    if (!studentUserId) {
+      return res.status(400).json({ error: "Student user account not found for this email" });
+    }
 
     const existingResult = await pool.query(
       `
@@ -3779,6 +3786,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
         `
         INSERT INTO submissions (
           assignment_id,
+          student_id,
           student_name,
           student_email,
           content,
@@ -3787,11 +3795,12 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
           feedback,
           rubric_selection
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
         `,
         [
           assignmentId,
+          studentUserId,
           studentName,
           studentEmail,
           saveContent,
