@@ -3643,6 +3643,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
       `
       SELECT
         id,
+        teacher_id,
         scoring_method,
         single_score_know_percent,
         single_score_do_percent,
@@ -3659,6 +3660,11 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
     }
 
     const assignment = assignmentResult.rows[0];
+    const teacherId = assignment.teacher_id ? Number(assignment.teacher_id) : null;
+
+    if (!teacherId) {
+      return res.status(400).json({ error: "Assignment teacher_id is required before saving KDU scores" });
+    }
 
     const convertPercentToKduLevel = (percent) => {
       const value = Number(percent);
@@ -3786,6 +3792,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
         `
         INSERT INTO submissions (
           assignment_id,
+          teacher_id,
           student_id,
           student_name,
           student_email,
@@ -3795,11 +3802,12 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
           feedback,
           rubric_selection
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *
         `,
         [
           assignmentId,
+          teacherId,
           studentUserId,
           studentName,
           studentEmail,
