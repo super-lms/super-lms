@@ -81,6 +81,8 @@ function normalizeStudentRow(rawRow, rowNumber) {
     school_year: cleanString(row.school_year) || "2026-2027",
     school_code: cleanString(row.school_code) || "CBC-WENZHOU",
     student_email: cleanOptionalString(row.student_email),
+    parent_email: cleanOptionalString(row.parent_email),
+    parent_name: cleanOptionalString(row.parent_name),
     status: cleanString(row.status) || "Active",
     notes: cleanOptionalString(row.notes),
     source_row_number: rowNumber,
@@ -247,6 +249,70 @@ router.get("/summary", async (req, res) => {
   }
 });
 
+router.get("/homeform-summary", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        next_year_grade,
+        COALESCE(NULLIF(next_year_homeform, ''), 'Unassigned') AS next_year_homeform,
+        COUNT(*)::int AS student_count
+      FROM master_students
+      WHERE LOWER(COALESCE(status, 'active')) = 'active'
+      GROUP BY next_year_grade, COALESCE(NULLIF(next_year_homeform, ''), 'Unassigned')
+      ORDER BY next_year_grade ASC NULLS LAST, next_year_homeform ASC
+      `
+    );
+
+    return res.json({
+      success: true,
+      groups: result.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/master-students/homeform-summary failed:", err);
+    return res.status(500).json({ error: "Failed to load homeform summary" });
+  }
+});
+
+router.patch("/assign-next-year-homeform", async (req, res) => {
+  const studentIds = Array.isArray(req.body?.student_ids) ? req.body.student_ids : [];
+  const nextYearHomeform = String(req.body?.next_year_homeform || "").trim().toUpperCase();
+
+  const cleanedStudentIds = studentIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (cleanedStudentIds.length === 0) {
+    return res.status(400).json({ error: "At least one valid student id is required." });
+  }
+
+  if (!/^(10|11|12)[A-Z]$/.test(nextYearHomeform)) {
+    return res.status(400).json({ error: "Next year homeform must look like 10A, 11B, or 12C." });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE master_students
+      SET next_year_homeform = $1,
+          updated_at = NOW()
+      WHERE id = ANY($2::int[])
+      RETURNING id, display_name, next_year_grade, next_year_homeform
+      `,
+      [nextYearHomeform, cleanedStudentIds]
+    );
+
+    return res.json({
+      success: true,
+      updated_count: result.rows.length,
+      students: result.rows,
+    });
+  } catch (err) {
+    console.error("PATCH /api/master-students/assign-next-year-homeform failed:", err);
+    return res.status(500).json({ error: "Failed to assign next year homeform" });
+  }
+});
+
 router.post("/preview-import", async (req, res) => {
   try {
     if (!req.file) {
@@ -278,6 +344,19 @@ router.post("/preview-import", async (req, res) => {
   }
 });
 
+
+async function ensureMasterStudentContactColumns() {
+  await pool.query(`
+    ALTER TABLE master_students
+    ADD COLUMN IF NOT EXISTS parent_email TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE master_students
+    ADD COLUMN IF NOT EXISTS parent_name TEXT
+  `);
+}
+
 router.post("/import", async (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
 
@@ -294,6 +373,8 @@ router.post("/import", async (req, res) => {
   }
 
   try {
+    await ensureMasterStudentContactColumns();
+
     await pool.query("BEGIN");
 
     let insertedOrUpdated = 0;
@@ -316,6 +397,8 @@ router.post("/import", async (req, res) => {
           school_year,
           school_code,
           student_email,
+          parent_email,
+          parent_name,
           status,
           notes,
           source_file_name,
@@ -324,7 +407,7 @@ router.post("/import", async (req, res) => {
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9,
-          $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW()
+          $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, NOW()
         )
         ON CONFLICT (pen)
         DO UPDATE
@@ -341,6 +424,8 @@ router.post("/import", async (req, res) => {
             school_year = EXCLUDED.school_year,
             school_code = EXCLUDED.school_code,
             student_email = EXCLUDED.student_email,
+            parent_email = EXCLUDED.parent_email,
+            parent_name = EXCLUDED.parent_name,
             status = EXCLUDED.status,
             notes = EXCLUDED.notes,
             source_file_name = EXCLUDED.source_file_name,
@@ -362,6 +447,8 @@ router.post("/import", async (req, res) => {
           row.school_year,
           row.school_code,
           row.student_email,
+          row.parent_email,
+          row.parent_name,
           row.status,
           row.notes,
           "dashboard-import",
