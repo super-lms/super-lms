@@ -2687,6 +2687,7 @@ app.post("/api/assignments/:assignmentId/duplicate", async (req, res) => {
       `
       SELECT
         id,
+        title,
         class_id,
         teacher_id,
         title,
@@ -3643,6 +3644,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
       `
       SELECT
         id,
+        title,
         class_id,
         teacher_id,
         scoring_method,
@@ -3661,6 +3663,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
     }
 
     const assignment = assignmentResult.rows[0];
+    const assignmentTitle = String(assignment.title || "Untitled Assignment");
     const courseId = assignment.class_id ? Number(assignment.class_id) : null;
     const teacherId = assignment.teacher_id ? Number(assignment.teacher_id) : null;
 
@@ -3798,6 +3801,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
         `
         INSERT INTO submissions (
           assignment_id,
+          assignment_title,
           course_id,
           teacher_id,
           student_id,
@@ -3809,11 +3813,12 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
           feedback,
           rubric_selection
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
         `,
         [
           assignmentId,
+          assignmentTitle,
           courseId,
           teacherId,
           studentUserId,
