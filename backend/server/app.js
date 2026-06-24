@@ -7001,8 +7001,8 @@ app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res)
 
       const userResult = await client.query(
         `
-        INSERT INTO users (name, email, role, parent_email, student_id)
-        VALUES ($1, $2, 'student', $3, $4)
+        INSERT INTO users (name, email, role, parent_email, student_id, password_hash)
+        VALUES ($1, $2, 'student', $3, $4, 'MASTER_DIRECTORY_PENDING_PASSWORD')
         ON CONFLICT (email)
         DO UPDATE
         SET name = EXCLUDED.name,
