@@ -202,6 +202,7 @@ export default function AssignmentSpeedGradingPage() {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
 
+  const [assignment, setAssignment] = useState(null);
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
   const [searchText, setSearchText] = useState("");
@@ -209,6 +210,7 @@ export default function AssignmentSpeedGradingPage() {
   const [doScore, setDoScore] = useState("4");
   const [knowScore, setKnowScore] = useState("4");
   const [understandScore, setUnderstandScore] = useState("4");
+  const [overallScore, setOverallScore] = useState("");
   const [savingKduScores, setSavingKduScores] = useState(false);
   const [kduSaveMessage, setKduSaveMessage] = useState("");
   const [kduLastSavedAt, setKduLastSavedAt] = useState("");
@@ -231,6 +233,8 @@ export default function AssignmentSpeedGradingPage() {
   const [studentAttachmentsMessage, setStudentAttachmentsMessage] = useState("");
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("");
 
+  const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
+
   useEffect(() => {
     loadGradebook();
     loadKduRubric();
@@ -247,6 +251,7 @@ export default function AssignmentSpeedGradingPage() {
       const data = await res.json();
 
       if (res.ok && Array.isArray(data.rows)) {
+        setAssignment(data.assignment || null);
         setRows(data.rows);
 
         const preferredEmail =
@@ -570,6 +575,14 @@ export default function AssignmentSpeedGradingPage() {
     setDoScore(String(nextDoScore));
     setKnowScore(String(nextKnowScore));
     setUnderstandScore(String(nextUnderstandScore));
+
+    const savedOverallScore =
+      rubricSelection.overallScore ??
+      rubricSelection.overall_score ??
+      row?.score ??
+      "";
+
+    setOverallScore(savedOverallScore === null || savedOverallScore === undefined ? "" : String(savedOverallScore));
     setKduSaveMessage("");
   }
 
@@ -700,6 +713,7 @@ export default function AssignmentSpeedGradingPage() {
     const nextDoScore = scoreOverrides.doScore ?? doScore;
     const nextKnowScore = scoreOverrides.knowScore ?? knowScore;
     const nextUnderstandScore = scoreOverrides.understandScore ?? understandScore;
+    const nextOverallScore = scoreOverrides.overallScore ?? overallScore;
 
     try {
       setSavingKduScores(true);
@@ -716,6 +730,7 @@ export default function AssignmentSpeedGradingPage() {
           doScore: toSafeScore(nextDoScore),
           knowScore: toSafeScore(nextKnowScore),
           understandScore: toSafeScore(nextUnderstandScore),
+          overallScore: nextOverallScore === "" ? null : Number(nextOverallScore),
         }),
       });
 
@@ -1603,6 +1618,53 @@ export default function AssignmentSpeedGradingPage() {
                         </div>
                       ) : null}
                     </div>
+
+                    {isOneScoreAssignment ? (
+                      <div
+                        style={{
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "12px",
+                          padding: "14px",
+                          background: "#ffffff",
+                          display: "grid",
+                          gap: "12px",
+                          marginBottom: "16px",
+                        }}
+                      >
+                        <div style={{ fontWeight: 900 }}>One Score → KDU Split</div>
+                        <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+                          Enter one overall percentage score. SUPER LMS will save it using this assignment's configured evidence split:
+                          KNOW {Number(assignment?.single_score_know_percent ?? 25)}%,
+                          DO {Number(assignment?.single_score_do_percent ?? 50)}%,
+                          UNDERSTAND {Number(assignment?.single_score_understand_percent ?? 25)}%.
+                        </div>
+
+                        <label style={{ display: "grid", gap: "6px", maxWidth: "260px" }}>
+                          <span style={{ fontWeight: 800 }}>Overall Score %</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={overallScore}
+                            onChange={(event) => setOverallScore(event.target.value)}
+                            style={inputStyle}
+                            placeholder="Example: 84"
+                          />
+                        </label>
+
+                        <ActionButton
+                          onClick={() => saveKduScores({
+                            doScore: overallScore,
+                            knowScore: overallScore,
+                            understandScore: overallScore,
+                            overallScore,
+                          })}
+                          disabled={savingKduScores || overallScore === ""}
+                        >
+                          {savingKduScores ? "Saving One Score..." : "Save One Score"}
+                        </ActionButton>
+                      </div>
+                    ) : null}
 
                     <div
                       style={{

@@ -3566,6 +3566,22 @@ app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
       return res.status(400).json({ error: "Valid assignmentId is required" });
     }
 
+    const assignmentResult = await pool.query(
+      `
+      SELECT
+        id,
+        title,
+        scoring_method,
+        single_score_know_percent,
+        single_score_do_percent,
+        single_score_understand_percent
+      FROM assignments
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [assignmentId]
+    );
+
     const result = await pool.query(
       `
       SELECT
@@ -3593,7 +3609,10 @@ app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
       [assignmentId]
     );
 
-    return res.json({ rows: result.rows });
+    return res.json({
+      assignment: assignmentResult.rows[0] || null,
+      rows: result.rows,
+    });
   } catch (err) {
     console.error("GET /api/assignments/:assignmentId/gradebook failed:", err);
     return res.status(500).json({ error: "Failed to load assignment gradebook" });
@@ -3608,6 +3627,9 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
     const doScore = Number(req.body.doScore);
     const knowScore = Number(req.body.knowScore);
     const understandScore = Number(req.body.understandScore);
+    const overallScore = req.body.overallScore === null || req.body.overallScore === undefined
+      ? null
+      : Number(req.body.overallScore);
 
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
@@ -3621,6 +3643,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
       DO: Number.isFinite(doScore) ? doScore : null,
       KNOW: Number.isFinite(knowScore) ? knowScore : null,
       UNDERSTAND: Number.isFinite(understandScore) ? understandScore : null,
+      overallScore: Number.isFinite(overallScore) ? overallScore : null,
     };
 
     const weightedScore =
