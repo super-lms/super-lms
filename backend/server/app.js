@@ -6922,6 +6922,89 @@ app.post("/api/import/class-from-csv-text", async (req, res) => {
 });
 
 
+/* LIST MASTER DIRECTORY STUDENTS FOR COURSE PICKER */
+app.get("/api/courses/:courseId/master-directory-students", async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    const currentGrade = req.query.current_grade === undefined || req.query.current_grade === ""
+      ? null
+      : Number(req.query.current_grade);
+    const nextYearGrade = req.query.next_year_grade === undefined || req.query.next_year_grade === ""
+      ? null
+      : Number(req.query.next_year_grade);
+    const homeform = String(req.query.homeform || "").trim();
+    const search = String(req.query.search || "").trim().toLowerCase();
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    const values = [courseId];
+    const filters = ["LOWER(COALESCE(ms.status, 'active')) = 'active'"];
+
+    if (currentGrade) {
+      values.push(currentGrade);
+      filters.push(`ms.current_grade = $${values.length}`);
+    }
+
+    if (nextYearGrade) {
+      values.push(nextYearGrade);
+      filters.push(`ms.next_year_grade = $${values.length}`);
+    }
+
+    if (homeform) {
+      values.push(homeform);
+      filters.push(`ms.current_homeform = $${values.length}`);
+    }
+
+    if (search) {
+      values.push(`%${search}%`);
+      filters.push(`LOWER(COALESCE(ms.display_name, '') || ' ' || COALESCE(ms.student_email, '') || ' ' || COALESCE(ms.student_id, '') || ' ' || COALESCE(ms.pen, '')) LIKE $${values.length}`);
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        ms.id,
+        ms.pen,
+        ms.student_id,
+        ms.display_name,
+        ms.student_email,
+        ms.parent_email,
+        ms.current_grade,
+        ms.next_year_grade,
+        ms.current_homeform,
+        ms.next_year_homeform,
+        CASE WHEN ce.id IS NULL THEN false ELSE true END AS already_enrolled
+      FROM master_students ms
+      LEFT JOIN users u
+        ON LOWER(u.email) = LOWER(ms.student_email)
+      LEFT JOIN class_enrollments ce
+        ON ce.student_user_id = u.id
+       AND ce.class_id = $1
+      WHERE ${filters.join(" AND ")}
+      ORDER BY
+        ms.current_grade ASC NULLS LAST,
+        ms.current_homeform ASC NULLS LAST,
+        ms.display_name ASC,
+        ms.pen ASC
+      LIMIT 300
+      `,
+      values
+    );
+
+    return res.json({
+      success: true,
+      course_id: courseId,
+      count: result.rows.length,
+      students: result.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/courses/:courseId/master-directory-students failed:", err);
+    return res.status(500).json({ error: "Failed to load master directory students" });
+  }
+});
+
 /* ENROLL STUDENTS FROM MASTER DIRECTORY */
 app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res) => {
   const client = await pool.connect();
