@@ -3157,6 +3157,7 @@ app.get(
           assignment_id,
           student_name,
           student_email,
+          original_file_name,
           content,
           score,
           feedback,
@@ -3251,6 +3252,7 @@ app.post("/api/assignments/:assignmentId/student-submit", async (req, res) => {
           assignment_id,
           student_name,
           student_email,
+          original_file_name,
           content,
           score,
           feedback,
@@ -3807,13 +3809,14 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
           student_id,
           student_name,
           student_email,
+          original_file_name,
           content,
           score,
           grade,
           feedback,
           rubric_selection
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *
         `,
         [
@@ -3824,6 +3827,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
           studentUserId,
           studentName,
           studentEmail,
+          "Teacher-entered KDU score",
           saveContent,
           percentScore,
           `${percentScore}%`,
