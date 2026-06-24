@@ -1392,23 +1392,27 @@ export default function AssignmentSpeedGradingPage() {
                     ) : null}
                   </div>
 
-                  <RawMarkEntryPanel
-                    assignmentId={assignmentId}
-                    selectedRow={selectedRow}
-                    sectionScoreRows={sectionScoreRows}
-                    onReload={reloadAfterRawMarkSave}
-                  />
+                  {!isOneScoreAssignment ? (
+                    <>
+                      <RawMarkEntryPanel
+                        assignmentId={assignmentId}
+                        selectedRow={selectedRow}
+                        sectionScoreRows={sectionScoreRows}
+                        onReload={reloadAfterRawMarkSave}
+                      />
 
-                  {sectionScoresLoading ? (
-                    <div style={{ marginBottom: "18px", fontWeight: 800 }}>
-                      Loading raw mark sections...
-                    </div>
-                  ) : null}
+                      {sectionScoresLoading ? (
+                        <div style={{ marginBottom: "18px", fontWeight: 800 }}>
+                          Loading raw mark sections...
+                        </div>
+                      ) : null}
 
-                  {sectionScoresMessage ? (
-                    <div style={{ marginBottom: "18px", color: "#4b5563" }}>
-                      {sectionScoresMessage}
-                    </div>
+                      {sectionScoresMessage ? (
+                        <div style={{ marginBottom: "18px", color: "#4b5563" }}>
+                          {sectionScoresMessage}
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
 
                   <div
