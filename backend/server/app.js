@@ -3639,19 +3639,95 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
       return res.status(400).json({ error: "student_email is required" });
     }
 
-    const rubricSelection = {
-      DO: Number.isFinite(doScore) ? doScore : null,
-      KNOW: Number.isFinite(knowScore) ? knowScore : null,
-      UNDERSTAND: Number.isFinite(understandScore) ? understandScore : null,
-      overallScore: Number.isFinite(overallScore) ? overallScore : null,
+    const assignmentResult = await pool.query(
+      `
+      SELECT
+        id,
+        scoring_method,
+        single_score_know_percent,
+        single_score_do_percent,
+        single_score_understand_percent
+      FROM assignments
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [assignmentId]
+    );
+
+    if (assignmentResult.rows.length === 0) {
+      return res.status(404).json({ error: "Assignment not found" });
+    }
+
+    const assignment = assignmentResult.rows[0];
+
+    const convertPercentToKduLevel = (percent) => {
+      const value = Number(percent);
+
+      if (!Number.isFinite(value)) return null;
+      if (value >= 92) return 6;
+      if (value >= 80) return 5;
+      if (value >= 67) return 4;
+      if (value >= 50) return 3;
+      if (value >= 35) return 2;
+      return 1;
     };
 
-    const weightedScore =
-      (Number(rubricSelection.DO || 0) * 0.5) +
-      (Number(rubricSelection.KNOW || 0) * 0.25) +
-      (Number(rubricSelection.UNDERSTAND || 0) * 0.25);
+    const isSingleScoreKdu =
+      assignment.scoring_method === "single_score_kdu" &&
+      Number.isFinite(overallScore);
 
-    const percentScore = Number(((weightedScore / 6) * 100).toFixed(2));
+    let rubricSelection;
+    let weightedScore;
+    let percentScore;
+    let saveFeedback;
+    let saveContent;
+
+    if (isSingleScoreKdu) {
+      const convertedKduLevel = convertPercentToKduLevel(overallScore);
+
+      const knowSplit = Number(assignment.single_score_know_percent || 0);
+      const doSplit = Number(assignment.single_score_do_percent || 0);
+      const understandSplit = Number(assignment.single_score_understand_percent || 0);
+
+      const distributedKnow = knowSplit > 0 ? convertedKduLevel : null;
+      const distributedDo = doSplit > 0 ? convertedKduLevel : null;
+      const distributedUnderstand = understandSplit > 0 ? convertedKduLevel : null;
+
+      rubricSelection = {
+        KNOW: distributedKnow,
+        DO: distributedDo,
+        UNDERSTAND: distributedUnderstand,
+        overallScore: Number(overallScore),
+        automaticDistribution: {
+          source: "single_score_kdu",
+          convertedKduLevel,
+          KNOW: distributedKnow,
+          DO: distributedDo,
+          UNDERSTAND: distributedUnderstand,
+        },
+      };
+
+      weightedScore = convertedKduLevel;
+      percentScore = Number(Number(overallScore).toFixed(2));
+      saveFeedback = "One Score → KDU Split saved.";
+      saveContent = "Teacher-entered one score KDU split.";
+    } else {
+      rubricSelection = {
+        DO: Number.isFinite(doScore) ? doScore : null,
+        KNOW: Number.isFinite(knowScore) ? knowScore : null,
+        UNDERSTAND: Number.isFinite(understandScore) ? understandScore : null,
+        overallScore: Number.isFinite(overallScore) ? overallScore : null,
+      };
+
+      weightedScore =
+        (Number(rubricSelection.DO || 0) * 0.5) +
+        (Number(rubricSelection.KNOW || 0) * 0.25) +
+        (Number(rubricSelection.UNDERSTAND || 0) * 0.25);
+
+      percentScore = Number(((weightedScore / 6) * 100).toFixed(2));
+      saveFeedback = "KDU rubric scores saved.";
+      saveContent = "Teacher-entered KDU rubric score.";
+    }
 
     const userResult = await pool.query(
       `
@@ -3693,7 +3769,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
         [
           percentScore,
           `${percentScore}%`,
-          "KDU rubric scores saved.",
+          saveFeedback,
           rubricSelection,
           existingResult.rows[0].id,
         ]
@@ -3718,10 +3794,10 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
           assignmentId,
           studentName,
           studentEmail,
-          "Teacher-entered KDU rubric score.",
+          saveContent,
           percentScore,
           `${percentScore}%`,
-          "KDU rubric scores saved.",
+          saveFeedback,
           rubricSelection,
         ]
       );
@@ -3731,7 +3807,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
       success: true,
       submission: result.rows[0],
       rubric_selection: rubricSelection,
-      weighted_score: Number(weightedScore.toFixed(2)),
+      weighted_score: Number(Number(weightedScore || 0).toFixed(2)),
       percent_score: percentScore,
     });
   } catch (err) {

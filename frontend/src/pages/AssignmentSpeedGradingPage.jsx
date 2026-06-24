@@ -1808,6 +1808,15 @@ function formatAttachmentSize(sizeBytes) {
 }
 
 
+const inputStyle = {
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  fontSize: "1rem",
+  boxSizing: "border-box",
+};
+
 const teacherAttachmentViewerStyle = {
   border: "1px solid #d7dce5",
   borderRadius: "14px",
