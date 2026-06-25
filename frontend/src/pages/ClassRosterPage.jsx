@@ -30,6 +30,7 @@ export default function ClassRosterPage() {
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase();
   const isTeacher = normalizedRole === "teacher";
+  const isAdmin = normalizedRole === "admin";
   const normalizedUserId = String(user?.id || "").trim();
   const normalizedUserEmail = String(user?.email || "").trim().toLowerCase();
   const requestedCourseId = String(searchParams.get("courseId") || "").trim();
@@ -39,6 +40,10 @@ export default function ClassRosterPage() {
 
   function filterCoursesForCurrentUser(allCourses) {
     const safeCourses = Array.isArray(allCourses) ? allCourses : [];
+
+    if (isAdmin) {
+      return safeCourses;
+    }
 
     if (!isTeacher) {
       return safeCourses;
