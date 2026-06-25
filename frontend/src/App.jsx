@@ -14,6 +14,7 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import EditAssignmentPage from "./pages/EditAssignmentPage.jsx";
 import EnrolledStudentsPage from "./pages/EnrolledStudentsPage.jsx";
 import GradebookPage from "./pages/GradebookPage.jsx";
+import HomeformAssignmentPage from "./pages/HomeformAssignmentPage.jsx";
 import LessonsPage from "./pages/LessonsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ObserverPage from "./pages/ObserverPage.jsx";
@@ -95,6 +96,7 @@ function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/timetable-builder" element={<TimetableBuilderPage />} />
         <Route path="/student-import" element={<StudentImportPage />} />
+        <Route path="/homeform-assignment" element={<HomeformAssignmentPage />} />
         <Route path="/class-enrollment" element={<ClassEnrollmentPage />} />
         <Route path="/class-roster" element={<ClassRosterPage />} />
         <Route path="/enrolled-students" element={<EnrolledStudentsPage />} />
@@ -155,6 +157,8 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }
