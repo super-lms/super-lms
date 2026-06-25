@@ -121,6 +121,7 @@ export default function Layout() {
     if (location.pathname === "/reports") return "Reports"
     if (location.pathname === "/student-import") return "Student Import"
     if (location.pathname === "/class-enrollment") return "Class Enrollment"
+    if (location.pathname === "/homeform-assignment") return "Homeform Assignment"
     if (location.pathname === "/class-roster") return "Class Roster"
     if (location.pathname === "/enrolled-students") return "Enrolled Students"
     if (location.pathname === "/attendance") return "Attendance"
@@ -226,6 +227,9 @@ export default function Layout() {
             <NavItem to="/class-enrollment" style={getNavLinkStyle("/class-enrollment")} icon={UserPlus}>
               Class Enrollment
             </NavItem>
+            <NavItem to="/homeform-assignment" style={getNavLinkStyle("/homeform-assignment")} icon={UserCheck}>
+              Homeform Assignment
+            </NavItem>
             <NavItem to="/class-roster" style={getNavLinkStyle("/class-roster")} icon={UserCheck}>
               Class Roster
             </NavItem>
@@ -280,6 +284,12 @@ export default function Layout() {
       </div>
 
       <div style={{ flex: 1, background: "#f7f7f7" }}>
+        {!isStudentRoute && location.pathname !== "/dashboard" ? (
+          <Link to="/dashboard" style={floatingDashboardButtonStyle}>
+            ← Dashboard
+          </Link>
+        ) : null}
+
         <div
           style={{
             background: "white",
@@ -379,6 +389,24 @@ function NavItem({ to, style, icon: Icon, children }) {
       <span>{children}</span>
     </Link>
   )
+}
+
+const floatingDashboardButtonStyle = {
+  position: "fixed",
+  left: "24px",
+  bottom: "24px",
+  zIndex: 1200,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "2px solid #111827",
+  borderRadius: "999px",
+  padding: "10px 14px",
+  background: "#ffffff",
+  color: "#111827",
+  fontWeight: 900,
+  textDecoration: "none",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.22)",
 }
 
 const logoutButtonStyle = {
