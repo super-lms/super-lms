@@ -1525,6 +1525,43 @@ app.delete("/api/lessons/:lessonId", async (req, res) => {
 /* GET COURSES */
 app.get("/api/courses", async (req, res) => {
   try {
+    const userColumnsResult = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'users'
+    `);
+
+    const userColumns = new Set(userColumnsResult.rows.map((row) => row.column_name));
+    const hasNameColumn = userColumns.has("name");
+    const hasFirstNameColumn = userColumns.has("first_name");
+    const hasLastNameColumn = userColumns.has("last_name");
+
+    let teacherNameSql = "'Unknown Teacher'";
+    const teacherGroupByColumns = [];
+
+    if (hasNameColumn) {
+      teacherNameSql = "COALESCE(NULLIF(TRIM(u.name), ''), u.email, 'Unknown Teacher')";
+      teacherGroupByColumns.push("u.name");
+    } else if (hasFirstNameColumn || hasLastNameColumn) {
+      const firstNameSql = hasFirstNameColumn ? "COALESCE(u.first_name, '')" : "''";
+      const lastNameSql = hasLastNameColumn ? "COALESCE(u.last_name, '')" : "''";
+      teacherNameSql = `COALESCE(NULLIF(TRIM(CONCAT(${firstNameSql}, ' ', ${lastNameSql})), ''), u.email, 'Unknown Teacher')`;
+
+      if (hasFirstNameColumn) {
+        teacherGroupByColumns.push("u.first_name");
+      }
+
+      if (hasLastNameColumn) {
+        teacherGroupByColumns.push("u.last_name");
+      }
+    }
+
+    const teacherGroupBySql =
+      teacherGroupByColumns.length > 0
+        ? `,
+        ${teacherGroupByColumns.join(",\n        ")}`
+        : "";
+
     const result = await pool.query(`
       SELECT
         c.id,
@@ -1534,11 +1571,7 @@ app.get("/api/courses", async (req, res) => {
         c.school_id,
         c.term_id,
         c.created_at,
-        COALESCE(
-          NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''),
-          u.email,
-          'Unknown Teacher'
-        ) AS teacher_name,
+        ${teacherNameSql} AS teacher_name,
         u.email AS teacher_email,
         COUNT(ce.student_user_id)::int AS student_count
       FROM courses c
@@ -1554,9 +1587,7 @@ app.get("/api/courses", async (req, res) => {
         c.school_id,
         c.term_id,
         c.created_at,
-        u.first_name,
-        u.last_name,
-        u.email
+        u.email${teacherGroupBySql}
       ORDER BY c.id ASC
     `);
 
