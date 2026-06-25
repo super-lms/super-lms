@@ -1534,7 +1534,11 @@ app.get("/api/courses", async (req, res) => {
         c.school_id,
         c.term_id,
         c.created_at,
-        u.name AS teacher_name,
+        COALESCE(
+          NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), ''),
+          u.email,
+          'Unknown Teacher'
+        ) AS teacher_name,
         u.email AS teacher_email,
         COUNT(ce.student_user_id)::int AS student_count
       FROM courses c
@@ -1550,7 +1554,8 @@ app.get("/api/courses", async (req, res) => {
         c.school_id,
         c.term_id,
         c.created_at,
-        u.name,
+        u.first_name,
+        u.last_name,
         u.email
       ORDER BY c.id ASC
     `);
@@ -7147,7 +7152,146 @@ app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res)
     client.release();
   }
 });
+/* IMPORT HOMEFORM INTO CLASS ROSTER */
+app.post("/api/class-roster/:courseId/import-homeform", async (req, res) => {
+  const client = await pool.connect();
 
+  try {
+    await ensureStudentInfoColumns();
+
+    const courseId = Number(req.params.courseId);
+    const homeform = String(req.body?.homeform || "").trim().toUpperCase();
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    if (!homeform) {
+      return res.status(400).json({ error: "Homeform is required" });
+    }
+
+    await client.query("BEGIN");
+
+    const courseResult = await client.query(
+      `
+      SELECT id, title
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const masterStudentsResult = await client.query(
+      `
+      SELECT
+        pen,
+        student_id,
+        display_name,
+        student_email,
+        parent_email,
+        next_year_homeform
+      FROM master_students
+      WHERE UPPER(COALESCE(next_year_homeform, '')) = $1
+        AND LOWER(COALESCE(status, 'active')) = 'active'
+      ORDER BY display_name ASC, pen ASC
+      `,
+      [homeform]
+    );
+
+    let createdUsers = 0;
+    let updatedUsers = 0;
+    let enrolledStudents = 0;
+    let skippedMissingEmail = 0;
+
+    for (const student of masterStudentsResult.rows) {
+      const studentName = String(student.display_name || "").trim();
+      const studentEmail = String(student.student_email || "").trim().toLowerCase();
+      const parentEmail = String(student.parent_email || "").trim().toLowerCase();
+      const studentId = String(student.student_id || student.pen || "").trim();
+
+      if (!studentName || !studentEmail || !studentEmail.includes("@")) {
+        skippedMissingEmail += 1;
+        continue;
+      }
+
+      const userResult = await client.query(
+        `
+        INSERT INTO users (name, email, role, parent_email, student_id, password_hash)
+        VALUES ($1, $2, 'student', $3, $4, 'MASTER_DIRECTORY_PENDING_PASSWORD')
+        ON CONFLICT (email)
+        DO UPDATE
+        SET name = EXCLUDED.name,
+            role = 'student',
+            parent_email = EXCLUDED.parent_email,
+            student_id = EXCLUDED.student_id
+        RETURNING id, (xmax = 0) AS inserted
+        `,
+        [studentName, studentEmail, parentEmail, studentId]
+      );
+
+      const user = userResult.rows[0];
+
+      if (user.inserted) {
+        createdUsers += 1;
+      } else {
+        updatedUsers += 1;
+      }
+
+      const enrollmentResult = await client.query(
+        `
+        INSERT INTO class_enrollments (class_id, student_user_id)
+        VALUES ($1, $2)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        `,
+        [courseId, user.id]
+      );
+
+      if (enrollmentResult.rows.length > 0) {
+        enrolledStudents += 1;
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      course: courseResult.rows[0],
+      homeform,
+      processed_master_students: masterStudentsResult.rows.length,
+      created_users: createdUsers,
+      updated_users: updatedUsers,
+      enrolled_students: enrolledStudents,
+      skipped_missing_email: skippedMissingEmail,
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error(
+        "POST /api/class-roster/:courseId/import-homeform rollback failed:",
+        rollbackErr
+      );
+    }
+
+    console.error(
+      "POST /api/class-roster/:courseId/import-homeform failed:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Failed to import homeform",
+    });
+  } finally {
+    client.release();
+  }
+});
 /* GET CLASS ROSTER */
 app.get("/api/class-roster/:courseId", async (req, res) => {
   try {

@@ -25,6 +25,8 @@ export default function ClassRosterPage() {
   const [enrollmentError, setEnrollmentError] = useState("");
   const [enrollmentSaving, setEnrollmentSaving] = useState(false);
   const [removingStudentId, setRemovingStudentId] = useState("");
+  const [selectedHomeform, setSelectedHomeform] = useState("");
+  const [homeformImporting, setHomeformImporting] = useState(false);
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase();
   const isTeacher = normalizedRole === "teacher";
@@ -139,6 +141,51 @@ export default function ClassRosterPage() {
       setEnrollmentError(error.message || "Failed to remove student.");
     } finally {
       setRemovingStudentId("");
+    }
+  }
+
+  async function handleImportHomeform() {
+    if (!selectedCourseId) {
+      setEnrollmentError("Select a course before importing a homeform.");
+      return;
+    }
+
+    if (!selectedHomeform) {
+      setEnrollmentError("Select a homeform to import.");
+      return;
+    }
+
+    setHomeformImporting(true);
+    setEnrollmentMessage("");
+    setEnrollmentError("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/class-roster/${selectedCourseId}/import-homeform`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ homeform: selectedHomeform }),
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to import homeform");
+      }
+
+      setEnrollmentMessage(
+        `Imported ${data.enrolled_students || 0} new students from ${selectedHomeform}. Processed ${data.processed_master_students || 0} students.`
+      );
+      await loadRoster(selectedCourseId);
+    } catch (error) {
+      console.error(error);
+      setEnrollmentError(error.message || "Failed to import homeform.");
+    } finally {
+      setHomeformImporting(false);
     }
   }
 
@@ -332,6 +379,59 @@ export default function ClassRosterPage() {
               <strong>Total Students:</strong> {students.length}
             </div>
           </div>
+
+          <section className="panel-subsection">
+            <div className="section-header">
+              <div>
+                <h3>Import Homeform</h3>
+                <p className="section-subtitle">
+                  Build this course roster from assigned homeforms such as 10A, 11B, or 12C.
+                </p>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-field">
+                <label htmlFor="homeform-import-select" className="form-label">
+                  Homeform
+                </label>
+                <select
+                  id="homeform-import-select"
+                  className="form-input"
+                  value={selectedHomeform}
+                  onChange={(event) => {
+                    setSelectedHomeform(event.target.value);
+                    setEnrollmentMessage("");
+                    setEnrollmentError("");
+                  }}
+                  disabled={!selectedCourseId || homeformImporting}
+                >
+                  <option value="">Select a homeform</option>
+                  <option value="10A">10A</option>
+                  <option value="10B">10B</option>
+                  <option value="10C">10C</option>
+                  <option value="11A">11A</option>
+                  <option value="11B">11B</option>
+                  <option value="11C">11C</option>
+                  <option value="12A">12A</option>
+                  <option value="12B">12B</option>
+                  <option value="12C">12C</option>
+                </select>
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Action</label>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={handleImportHomeform}
+                  disabled={!selectedCourseId || !selectedHomeform || homeformImporting}
+                >
+                  {homeformImporting ? "Importing Homeform..." : "Import Homeform"}
+                </button>
+              </div>
+            </div>
+          </section>
 
           <section className="panel-subsection">
             <div className="section-header">
