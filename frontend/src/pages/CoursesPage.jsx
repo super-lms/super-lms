@@ -139,6 +139,7 @@ export default function CoursesPage() {
 
   useEffect(() => {
     loadCourses()
+    loadAssignments()
 
     const params = new URLSearchParams(window.location.search)
     const shouldStartCreate = params.get("startCreate") === "1"
