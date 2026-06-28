@@ -232,6 +232,7 @@ export default function CoursesPage() {
 
       setCourses(sortedCourses)
       await loadCourseStructuresForStatus(sortedCourses)
+      await loadRostersForStatus(sortedCourses)
     } catch (err) {
       setError(err.message || "Failed to load courses")
       setCourses([])
@@ -313,6 +314,56 @@ export default function CoursesPage() {
       })
     } catch (err) {
       console.warn("Course status structure loading failed:", err)
+    }
+  }
+
+  async function loadRostersForStatus(courseList) {
+    const safeCourses = Array.isArray(courseList) ? courseList : []
+
+    if (safeCourses.length === 0) {
+      return
+    }
+
+    try {
+      const rosterEntries = await Promise.all(
+        safeCourses.map(async (course) => {
+          const courseId = course?.id
+
+          if (!courseId) {
+            return null
+          }
+
+          const res = await fetch(`${API_BASE}/api/class-roster/${courseId}`)
+          const data = await res.json()
+
+          if (!res.ok) {
+            return [courseId, { course: null, students: [] }]
+          }
+
+          return [
+            courseId,
+            {
+              course: data.course || null,
+              students: Array.isArray(data.students) ? data.students : [],
+            },
+          ]
+        })
+      )
+
+      setRosterByCourseId((current) => {
+        const next = { ...current }
+
+        rosterEntries.forEach((entry) => {
+          if (!entry) return
+
+          const [courseId, roster] = entry
+          next[courseId] = roster
+        })
+
+        return next
+      })
+    } catch (err) {
+      console.warn("Course status roster loading failed:", err)
     }
   }
 
