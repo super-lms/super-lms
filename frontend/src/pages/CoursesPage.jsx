@@ -230,11 +230,88 @@ export default function CoursesPage() {
       })
 
       setCourses(sortedCourses)
+      await loadCourseStructuresForStatus(sortedCourses)
     } catch (err) {
       setError(err.message || "Failed to load courses")
       setCourses([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadCourseStructuresForStatus(courseList) {
+    const safeCourses = Array.isArray(courseList) ? courseList : []
+
+    if (safeCourses.length === 0) {
+      return
+    }
+
+    try {
+      const structureEntries = await Promise.all(
+        safeCourses.map(async (course) => {
+          const courseId = course?.id
+
+          if (!courseId) {
+            return null
+          }
+
+          const categoriesRes = await fetch(`${API_BASE}/api/courses/${courseId}/categories`)
+          const categoriesData = await categoriesRes.json()
+
+          if (!categoriesRes.ok) {
+            return [courseId, []]
+          }
+
+          const categories = Array.isArray(categoriesData)
+            ? [...categoriesData].sort((a, b) => {
+                const orderA = Number(a.sort_order || 0)
+                const orderB = Number(b.sort_order || 0)
+
+                if (orderA !== orderB) {
+                  return orderA - orderB
+                }
+
+                return Number(a.id || 0) - Number(b.id || 0)
+              })
+            : []
+
+          const categoriesWithSubcategories = await Promise.all(
+            categories.map(async (category) => {
+              const subcategoriesRes = await fetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
+              const subcategoriesData = await subcategoriesRes.json()
+
+              if (!subcategoriesRes.ok) {
+                return {
+                  ...category,
+                  subcategories: [],
+                }
+              }
+
+              return {
+                ...category,
+                subcategories: Array.isArray(subcategoriesData) ? subcategoriesData : [],
+              }
+            })
+          )
+
+          return [courseId, categoriesWithSubcategories]
+        })
+      )
+
+      setCompetenciesByCourseId((current) => {
+        const next = { ...current }
+
+        structureEntries.forEach((entry) => {
+          if (!entry) return
+
+          const [courseId, structure] = entry
+          next[courseId] = structure
+        })
+
+        return next
+      })
+    } catch (err) {
+      console.warn("Course status structure loading failed:", err)
     }
   }
 
