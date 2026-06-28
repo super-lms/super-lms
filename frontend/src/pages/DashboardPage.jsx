@@ -1042,7 +1042,7 @@ export default function DashboardPage() {
                   style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                    gap: "16px",
+                    gap: "12px",
                   }}
                 >
                   <DashboardActionCard
@@ -1090,17 +1090,17 @@ export default function DashboardPage() {
 
             <div
               style={{
-                padding: "24px",
+                padding: "18px",
                 background: "#fbfbfc",
                 display: "grid",
-                gap: "18px",
+                gap: "12px",
                 alignContent: "start",
               }}
             >
               <div
                 style={{
                   ...shellCardStyle,
-                  padding: "16px",
+                  padding: "12px",
                 }}
               >
                 <SectionHeading

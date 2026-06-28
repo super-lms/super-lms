@@ -31,6 +31,29 @@ function getPercentLabel(earned, max) {
   return `${((earnedNumber / maxNumber) * 100).toFixed(1)}%`;
 }
 
+function getPercentValue(earned, max) {
+  const earnedNumber = Number(earned);
+  const maxNumber = Number(max);
+
+  if (!Number.isFinite(earnedNumber) || !Number.isFinite(maxNumber) || maxNumber <= 0) {
+    return "";
+  }
+
+  return ((earnedNumber / maxNumber) * 100).toFixed(1);
+}
+
+function convertPercentInputToEarned(percent, max) {
+  const percentNumber = Number(percent);
+  const maxNumber = Number(max);
+
+  if (!Number.isFinite(percentNumber) || !Number.isFinite(maxNumber) || maxNumber <= 0) {
+    return "";
+  }
+
+  const boundedPercent = Math.max(0, Math.min(100, percentNumber));
+  return ((boundedPercent / 100) * maxNumber).toFixed(2);
+}
+
 function getBucketAverage(sections, bucketName, getScoreValue) {
   const matching = sections.filter(
     (section) => String(section.competency_bucket || "").toUpperCase() === bucketName
@@ -182,22 +205,41 @@ export default function RawMarkEntryPanel({
                 KDU Bucket: <strong>{section.competency_bucket}</strong>
               </div>
 
-              <label style={labelStyle}>
-                Score earned
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "6px" }}>
-                  <input
-                    type="number"
-                    min="0"
-                    max={section.max_points}
-                    step="0.5"
-                    value={value}
-                    onChange={(e) => updateScore(section.assignment_section_id, e.target.value)}
-                    style={inputStyle}
-                    aria-label={`Score earned for ${section.section_name}`}
-                  />
-                  <span>out of {section.max_points}</span>
-                </div>
-              </label>
+              <div style={{ display: "grid", gap: "10px" }}>
+                <label style={labelStyle}>
+                  Score earned
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "6px" }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max={section.max_points}
+                      step="0.5"
+                      value={value}
+                      onChange={(e) => updateScore(section.assignment_section_id, e.target.value)}
+                      style={inputStyle}
+                      aria-label={`Score earned for ${section.section_name}`}
+                    />
+                    <span>out of {section.max_points}</span>
+                  </div>
+                </label>
+
+                <label style={labelStyle}>
+                  Percentage
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginTop: "6px" }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={getPercentValue(value, section.max_points)}
+                      onChange={(e) => updateScore(section.assignment_section_id, convertPercentInputToEarned(e.target.value, section.max_points))}
+                      style={inputStyle}
+                      aria-label={`Percentage for ${section.section_name}`}
+                    />
+                    <span>%</span>
+                  </div>
+                </label>
+              </div>
 
               <div style={{ marginTop: "10px", lineHeight: 1.5 }}>
                 <div><strong>Percent Preview:</strong> {percentLabel}</div>
@@ -246,25 +288,25 @@ export default function RawMarkEntryPanel({
 
 const panelStyle = {
   border: "2px solid #111827",
-  borderRadius: "14px",
-  padding: "18px",
+  borderRadius: "12px",
+  padding: "12px",
   background: "#ffffff",
-  marginBottom: "18px",
+  marginBottom: "12px",
 };
 
 const stepBoxStyle = {
   border: "1px solid #d7dce5",
-  borderRadius: "12px",
-  padding: "12px",
+  borderRadius: "10px",
+  padding: "9px",
   background: "#f8fafc",
-  marginBottom: "14px",
-  lineHeight: 1.5,
+  marginBottom: "9px",
+  lineHeight: 1.35,
 };
 
 const sectionCardStyle = {
   border: "1px solid #d7dce5",
-  borderRadius: "12px",
-  padding: "14px",
+  borderRadius: "10px",
+  padding: "10px",
   background: "#ffffff",
 };
 
@@ -274,16 +316,16 @@ const labelStyle = {
 };
 
 const inputStyle = {
-  width: "140px",
-  padding: "12px",
+  width: "120px",
+  padding: "8px",
   borderRadius: "8px",
   border: "1px solid #cbd5e1",
   font: "inherit",
 };
 
 const buttonStyle = {
-  padding: "10px 14px",
-  borderRadius: "10px",
+  padding: "8px 12px",
+  borderRadius: "9px",
   border: "1px solid #111827",
   background: "#ffffff",
   fontWeight: 800,
@@ -291,10 +333,10 @@ const buttonStyle = {
 };
 
 const messageStyle = {
-  marginTop: "12px",
+  marginTop: "9px",
   color: "#4b5563",
-  lineHeight: 1.5,
+  lineHeight: 1.35,
   border: "1px solid #d7dce5",
-  borderRadius: "12px",
-  padding: "12px",
+  borderRadius: "10px",
+  padding: "9px",
 };

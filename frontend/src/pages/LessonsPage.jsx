@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import API_BASE from "../apiBase";
 
 function LessonsPage() {
   const [lessons, setLessons] = useState([]);
@@ -10,7 +11,7 @@ function LessonsPage() {
   const [message, setMessage] = useState("Loading lessons...");
 
   function loadLessons() {
-    fetch("/api/lessons")
+    fetch(`${API_BASE}/api/lessons`)
       .then((response) => {
         if (!response.ok) {
           throw new Error("Failed to load lessons");
@@ -28,7 +29,7 @@ function LessonsPage() {
   }
 
   function loadCourses() {
-    fetch("/api/courses")
+    fetch(`${API_BASE}/api/courses`)
       .then((response) => {
         if (!response.ok) {
           throw new Error("Failed to load courses");
@@ -51,18 +52,21 @@ function LessonsPage() {
 
   function uploadLessonFile(lessonId) {
     if (!selectedFile) {
-      return Promise.resolve();
+      return Promise.resolve({ skipped: true });
     }
 
     const formData = new FormData();
     formData.append("file", selectedFile);
 
-    return fetch(`/api/lesson-files/${lessonId}`, {
+    return fetch(`${API_BASE}/api/lesson-files/${lessonId}`, {
       method: "POST",
       body: formData,
     }).then((response) => {
       if (!response.ok) {
-        throw new Error("Failed to upload lesson file");
+        return {
+          skipped: true,
+          warning: "Lesson was created, but file upload is not available yet.",
+        };
       }
       return response.json();
     });
@@ -125,7 +129,7 @@ function LessonsPage() {
       return;
     }
 
-    fetch(`/api/lessons/${id}`, {
+    fetch(`${API_BASE}/api/lessons/${id}`, {
       method: "DELETE",
     })
       .then((response) => {

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import API_BASE from "../apiBase"
+import AssignmentCardsView from "../components/courseAssignments/AssignmentCardsView"
+import TeachersPublishedAssignmentsView from "../components/courseAssignments/TeachersPublishedAssignmentsView"
+import TeacherCoachPanel from "../components/courseAssignments/TeacherCoachPanel"
 
 export default function CourseAssignmentsPage() {
   const { courseId } = useParams()
@@ -15,6 +18,7 @@ export default function CourseAssignmentsPage() {
   const [duplicatingAssignmentId, setDuplicatingAssignmentId] = useState("")
   const [deletingAssignmentId, setDeletingAssignmentId] = useState("")
   const [coachOpen, setCoachOpen] = useState(true)
+  const [assignmentView, setAssignmentView] = useState("cards")
 
   useEffect(() => {
     loadPage()
@@ -106,6 +110,13 @@ export default function CourseAssignmentsPage() {
     if (ungraded > 0) return "Ready to Grade"
     if (graded > 0 && graded >= submissions) return "Completed"
     return "Current"
+  }
+
+  function getPublishedLabel(assignment) {
+    if (assignment?.published === true) return "Published"
+    if (assignment?.is_published === true) return "Published"
+    if (String(assignment?.status || "").toLowerCase() === "published") return "Published"
+    return "Draft"
   }
 
   function openSpeedGrading(assignmentId) {
@@ -285,165 +296,105 @@ export default function CourseAssignmentsPage() {
         ) : null}
 
         <section className="panel">
-          <h2 style={{ marginTop: 0 }}>Current Assignments</h2>
+          <div style={sectionHeaderStyle}>
+            <div>
+              <h2 style={{ marginTop: 0, marginBottom: "6px" }}>Current Assignments</h2>
+              <p style={{ margin: 0, color: "#4b5563" }}>
+                Use Assignment Cards for full assignment controls, or Teacher's Published Assignments for a quick teacher overview.
+              </p>
+            </div>
+
+            <div style={viewToggleStyle} aria-label="Assignment view selector">
+              <button
+                type="button"
+                onClick={() => setAssignmentView("cards")}
+                style={assignmentView === "cards" ? activeToggleButtonStyle : toggleButtonStyle}
+              >
+                Assignment Cards
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAssignmentView("published-grid")}
+                style={assignmentView === "published-grid" ? activeToggleButtonStyle : toggleButtonStyle}
+              >
+                Teacher's Published Assignments
+              </button>
+            </div>
+          </div>
 
           {courseAssignments.length === 0 ? (
             <div style={noticeBoxStyle}>No assignments yet for this course.</div>
+          ) : assignmentView === "published-grid" ? (
+            <TeachersPublishedAssignmentsView
+              assignments={courseAssignments}
+              formatDate={formatDate}
+              formatPercent={formatPercent}
+              getStatusLabel={getStatusLabel}
+              getPublishedLabel={getPublishedLabel}
+              openSpeedGrading={openSpeedGrading}
+              openEditAssignment={openEditAssignment}
+              openEditSections={openEditSections}
+            />
           ) : (
-            <div style={assignmentGridStyle}>
-              {courseAssignments.map((assignment) => (
-                <div key={assignment.id} style={assignmentCardStyle}>
-                  <h3 style={{ marginTop: 0 }}>{assignment.title || "Untitled Assignment"}</h3>
-
-                  <div style={statusPillStyle}>{getStatusLabel(assignment)}</div>
-
-                  <p>
-                    <strong>Due:</strong> {formatDate(assignment.due_date)}
-                  </p>
-                  <p>
-                    <strong>Assessment Pathway:</strong> {assignment.category_name || "Not linked"}
-                  </p>
-                  <p>
-                    <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not linked"}
-                  </p>
-                  <p>
-                    <strong>Description:</strong> {assignment.description || "No description"}
-                  </p>
-                  <p>
-                    <strong>Weight:</strong> {formatPercent(assignment.calculated_weight)}
-                  </p>
-
-                  <div style={buttonRowStyle}>
-                    <button
-                      type="button"
-                      onClick={() => moveAssignment(assignment.id, "up")}
-                      disabled={movingAssignmentId === `${assignment.id}-up`}
-                      style={buttonStyle}
-                    >
-                      {movingAssignmentId === `${assignment.id}-up` ? "Moving..." : "↑ Move Up"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => moveAssignment(assignment.id, "down")}
-                      disabled={movingAssignmentId === `${assignment.id}-down`}
-                      style={buttonStyle}
-                    >
-                      {movingAssignmentId === `${assignment.id}-down` ? "Moving..." : "↓ Move Down"}
-                    </button>
-
-                    <button type="button" onClick={() => openSpeedGrading(assignment.id)} style={buttonStyle}>
-                      Open Speed Grading
-                    </button>
-
-                    <button type="button" onClick={() => openEditAssignment(assignment.id)} style={buttonStyle}>
-                      Open Edit Page
-                    </button>
-
-                    <button type="button" onClick={() => openEditSections(assignment.id)} style={buttonStyle}>
-                      Edit Sections
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => duplicateAssignment(assignment)}
-                      disabled={String(duplicatingAssignmentId) === String(assignment.id)}
-                      style={buttonStyle}
-                    >
-                      {String(duplicatingAssignmentId) === String(assignment.id) ? "Duplicating..." : "Duplicate"}
-                    </button>
-
-                    <button type="button" onClick={() => openEditAssignment(assignment.id)} style={buttonStyle}>
-                      Inline Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => deleteAssignment(assignment)}
-                      disabled={String(deletingAssignmentId) === String(assignment.id)}
-                      style={dangerButtonStyle}
-                    >
-                      {String(deletingAssignmentId) === String(assignment.id) ? "Deleting..." : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <AssignmentCardsView
+              assignments={courseAssignments}
+              movingAssignmentId={movingAssignmentId}
+              duplicatingAssignmentId={duplicatingAssignmentId}
+              deletingAssignmentId={deletingAssignmentId}
+              formatDate={formatDate}
+              formatPercent={formatPercent}
+              getStatusLabel={getStatusLabel}
+              openSpeedGrading={openSpeedGrading}
+              openEditAssignment={openEditAssignment}
+              openEditSections={openEditSections}
+              moveAssignment={moveAssignment}
+              duplicateAssignment={duplicateAssignment}
+              deleteAssignment={deleteAssignment}
+            />
           )}
         </section>
       </div>
 
-      <div style={teacherCoachShellStyle}>
-        {coachOpen ? (
-          <div style={teacherCoachPanelStyle}>
-            <div style={teacherCoachHeaderStyle}>
-              <div>
-                <div style={{ fontWeight: 900 }}>Teacher Coach</div>
-                <div style={{ fontSize: "0.9rem", color: "#4b5563" }}>
-                  Assignment Readiness Coach
-                </div>
-              </div>
-
-              <button type="button" onClick={() => setCoachOpen(false)} style={teacherCoachSmallButtonStyle}>
-                Close
-              </button>
-            </div>
-
-            <div style={teacherCoachRecommendationStyle}>
-              <div style={{ fontWeight: 900, marginBottom: "6px" }}>SUPER LMS Recommends</div>
-              <div>
-                <strong>Next Step:</strong> {coachRecommendation.title}
-              </div>
-              <div style={{ marginTop: "6px", color: "#4b5563" }}>
-                <strong>Reason:</strong> {coachRecommendation.reason}
-              </div>
-              <div style={{ marginTop: "6px" }}>
-                <strong>Do this:</strong> {coachRecommendation.action}
-              </div>
-              <div style={{ marginTop: "6px" }}>
-                <strong>Readiness:</strong> {coachRecommendation.readiness}
-              </div>
-            </div>
-
-            <div style={teacherCoachStepStyle}>
-              <div style={{ fontWeight: 900, marginBottom: "6px" }}>Before grading, check:</div>
-              <div style={{ color: "#111827", lineHeight: 1.55 }}>
-                <div>□ Assignment exists</div>
-                <div>□ Edit Sections has KNOW, DO, and UNDERSTAND evidence where needed</div>
-                <div>□ Section out-of marks and weights make sense</div>
-                <div>□ Students are enrolled in the course</div>
-                <div>□ Open Speed Grading when ready to enter raw marks</div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <button type="button" onClick={() => setCoachOpen((value) => !value)} style={teacherCoachButtonStyle}>
-          {coachOpen ? "Hide Coach" : "Need Help?"}
-        </button>
-      </div>
+      <TeacherCoachPanel
+        coachOpen={coachOpen}
+        setCoachOpen={setCoachOpen}
+        coachRecommendation={coachRecommendation}
+      />
     </>
   )
 }
 
-const assignmentGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: "16px",
-}
-
-const assignmentCardStyle = {
-  border: "1px solid #d7dce5",
-  borderRadius: "14px",
-  padding: "16px",
-  background: "#ffffff",
-}
-
-const buttonRowStyle = {
+const sectionHeaderStyle = {
   display: "flex",
-  gap: "10px",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "16px",
   flexWrap: "wrap",
-  marginTop: "14px",
+  marginBottom: "18px",
+}
+
+const viewToggleStyle = {
+  display: "flex",
+  gap: "8px",
+  flexWrap: "wrap",
+}
+
+const toggleButtonStyle = {
+  padding: "10px 14px",
+  borderRadius: "999px",
+  border: "1px solid #d7dce5",
+  background: "#ffffff",
+  color: "#111827",
+  font: "inherit",
+  fontWeight: 900,
+  cursor: "pointer",
+}
+
+const activeToggleButtonStyle = {
+  ...toggleButtonStyle,
+  border: "2px solid #111827",
+  background: "#f8fafc",
 }
 
 const buttonStyle = {
@@ -454,21 +405,6 @@ const buttonStyle = {
   font: "inherit",
   fontWeight: 800,
   cursor: "pointer",
-}
-
-const dangerButtonStyle = {
-  ...buttonStyle,
-  border: "1px solid #d1a1a1",
-  background: "#fff1f1",
-}
-
-const statusPillStyle = {
-  display: "inline-block",
-  border: "1px solid #d7dce5",
-  borderRadius: "999px",
-  padding: "6px 12px",
-  fontWeight: 800,
-  marginBottom: "10px",
 }
 
 const noticeBoxStyle = {
@@ -483,67 +419,4 @@ const errorBoxStyle = {
   borderRadius: "12px",
   padding: "14px 16px",
   background: "#fff8f8",
-}
-
-const teacherCoachShellStyle = {
-  position: "fixed",
-  right: "20px",
-  bottom: "20px",
-  zIndex: 1000,
-  display: "grid",
-  gap: "10px",
-  justifyItems: "end",
-}
-
-const teacherCoachPanelStyle = {
-  width: "min(420px, calc(100vw - 40px))",
-  border: "2px solid #111827",
-  borderRadius: "16px",
-  padding: "16px",
-  background: "#ffffff",
-  boxShadow: "0 18px 40px rgba(0, 0, 0, 0.22)",
-}
-
-const teacherCoachHeaderStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: "12px",
-}
-
-const teacherCoachRecommendationStyle = {
-  marginTop: "12px",
-  border: "2px solid #111827",
-  borderRadius: "12px",
-  padding: "12px",
-  background: "#f8fafc",
-  lineHeight: 1.45,
-}
-
-const teacherCoachStepStyle = {
-  border: "1px solid #d7dce5",
-  borderRadius: "12px",
-  padding: "14px",
-  marginTop: "12px",
-  background: "#ffffff",
-}
-
-const teacherCoachButtonStyle = {
-  padding: "12px 16px",
-  borderRadius: "999px",
-  border: "2px solid #111827",
-  background: "#ffffff",
-  color: "#111827",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.22)",
-}
-
-const teacherCoachSmallButtonStyle = {
-  padding: "8px 10px",
-  borderRadius: "10px",
-  border: "1px solid #d7dce5",
-  background: "#ffffff",
-  fontWeight: 800,
-  cursor: "pointer",
 }

@@ -2,7 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import API_BASE from "../apiBase"
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx"
+import StudentCourseCard from "../components/student/StudentCourseCard.jsx"
+import StudentSummaryCards from "../components/student/StudentSummaryCards.jsx"
+import StudentCourseProgressPanel from "../components/student/StudentCourseProgressPanel.jsx"
+import StudentMissingWorkPanel from "../components/student/StudentMissingWorkPanel.jsx"
+import StudentGoalsGrowthPanel from "../components/student/StudentGoalsGrowthPanel.jsx"
+import StudentNextStepsPanel from "../components/student/StudentNextStepsPanel.jsx"
+import StudentTeacherAnnouncementsPanel from "../components/student/StudentTeacherAnnouncementsPanel.jsx"
+import StudentUpcomingDueDatesPanel from "../components/student/StudentUpcomingDueDatesPanel.jsx"
 import { useAuth } from "../AuthContext.jsx"
+import useStudentDashboard from "../hooks/dashboard/useStudentDashboard.js"
 
 function SectionHeader({ title, subtitle, action }) {
   return (
@@ -69,12 +78,11 @@ function DetailCard({ title, children }) {
 
 function CourseOverviewCard({ course, isSelected, onSelect }) {
   return (
-    <button type="button" onClick={() => onSelect(String(course.id))} style={courseButtonStyle(isSelected)}>
-      <div style={{ fontWeight: 800, marginBottom: "6px" }}>{course.title || course.class_name || "Untitled Course"}</div>
-      <div style={{ fontSize: "0.95rem", lineHeight: 1.5, color: "#4b5563" }}>
-        {course.description || "No course description available."}
-      </div>
-    </button>
+    <StudentCourseCard
+      course={course}
+      isSelected={isSelected}
+      onOpen={onSelect}
+    />
   )
 }
 
@@ -314,7 +322,7 @@ function SubmissionEditor({
           </div>
 
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
-            <ActionButton onClick={onSave} disabled={submissionSaving || !submissionHasUnsavedChanges || (String(draftText || "").trim() === "" && attachments.length === 0)}>
+            <ActionButton onClick={onSave} disabled={submissionSaving || (String(draftText || "").trim() === "" && attachments.length === 0)}>
               {submissionSaving ? "Saving Submission..." : "Save Submission"}
             </ActionButton>
             <ActionButton quiet onClick={onClose}>
@@ -334,7 +342,7 @@ function SubmissionEditor({
           <div style={submissionPreviewGridStyle}>
             <DetailCard title="Saved Submission Preview">
               <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
-                {existingContent || "No submission saved yet."}
+                {existingContent || (attachments.length > 0 ? "Submission saved with attached file." : "No submission saved yet.")}
               </div>
             </DetailCard>
 
@@ -415,15 +423,23 @@ export default function StudentDashboardPage() {
   const [searchParams] = useSearchParams()
   const submissionEditorRef = useRef(null)
 
-  const [courses, setCourses] = useState([])
-  const [lessons, setLessons] = useState([])
-  const [assignments, setAssignments] = useState([])
-  const [selectedCourseId, setSelectedCourseId] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [errorText, setErrorText] = useState("")
+  const {
+    courses,
+    selectedCourse,
+    selectedCourseId,
+    dashboard,
+    assignments,
+    lessons,
+    submissionStatesByAssignmentId,
+    setSubmissionStateByAssignmentId,
+    loading,
+    errorText,
+    setErrorText,
+    selectCourse,
+  } = useStudentDashboard(user?.email)
 
   const [selectedSubmissionAssignmentId, setSelectedSubmissionAssignmentId] = useState("")
-  const [submissionStateByAssignmentId, setSubmissionStateByAssignmentId] = useState({})
+  const submissionStateByAssignmentId = submissionStatesByAssignmentId
   const [submissionLoadingId, setSubmissionLoadingId] = useState("")
   const [submissionSavingId, setSubmissionSavingId] = useState("")
   const [submissionDraftText, setSubmissionDraftText] = useState("")
@@ -433,125 +449,11 @@ export default function StudentDashboardPage() {
   const [submissionAttachmentsByAssignmentId, setSubmissionAttachmentsByAssignmentId] = useState({})
   const [attachmentLoadingId, setAttachmentLoadingId] = useState("")
   const [attachmentUploadingId, setAttachmentUploadingId] = useState("")
+  const [courseProgressLoading, setCourseProgressLoading] = useState(false)
   const [attachmentErrorText, setAttachmentErrorText] = useState("")
   const [attachmentSuccessText, setAttachmentSuccessText] = useState("")
   const [attachmentSuccessByAssignmentId, setAttachmentSuccessByAssignmentId] = useState({})
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("")
-
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadStudentDashboard() {
-      const studentEmail = String(user?.email || "").trim().toLowerCase()
-
-      if (!studentEmail) {
-        if (!isMounted) return
-        setCourses([])
-        setLessons([])
-        setAssignments([])
-        setSelectedCourseId("")
-        setErrorText("Student email is missing from the current session.")
-        setLoading(false)
-        return
-      }
-
-      try {
-        const [coursesResponse, assignmentsResponse] = await Promise.all([
-          fetch(`${API_BASE}/api/classes`),
-          fetch(`${API_BASE}/api/assignments`),
-        ])
-
-        if (!coursesResponse.ok || !assignmentsResponse.ok) {
-          throw new Error("Could not load student learning data.")
-        }
-
-        const [coursesData, assignmentsData] = await Promise.all([
-          coursesResponse.json(),
-          assignmentsResponse.json(),
-        ])
-
-        const safeCourses = Array.isArray(coursesData) ? coursesData : []
-        const safeLessons = []
-        const safeAssignments = Array.isArray(assignmentsData) ? assignmentsData : []
-
-        const visibleCourses = []
-
-        for (const course of safeCourses) {
-          const rosterResponse = await fetch(`${API_BASE}/api/class-roster/${course.id}`)
-
-          if (!rosterResponse.ok) {
-            continue
-          }
-
-          const rosterData = await rosterResponse.json()
-          const rosterStudents = Array.isArray(rosterData.students) ? rosterData.students : []
-
-          const isEnrolled = rosterStudents.some((student) => {
-            return String(student.email || "").trim().toLowerCase() === studentEmail
-          })
-
-          if (isEnrolled) {
-            visibleCourses.push(course)
-          }
-        }
-
-        if (!isMounted) return
-
-        const visibleCourseIds = new Set(visibleCourses.map((course) => String(course.id)))
-
-        const visibleLessons = safeLessons.filter((lesson) =>
-          visibleCourseIds.has(String(getLessonCourseId(lesson)))
-        )
-
-        const visibleAssignments = safeAssignments.filter((assignment) =>
-          visibleCourseIds.has(String(getAssignmentCourseId(assignment)))
-        )
-
-        setCourses(visibleCourses)
-        setLessons(visibleLessons)
-        setAssignments(visibleAssignments)
-        setErrorText("")
-        setLoading(false)
-
-        if (visibleCourses.length > 0) {
-          setSelectedCourseId((currentSelectedCourseId) => {
-            const currentStillVisible = visibleCourses.some(
-              (course) => String(course.id) === String(currentSelectedCourseId)
-            )
-
-            if (currentStillVisible) {
-              return currentSelectedCourseId
-            }
-
-            return String(visibleCourses[0].id)
-          })
-        } else {
-          setSelectedCourseId("")
-        }
-      } catch (err) {
-        console.error("Error loading student dashboard:", err)
-
-        if (!isMounted) return
-
-        setCourses([])
-        setLessons([])
-        setAssignments([])
-        setSelectedCourseId("")
-        setErrorText("Could not load student learning data.")
-        setLoading(false)
-      }
-    }
-
-    loadStudentDashboard()
-
-    return () => {
-      isMounted = false
-    }
-  }, [user?.email])
-
-  const selectedCourse = useMemo(() => {
-    return courses.find((course) => String(course.id) === String(selectedCourseId)) || null
-  }, [courses, selectedCourseId])
 
   const filteredLessons = useMemo(() => {
     if (!selectedCourseId) return []
@@ -709,6 +611,7 @@ export default function StudentDashboardPage() {
       if (assignmentsNeedingStatus.length === 0) return
 
       try {
+        setCourseProgressLoading(true)
         const results = await Promise.all(
           assignmentsNeedingStatus.map(async (assignment) => {
             const assignmentId = String(assignment.id)
@@ -740,6 +643,10 @@ export default function StudentDashboardPage() {
         })
       } catch (err) {
         console.error("Error loading visible submission statuses:", err)
+      } finally {
+        if (!isCancelled) {
+          setCourseProgressLoading(false)
+        }
       }
     }
 
@@ -789,6 +696,7 @@ export default function StudentDashboardPage() {
         `${API_BASE}/api/assignments/${assignmentId}/student-attachments?student_email=${encodeURIComponent(studentEmail)}`
       )
       const data = await response.json()
+      console.log("SAVE SUBMISSION RESPONSE", response.status, data)
 
       if (!response.ok) {
         setAttachmentErrorText(data.error || "Failed to load attachments.")
@@ -961,6 +869,12 @@ export default function StudentDashboardPage() {
   }
 
   async function handleSaveSubmission() {
+    console.log("SAVE SUBMISSION CLICKED", {
+      selectedSubmissionAssignmentId,
+      draftText: submissionDraftText,
+      attachments: selectedSubmissionAttachments,
+    })
+
     const assignmentId = String(selectedSubmissionAssignmentId || "").trim()
     const studentName = String(user?.name || "Student").trim()
     const studentEmail = String(user?.email || "").trim().toLowerCase()
@@ -976,8 +890,10 @@ export default function StudentDashboardPage() {
       return
     }
 
-    if (!content) {
-      setSubmissionErrorText("Please enter submission text before saving.")
+    const hasAttachments = Array.isArray(selectedSubmissionAttachments) && selectedSubmissionAttachments.length > 0
+
+    if (!content && !hasAttachments) {
+      setSubmissionErrorText("Please enter submission text or attach a file before saving.")
       return
     }
 
@@ -1031,6 +947,11 @@ export default function StudentDashboardPage() {
     setAttachmentSuccessText("")
     setAttachmentLoadingId("")
     setAttachmentUploadingId("")
+  }
+
+  async function handleOpenCourse(courseId) {
+    closeSubmissionEditor()
+    await selectCourse(courseId)
   }
 
   function handleLogout() {
@@ -1181,33 +1102,36 @@ export default function StudentDashboardPage() {
 
         <section className="panel">
           <SectionHeader
-            title={`You're Currently ${getProficiencyLabel(gradedAverage)}`}
-            subtitle="This is your current learning snapshot based on graded evidence your teacher has returned."
+            title="Choose Your Course"
+            subtitle="Select a course first so your results, assignments, and progress show the right class."
           />
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.7fr) minmax(0, 1.3fr)", gap: "14px" }}>
-            <DetailCard title="Current Standing">
-              <div style={{ fontSize: "2.4rem", fontWeight: 800 }}>{formatAverage(gradedAverage)}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                Your current course standing from graded evidence.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="What This Means">
-              <div style={{ lineHeight: 1.6 }}>
-                {getProficiencyLabel(gradedAverage) === "Extending"
-                  ? "You are demonstrating strong understanding and application of course concepts. Keep maintaining high-quality work and reviewing teacher feedback."
-                  : getProficiencyLabel(gradedAverage) === "Proficient"
-                    ? "You are meeting important course expectations. Review feedback carefully and look for ways to deepen your explanations and applications."
-                    : getProficiencyLabel(gradedAverage) === "Developing"
-                      ? "You are building the required skills. Focus on feedback, complete missing work, and ask for help when a task is unclear."
-                      : getProficiencyLabel(gradedAverage) === "Emerging"
-                        ? "You are beginning to show evidence of learning. Your next step is to complete current assignments and review teacher feedback."
-                        : "Once your teacher returns graded evidence, your current standing and next steps will appear here."}
-              </div>
-            </DetailCard>
-          </div>
+          {courses.length === 0 ? (
+            <NoticeBox>No courses are currently available.</NoticeBox>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "14px" }}>
+              {courses.map((course) => (
+                <CourseOverviewCard
+                  key={`top-course-${course.id}`}
+                  course={course}
+                  isSelected={String(course.id) === String(selectedCourseId)}
+                  onSelect={handleOpenCourse}
+                />
+              ))}
+            </div>
+          )}
         </section>
+
+        {selectedCourseId ? (
+          <>
+            <StudentCourseProgressPanel
+              courseProgressLoading={courseProgressLoading}
+              proficiencyLabel={getProficiencyLabel(gradedAverage)}
+              standing={formatAverage(gradedAverage)}
+              latestResultTitle={latestResultAssignment?.title || "No graded result yet"}
+              latestResultScore={formatAverage(latestResultState?.submission?.score)}
+              latestResultFeedback={latestResultState?.submission?.feedback || ""}
+            />
 
         <section className="panel">
           <SectionHeader
@@ -1283,96 +1207,24 @@ export default function StudentDashboardPage() {
           </div>
         </section>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "16px" }}>
-          <SummaryCard label="Courses" value={courses.length} helper="Courses currently visible in the student portal." />
-          <SummaryCard
-            label="Due Soon"
-            value={dueSoonCount}
-            helper={selectedCourse ? `Assignments approaching due date in ${selectedCourse.title || selectedCourse.class_name}.` : "Assignments approaching due date across the portal."}
-          />
-          <SummaryCard
-            label="Submitted"
-            value={submittedCount}
-            helper={selectedCourseId ? "Assignments already submitted in the selected course." : "Assignments already submitted across the portal."}
-          />
-          <SummaryCard
-            label="Graded"
-            value={gradedCount}
-            helper={selectedCourseId ? "Assignments with returned scores in the selected course." : "Assignments with returned scores across the portal."}
-          />
-          <SummaryCard label="Standing" value={formatAverage(gradedAverage)} helper="Current standing from graded evidence currently shown." />
-          <SummaryCard
-            label="Lessons"
-            value={selectedCourseId ? filteredLessons.length : lessons.length}
-            helper={selectedCourseId ? "Lessons for the selected course." : "Total lessons loaded into the student view."}
-          />
-          <SummaryCard
-            label="Assignments"
-            value={selectedCourseId ? filteredAssignments.length : assignments.length}
-            helper={selectedCourseId ? "Assignments for the selected course." : "Total assignments loaded into the student view."}
-          />
-        </section>
+        <StudentSummaryCards
+          courses={courses}
+          selectedCourse={selectedCourse}
+          selectedCourseId={selectedCourseId}
+          dueSoonCount={dueSoonCount}
+          submittedCount={submittedCount}
+          gradedCount={gradedCount}
+          standing={formatAverage(gradedAverage)}
+          lessonsCount={selectedCourseId ? filteredLessons.length : lessons.length}
+          assignmentsCount={selectedCourseId ? filteredAssignments.length : assignments.length}
+        />
 
-        <section className="panel">
-          <SectionHeader
-            title="Missing Work"
-            subtitle="A quick check of assignments that still need attention."
-          />
+        <StudentMissingWorkPanel missingAssignments={missingAssignments} />
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.6fr) minmax(0, 1.4fr)", gap: "14px" }}>
-            <DetailCard title="Assignments Missing">
-              <div style={{ fontSize: "2.4rem", fontWeight: 800 }}>{missingAssignments.length}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                {missingAssignments.length === 0
-                  ? "Great job. You are currently caught up."
-                  : "These assignments still need to be submitted."}
-              </div>
-            </DetailCard>
-
-            <DetailCard title="What To Do Next">
-              {missingAssignments.length === 0 ? (
-                <div style={{ lineHeight: 1.6 }}>
-                  Keep reviewing your teacher feedback and prepare for the next assignment.
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: "8px" }}>
-                  {missingAssignments.slice(0, 5).map((assignment) => (
-                    <div key={assignment.id} style={{ lineHeight: 1.5 }}>
-                      <strong>{assignment.title || "Untitled Assignment"}</strong>
-                      <div style={{ color: "#4b5563" }}>Due: {formatDueDate(assignment.due_date)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </DetailCard>
-          </div>
-        </section>
-
-        <section className="panel">
-          <SectionHeader
-            title="Upcoming Due Dates"
-            subtitle="Assignments coming up soon in your selected course."
-          />
-
-          {!selectedCourseId ? (
-            <NoticeBox>Select a course above to view upcoming due dates.</NoticeBox>
-          ) : upcomingAssignments.length === 0 ? (
-            <NoticeBox>No upcoming assignments found for this course.</NoticeBox>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
-              {upcomingAssignments.slice(0, 3).map((assignment) => (
-                <DetailCard key={assignment.id} title={assignment.title || "Untitled Assignment"}>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>
-                    Due: {formatDueDate(assignment.due_date)}
-                  </div>
-                  <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                    {assignment.description || "Open the assignment to review the details."}
-                  </div>
-                </DetailCard>
-              ))}
-            </div>
-          )}
-        </section>
+        <StudentUpcomingDueDatesPanel
+          selectedCourseId={selectedCourseId}
+          upcomingAssignments={upcomingAssignments}
+        />
 
         <section className="panel">
           <SectionHeader
@@ -1420,109 +1272,14 @@ export default function StudentDashboardPage() {
           </div>
         </section>
 
-        <section className="panel">
-          <SectionHeader
-            title="Student Goals & Growth"
-            subtitle="Use your current standing and teacher feedback to decide your next learning move."
-          />
+        <StudentGoalsGrowthPanel
+          gradedAverage={gradedAverage}
+          standing={formatAverage(gradedAverage)}
+        />
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
-            <DetailCard title="Current Standing">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{formatAverage(gradedAverage)}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                This is where your returned evidence currently places you.
-              </div>
-            </DetailCard>
+        <StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} />
 
-            <DetailCard title="Suggested Goal">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>
-                {gradedAverage === null || gradedAverage === undefined
-                  ? "Submit first evidence"
-                  : Number(gradedAverage) >= 95
-                    ? "Maintain excellence"
-                    : Number(gradedAverage) >= 86
-                      ? "Aim for 95%"
-                      : Number(gradedAverage) >= 73
-                        ? "Aim for 86%"
-                        : Number(gradedAverage) >= 60
-                          ? "Aim for 73%"
-                          : "Build consistency"}
-              </div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                A simple next target based on your current evidence.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Recommended Action">
-              <div style={{ lineHeight: 1.6 }}>
-                {gradedAverage === null || gradedAverage === undefined
-                  ? "Open your next assignment and submit evidence so your teacher can give feedback."
-                  : Number(gradedAverage) >= 95
-                    ? "Keep submitting high-quality work and look for enrichment or leadership opportunities."
-                    : Number(gradedAverage) >= 86
-                      ? "Review teacher feedback, maintain completion, and look for ways to deepen explanations."
-                      : Number(gradedAverage) >= 73
-                        ? "Focus on improving one KDU area and use teacher feedback before your next submission."
-                        : Number(gradedAverage) >= 60
-                          ? "Complete missing work, ask for help early, and revise using teacher feedback."
-                          : "Start with the next assignment, submit evidence, and ask your teacher what to focus on first."}
-              </div>
-            </DetailCard>
-          </div>
-        </section>
-
-        <section className="panel">
-          <SectionHeader
-            title="Teacher Announcements"
-            subtitle="Important course messages from your teacher will appear here."
-          />
-
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1.2fr)", gap: "14px" }}>
-            <DetailCard title={selectedCourse?.title || selectedCourse?.class_name || "Selected Course"}>
-              <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>
-                Welcome to your course dashboard.
-              </div>
-              <div style={{ marginTop: "8px", color: "#4b5563", lineHeight: 1.6 }}>
-                Check your standing, review your latest feedback, and open your next assignment when you are ready.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Reminders">
-              <div style={{ lineHeight: 1.7 }}>
-                • Review teacher feedback before starting your next task.<br />
-                • Keep track of upcoming due dates.<br />
-                • Ask for help early if an assignment is unclear.
-              </div>
-            </DetailCard>
-          </div>
-        </section>
-
-        <section className="panel">
-          <SectionHeader
-            title="My Next Steps"
-            subtitle="A simple checklist to help you stay organized in this course."
-          />
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
-            <DetailCard title="1. Check Your Standing">
-              <div style={{ lineHeight: 1.5 }}>
-                Review your current standing and proficiency so you know how you are doing right now.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="2. Review Latest Feedback">
-              <div style={{ lineHeight: 1.5 }}>
-                Read your latest teacher feedback and KDU evidence before starting the next task.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="3. Open Your Next Assignment">
-              <div style={{ lineHeight: 1.5 }}>
-                Use Open Assignment to continue your work or review assignment details.
-              </div>
-            </DetailCard>
-          </div>
-        </section>
+        <StudentNextStepsPanel />
 
         <section className="panel">
           <SectionHeader title="My Courses" subtitle="Choose a course to focus the dashboard on that class." />
@@ -1536,7 +1293,7 @@ export default function StudentDashboardPage() {
                   key={course.id}
                   course={course}
                   isSelected={String(course.id) === String(selectedCourseId)}
-                  onSelect={setSelectedCourseId}
+                  onSelect={handleOpenCourse}
                 />
               ))}
             </div>
@@ -1544,7 +1301,7 @@ export default function StudentDashboardPage() {
 
           <div style={{ marginTop: "18px", maxWidth: "460px" }}>
             <label style={labelStyle}>Course</label>
-            <select value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)} style={inputStyle}>
+            <select value={selectedCourseId} onChange={(e) => handleOpenCourse(e.target.value)} style={inputStyle}>
               <option value="">Select Course</option>
               {courses.map((course) => (
                 <option key={course.id} value={course.id}>
@@ -1749,6 +1506,16 @@ export default function StudentDashboardPage() {
             </div>
           )}
         </section>
+          </>
+        ) : (
+          <section className="panel">
+            <SectionHeader
+              title="Choose a Course to Begin"
+              subtitle="Select Open Course on one of your course cards. Your progress, assignments, feedback, due dates, and lessons will load after you choose a course."
+            />
+            <NoticeBox>Your dashboard is ready. Choose a course above to continue.</NoticeBox>
+          </section>
+        )}
       </div>
       <FloatingTeacherCoach
         title="Student Coach"

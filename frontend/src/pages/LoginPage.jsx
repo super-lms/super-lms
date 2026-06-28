@@ -14,29 +14,11 @@ function getRedirectPathForRole(role) {
     return "/dashboard"
   }
 
-  return "/login"
-}
+  if (normalizedRole === "observer" || normalizedRole === "parent") {
+    return "/observer"
+  }
 
-function DemoAccountButton({ label, email, onUse }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onUse(email)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        padding: "12px 14px",
-        borderRadius: "10px",
-        border: "1px solid #d7d7d7",
-        background: "#ffffff",
-        cursor: "pointer",
-        font: "inherit",
-      }}
-    >
-      <div style={{ fontWeight: 700, marginBottom: "4px" }}>{label}</div>
-      <div style={{ fontSize: "0.95rem", color: "#4b5563" }}>{email}</div>
-    </button>
-  )
+  return "/login"
 }
 
 export default function LoginPage() {
@@ -89,7 +71,8 @@ export default function LoginPage() {
         requestedPath &&
         requestedPath !== "/login" &&
         ((normalizedRole === "teacher" || normalizedRole === "admin") ||
-          (normalizedRole === "student" && requestedPath.startsWith("/student")))
+          (normalizedRole === "student" && requestedPath.startsWith("/student")) ||
+          ((normalizedRole === "observer" || normalizedRole === "parent") && requestedPath.startsWith("/observer")))
       ) {
         navigate(requestedPath, { replace: true })
         return
@@ -101,11 +84,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  function handleUseDemoEmail(nextEmail) {
-    setEmail(nextEmail)
-    setError("")
   }
 
   return (
@@ -170,83 +148,23 @@ export default function LoginPage() {
               marginBottom: "28px",
             }}
           >
-            <div
-              style={{
-                border: "1px solid #d7d7d7",
-                borderRadius: "12px",
-                padding: "16px",
-                background: "#ffffff",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.82rem",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                  color: "#6b7280",
-                  marginBottom: "8px",
-                }}
-              >
-                Teacher/Admin
-              </div>
-              <div style={{ fontWeight: 700, marginBottom: "6px" }}>Dashboard Access</div>
-              <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>
-                Teachers and admins go directly to the main LMS workspace.
-              </div>
-            </div>
+            <RoleInfoCard
+              title="Teacher/Admin"
+              heading="Dashboard Access"
+              body="Teachers and admins go directly to the main LMS workspace."
+            />
 
-            <div
-              style={{
-                border: "1px solid #d7d7d7",
-                borderRadius: "12px",
-                padding: "16px",
-                background: "#ffffff",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.82rem",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                  color: "#6b7280",
-                  marginBottom: "8px",
-                }}
-              >
-                Student
-              </div>
-              <div style={{ fontWeight: 700, marginBottom: "6px" }}>Student Portal</div>
-              <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>
-                Students are redirected into their own learning view automatically.
-              </div>
-            </div>
+            <RoleInfoCard
+              title="Student"
+              heading="Student Portal"
+              body="Students are redirected into their own learning view automatically."
+            />
 
-            <div
-              style={{
-                border: "1px solid #d7d7d7",
-                borderRadius: "12px",
-                padding: "16px",
-                background: "#ffffff",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.82rem",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                  color: "#6b7280",
-                  marginBottom: "8px",
-                }}
-              >
-                Session
-              </div>
-              <div style={{ fontWeight: 700, marginBottom: "6px" }}>Persistent Login</div>
-              <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>
-                Your session stays active across refresh until you log out.
-              </div>
-            </div>
+            <RoleInfoCard
+              title="Parent/Observer"
+              heading="Observer Portal"
+              body="Parents and observers see linked student progress and learning evidence."
+            />
           </div>
 
           <form onSubmit={handleLogin}>
@@ -259,7 +177,7 @@ export default function LoginPage() {
                 marginBottom: "8px",
               }}
             >
-              Email
+              School Email
             </label>
 
             <input
@@ -333,7 +251,7 @@ export default function LoginPage() {
               fontSize: "1.4rem",
             }}
           >
-            Demo Accounts
+            Production Access
           </h2>
 
           <p
@@ -345,30 +263,13 @@ export default function LoginPage() {
               color: "#4b5563",
             }}
           >
-            Click one of these to fill the login email quickly.
+            SUPER LMS now uses real school accounts from the production user directory.
           </p>
 
           <div style={{ display: "grid", gap: "12px", marginBottom: "22px" }}>
-            <DemoAccountButton
-              label="Admin Demo"
-              email="davidbrecht@cbcschools.ca"
-              onUse={handleUseDemoEmail}
-            />
-            <DemoAccountButton
-              label="Teacher Demo - Carrie Fang"
-              email="carriefang@cbcschools.ca"
-              onUse={handleUseDemoEmail}
-            />
-            <DemoAccountButton
-              label="Teacher Demo - Jennifer Boyd"
-              email="jenniferboyd@cbcschools.ca"
-              onUse={handleUseDemoEmail}
-            />
-            <DemoAccountButton
-              label="Student Demo"
-              email="cekcqh@dingtalk.com"
-              onUse={handleUseDemoEmail}
-            />
+            <ProductionNote title="Students" body="Use the student DingTalk or school email connected to the Master Student Directory." />
+            <ProductionNote title="Teachers" body="Use the teacher account assigned to your courses." />
+            <ProductionNote title="Parents / Observers" body="Use the observer account linked to one or more students." />
           </div>
 
           <div
@@ -393,18 +294,62 @@ export default function LoginPage() {
             <div style={{ display: "grid", gap: "10px" }}>
               <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>
                 <strong>Teacher/Admin:</strong> redirected to the requested teacher page first,
-                otherwise dashboard
+                otherwise dashboard.
               </div>
               <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>
-                <strong>Student:</strong> redirected to the student portal
+                <strong>Student:</strong> redirected to the student portal.
               </div>
               <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>
-                <strong>Unknown role:</strong> stays out of protected pages until corrected
+                <strong>Parent/Observer:</strong> redirected to the observer portal.
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function RoleInfoCard({ title, heading, body }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #d7d7d7",
+        borderRadius: "12px",
+        padding: "16px",
+        background: "#ffffff",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "0.82rem",
+          fontWeight: 800,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          color: "#6b7280",
+          marginBottom: "8px",
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ fontWeight: 700, marginBottom: "6px" }}>{heading}</div>
+      <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>{body}</div>
+    </div>
+  )
+}
+
+function ProductionNote({ title, body }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #d7d7d7",
+        borderRadius: "12px",
+        padding: "14px",
+        background: "#f8fafc",
+      }}
+    >
+      <div style={{ fontWeight: 800, marginBottom: "6px" }}>{title}</div>
+      <div style={{ color: "#4b5563", lineHeight: 1.5, fontSize: "0.95rem" }}>{body}</div>
     </div>
   )
 }

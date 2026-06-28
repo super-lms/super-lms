@@ -1491,7 +1491,7 @@ export default function AssignmentsPage() {
                       title="Assignment Inbox"
                       subtitle="Start grading from the assignments that need attention most."
                       action={
-                        <ActionButton quiet onClick={() => openTeacherSection("current")}>
+                        <ActionButton quiet onClick={() => navigate(`/course-assignments/${selectedClassId}`)}>
                           View All Assignments
                         </ActionButton>
                       }

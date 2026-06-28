@@ -233,6 +233,11 @@ export default function AssignmentSpeedGradingPage() {
   const [studentAttachmentsMessage, setStudentAttachmentsMessage] = useState("");
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("");
 
+  function backToAssignmentsPage() {
+    const classId = assignment?.class_id || assignment?.course_id || assignment?.classId || "";
+    navigate(classId ? `/assignments?classId=${classId}` : "/assignments");
+  }
+
   const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
 
   useEffect(() => {
@@ -821,7 +826,7 @@ export default function AssignmentSpeedGradingPage() {
         action:
           "Go back to the course and confirm students are enrolled before entering marks.",
         buttonLabel: "Back to Assignments",
-        buttonAction: () => navigate("/assignments"),
+        buttonAction: () => backToAssignmentsPage(),
       };
     }
 
@@ -878,7 +883,7 @@ export default function AssignmentSpeedGradingPage() {
       reason:
         "A student is selected and the grading screen is ready. Review DO, KNOW, and UNDERSTAND evidence before saving.",
       action:
-        "Enter or adjust the scores, review feedback, then save. Use Save & Back to Dashboard when you are finished.",
+        "Enter or adjust the scores, review feedback, then save. Use Save & Back to Assignments when you are finished.",
       buttonLabel: "",
       buttonAction: null,
     };
@@ -898,10 +903,10 @@ export default function AssignmentSpeedGradingPage() {
     <div className="content-area">
       <div style={floatingDashboardButtonWrapStyle}>
         <ActionButton
-          onClick={saveAndBackToDashboard}
+          onClick={async () => { await saveKduScores(); backToAssignmentsPage(); }}
           disabled={savingKduScores}
         >
-          {savingKduScores ? "Saving..." : "Save & Back to Dashboard"}
+          {savingKduScores ? "Saving..." : "Save & Back to Assignments"}
         </ActionButton>
       </div>
 
@@ -916,7 +921,7 @@ export default function AssignmentSpeedGradingPage() {
             marginBottom: "16px",
           }}
         >
-          <ActionButton quiet onClick={() => navigate("/assignments")}>
+          <ActionButton quiet onClick={() => backToAssignmentsPage()}>
             ← Back to Assignments
           </ActionButton>
 
@@ -1136,7 +1141,7 @@ export default function AssignmentSpeedGradingPage() {
             <div style={{ fontWeight: 700, marginBottom: "10px" }}>
               No students to display.
             </div>
-            <ActionButton quiet onClick={() => navigate("/assignments")}>
+            <ActionButton quiet onClick={() => backToAssignmentsPage()}>
               ← Back to Assignments
             </ActionButton>
           </div>
@@ -1760,7 +1765,7 @@ export default function AssignmentSpeedGradingPage() {
                     </div>
                   </div>
 
-                  <ActionButton quiet onClick={() => navigate("/assignments")}>
+                  <ActionButton quiet onClick={() => backToAssignmentsPage()}>
                     ← Back to Assignments
                   </ActionButton>
                 </>

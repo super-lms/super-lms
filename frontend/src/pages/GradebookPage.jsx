@@ -580,6 +580,7 @@ export default function GradebookPage() {
               <option value="student-standing">Student Course Standing</option>
               <option value="selected-student">Selected Student Detail</option>
               <option value="assignment-kdu">Assignment KDU Scores</option>
+              <option value="assignment-test-mark-entry">Assignment / Test Mark Entry</option>
             </select>
           </div>
 
@@ -852,6 +853,90 @@ export default function GradebookPage() {
                 </div>
               ))}
             </div>
+          </section>
+          ) : null}
+
+          {activeGradebookSection === "assignment-test-mark-entry" ? (
+          <section className="panel">
+            <h2>Assignment / Test Mark Entry</h2>
+            <p className="section-subtitle">
+              Choose an assignment or test, then open Speed Grading to enter raw marks or percentages. SUPER LMS converts those marks into KDU scores automatically.
+            </p>
+
+            {groupedAssignments.length === 0 ? (
+              <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+                No assignments found for this course yet.
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "16px" }}>
+                {groupedAssignments.map((group) => (
+                  <div
+                    key={group.key}
+                    style={{
+                      border: "1px solid #d7dce5",
+                      borderRadius: "14px",
+                      background: "#ffffff",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "16px",
+                        borderBottom: "1px solid #e5e7eb",
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <h3 style={{ margin: 0, fontSize: "1.15rem" }}>
+                        {group.groupName}
+                      </h3>
+                      <div style={{ marginTop: "6px", color: "#4b5563" }}>
+                        Evidence Tier: {group.bucketName} • Course Weight: {formatPercent(group.courseWeight)}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gap: "10px", padding: "16px" }}>
+                      {group.assignments.map((assignment) => (
+                        <div
+                          key={assignment.id}
+                          style={{
+                            border: "1px solid #d7dce5",
+                            borderRadius: "12px",
+                            padding: "12px",
+                            background: "#ffffff",
+                          }}
+                        >
+                          <div style={{ fontWeight: 900, marginBottom: "6px" }}>
+                            {assignment.title}
+                          </div>
+
+                          <div style={{ color: "#4b5563", lineHeight: 1.5, marginBottom: "10px" }}>
+                            Assessment Pathway: {assignment.category_name || "No pathway"} • Evidence Tier: {assignment.subcategory_name || "No tier"}
+                          </div>
+
+                          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => { window.location.href = `/assignments/${assignment.id}/edit` }}
+                              className="btn secondary"
+                            >
+                              Open Edit Page
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => { window.location.href = `/assignments/${assignment.id}/grade` }}
+                              className="btn"
+                            >
+                              Open Speed Grading / Raw Marks
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
           ) : null}
 

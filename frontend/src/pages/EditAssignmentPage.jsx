@@ -1123,7 +1123,7 @@ export default function EditAssignmentPage() {
     <>
       <div className="content-area">
       <section className="panel">
-        <div style={{ marginBottom: "16px" }}>
+        <div style={stickyAssignmentNavStyle}>
           <EditAssignmentActionButton quiet onClick={backToAssignmentsPage}>
             ← Back to Assignments
           </EditAssignmentActionButton>
@@ -1884,3 +1884,13 @@ const tableCellStyle = {
   padding: "10px",
   verticalAlign: "top",
 };
+
+
+const stickyAssignmentNavStyle = {
+  position: "sticky",
+  top: "12px",
+  zIndex: 20,
+  marginBottom: "16px",
+  padding: "10px 0",
+  background: "#ffffff",
+}

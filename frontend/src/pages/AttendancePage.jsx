@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function formatDisplayDate(value) {
@@ -163,11 +168,22 @@ function DetailCard({ title, children }) {
 }
 
 export default function AttendancePage() {
+  const navigate = useNavigate();
+  const { courseId } = useParams();
+
+  const routeCourseId = String(courseId || "").trim();
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
-  const [selectedClassId, setSelectedClassId] = useState("2");
-  const [selectedDate, setSelectedDate] = useState("2026-03-21");
+  const [selectedClassId, setSelectedClassId] = useState(routeCourseId || "");
+  const [selectedDate, setSelectedDate] = useState(todayIsoDate());
+
+  useEffect(() => {
+    if (routeCourseId) {
+      setSelectedClassId(routeCourseId);
+    }
+  }, [routeCourseId]);
 
   const attendanceUrl = useMemo(() => {
     const safeClassId = String(selectedClassId || "").trim();
@@ -176,7 +192,7 @@ export default function AttendancePage() {
     if (!safeClassId) return "";
 
     const query = safeDate ? `?date=${encodeURIComponent(safeDate)}` : "";
-    return `http://localhost:3000/api/classes/${safeClassId}/attendance${query}`;
+    return `/api/classes/${encodeURIComponent(safeClassId)}/attendance${query}`;
   }, [selectedClassId, selectedDate]);
 
   useEffect(() => {
@@ -186,7 +202,7 @@ export default function AttendancePage() {
       if (!attendanceUrl) {
         setData(null);
         setLoading(false);
-        setErrorText("Select a class to load attendance.");
+        setErrorText("");
         return;
       }
 
@@ -197,6 +213,21 @@ export default function AttendancePage() {
         const response = await fetch(attendanceUrl);
 
         if (!response.ok) {
+          if (response.status === 404) {
+            if (!isMounted) return;
+            setData({
+              class: {
+                id: selectedClassId,
+                class_name: routeCourseId ? `Course ${selectedClassId}` : "Selected Class",
+                description: "Attendance has not been set up for this class yet.",
+              },
+              date: selectedDate,
+              students: [],
+            });
+            setErrorText("");
+            return;
+          }
+
           throw new Error(`Attendance request failed with status ${response.status}`);
         }
 
@@ -219,7 +250,7 @@ export default function AttendancePage() {
     return () => {
       isMounted = false;
     };
-  }, [attendanceUrl]);
+  }, [attendanceUrl, routeCourseId, selectedClassId, selectedDate]);
 
   const classInfo = data?.class || {};
   const students = useMemo(() => toArray(data?.students), [data]);
@@ -252,12 +283,17 @@ export default function AttendancePage() {
     }));
   }, [students]);
 
+  const backTarget = routeCourseId
+    ? `/admin/courses/${encodeURIComponent(routeCourseId)}`
+    : "/dashboard";
+
   return (
     <>
       <div className="topbar">
         <h1>Attendance</h1>
         <p className="topbar-subtitle">
-          Review class attendance in a cleaner teacher-facing format for the demo path.
+          Review attendance for the selected course. If no attendance has been recorded yet,
+          this page will show a clean empty state instead of a broken request.
         </p>
       </div>
 
@@ -265,15 +301,14 @@ export default function AttendancePage() {
         <section className="panel">
           <SectionHeader
             title="Attendance Lookup"
-            subtitle="Use class and date to review attendance records without leaving the teacher workflow."
+            subtitle={
+              routeCourseId
+                ? "This attendance view is connected to the selected Administrator Course Workspace."
+                : "Use class and date to review attendance records without leaving the teacher workflow."
+            }
             action={
-              <ActionButton
-                quiet
-                onClick={() => {
-                  window.location.href = "/dashboard";
-                }}
-              >
-                Back to Dashboard
+              <ActionButton quiet onClick={() => navigate(backTarget)}>
+                {routeCourseId ? "Back to Course Workspace" : "Back to Dashboard"}
               </ActionButton>
             }
           />
@@ -303,13 +338,14 @@ export default function AttendancePage() {
                 value={selectedClassId}
                 onChange={(event) => setSelectedClassId(event.target.value)}
                 placeholder="Enter class ID"
+                disabled={Boolean(routeCourseId)}
                 style={{
                   width: "100%",
                   boxSizing: "border-box",
                   padding: "10px 12px",
                   borderRadius: "10px",
                   border: "1px solid #d7dce5",
-                  background: "#ffffff",
+                  background: routeCourseId ? "#f3f4f6" : "#ffffff",
                   font: "inherit",
                 }}
               />
@@ -403,23 +439,31 @@ export default function AttendancePage() {
 
             <section className="panel">
               <SectionHeader
-                title={classInfo.class_name || "Class Attendance"}
-                subtitle={`Attendance for ${formatDisplayDate(data?.date)}`}
+                title={classInfo.class_name || classInfo.title || "Class Attendance"}
+                subtitle={`Attendance for ${formatDisplayDate(data?.date || selectedDate)}`}
               />
+
+              {attendanceRows.length === 0 ? (
+                <NoticeBox>
+                  No attendance has been recorded for this class and date yet. This is expected
+                  before the school begins using the attendance workflow.
+                </NoticeBox>
+              ) : null}
 
               <div
                 style={{
                   display: "grid",
                   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                   gap: "14px",
+                  marginTop: attendanceRows.length === 0 ? "16px" : 0,
                 }}
               >
                 <DetailCard title="Class Name">
-                  <div>{classInfo.class_name || classInfo.title || "—"}</div>
+                  <div>{classInfo.class_name || classInfo.title || `Course ${selectedClassId}`}</div>
                 </DetailCard>
 
                 <DetailCard title="Date">
-                  <div>{formatDisplayDate(data?.date)}</div>
+                  <div>{formatDisplayDate(data?.date || selectedDate)}</div>
                 </DetailCard>
 
                 <DetailCard title="Description">
@@ -431,13 +475,11 @@ export default function AttendancePage() {
             <section className="panel">
               <SectionHeader
                 title="Attendance Roster"
-                subtitle="A simple teacher-friendly roster view for attendance review."
+                subtitle="A simple roster view for attendance review."
               />
 
               {attendanceRows.length === 0 ? (
-                <NoticeBox>
-                  No attendance records were returned for this class and date.
-                </NoticeBox>
+                <NoticeBox>No attendance roster was returned for this class and date.</NoticeBox>
               ) : (
                 <div
                   style={{
@@ -450,44 +492,16 @@ export default function AttendancePage() {
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr>
-                        <th
-                          style={{
-                            textAlign: "left",
-                            padding: "12px",
-                            borderBottom: "1px solid #d7dce5",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={{ textAlign: "left", padding: "12px", borderBottom: "1px solid #d7dce5", whiteSpace: "nowrap" }}>
                           Student
                         </th>
-                        <th
-                          style={{
-                            textAlign: "left",
-                            padding: "12px",
-                            borderBottom: "1px solid #d7dce5",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={{ textAlign: "left", padding: "12px", borderBottom: "1px solid #d7dce5", whiteSpace: "nowrap" }}>
                           Email
                         </th>
-                        <th
-                          style={{
-                            textAlign: "left",
-                            padding: "12px",
-                            borderBottom: "1px solid #d7dce5",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={{ textAlign: "left", padding: "12px", borderBottom: "1px solid #d7dce5", whiteSpace: "nowrap" }}>
                           Status
                         </th>
-                        <th
-                          style={{
-                            textAlign: "left",
-                            padding: "12px",
-                            borderBottom: "1px solid #d7dce5",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <th style={{ textAlign: "left", padding: "12px", borderBottom: "1px solid #d7dce5", whiteSpace: "nowrap" }}>
                           Note
                         </th>
                       </tr>
@@ -495,41 +509,16 @@ export default function AttendancePage() {
                     <tbody>
                       {attendanceRows.map((student) => (
                         <tr key={student.key}>
-                          <td
-                            style={{
-                              padding: "12px",
-                              borderBottom: "1px solid #e5e7eb",
-                              verticalAlign: "top",
-                            }}
-                          >
+                          <td style={{ padding: "12px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top" }}>
                             <div style={{ fontWeight: 700 }}>{student.student_name}</div>
                           </td>
-                          <td
-                            style={{
-                              padding: "12px",
-                              borderBottom: "1px solid #e5e7eb",
-                              verticalAlign: "top",
-                            }}
-                          >
+                          <td style={{ padding: "12px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top" }}>
                             {student.student_email}
                           </td>
-                          <td
-                            style={{
-                              padding: "12px",
-                              borderBottom: "1px solid #e5e7eb",
-                              verticalAlign: "top",
-                              fontWeight: 700,
-                            }}
-                          >
+                          <td style={{ padding: "12px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top", fontWeight: 700 }}>
                             {student.attendance_status}
                           </td>
-                          <td
-                            style={{
-                              padding: "12px",
-                              borderBottom: "1px solid #e5e7eb",
-                              verticalAlign: "top",
-                            }}
-                          >
+                          <td style={{ padding: "12px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top" }}>
                             {student.attendance_note}
                           </td>
                         </tr>

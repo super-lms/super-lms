@@ -1598,6 +1598,107 @@ app.get("/api/courses", async (req, res) => {
   }
 });
 
+/* GET TEACHER FOR ONE COURSE - ADMIN COURSE WORKSPACE */
+app.get("/api/admin/courses/:courseId/teacher", async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        c.id AS course_id,
+        c.title AS course_title,
+        c.teacher_id,
+        u.id AS teacher_user_id,
+        u.name AS teacher_name,
+        u.email AS teacher_email,
+        u.role AS teacher_role
+      FROM courses c
+      LEFT JOIN users u
+        ON u.id = c.teacher_id
+      WHERE c.id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    return res.json({
+      success: true,
+      course: {
+        id: result.rows[0].course_id,
+        title: result.rows[0].course_title,
+      },
+      teacher: {
+        id: result.rows[0].teacher_user_id,
+        name: result.rows[0].teacher_name,
+        email: result.rows[0].teacher_email,
+        role: result.rows[0].teacher_role,
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/admin/courses/:courseId/teacher failed:", err);
+    return res.status(500).json({ error: "Failed to load course teacher" });
+  }
+});
+
+/* GET STUDENTS FOR ONE COURSE - ADMIN COURSE WORKSPACE */
+app.get("/api/admin/courses/:courseId/students", async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    const courseResult = await pool.query(
+      `
+      SELECT id, title
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const studentsResult = await pool.query(
+      `
+      SELECT
+        ce.student_user_id,
+        u.id,
+        u.name AS student_name,
+        u.email AS student_email
+      FROM class_enrollments ce
+      JOIN users u
+        ON u.id = ce.student_user_id
+      WHERE ce.class_id = $1
+      ORDER BY u.name ASC, u.email ASC
+      `,
+      [courseId]
+    );
+
+    return res.json({
+      success: true,
+      course: courseResult.rows[0],
+      students: studentsResult.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/admin/courses/:courseId/students failed:", err);
+    return res.status(500).json({ error: "Failed to load course students" });
+  }
+});
+
 /* GET CLASSES FOR GRADEBOOK */
 app.get("/api/classes", async (req, res) => {
   try {
@@ -1611,23 +1712,8 @@ app.get("/api/classes", async (req, res) => {
         c.school_id,
         c.term_id,
         c.created_at,
-        COALESCE(
-          json_agg(
-            DISTINCT ct.teacher_id
-          ) FILTER (WHERE ct.teacher_id IS NOT NULL),
-          '[]'
-        ) AS shared_teacher_ids
+        '[]'::json AS shared_teacher_ids
       FROM courses c
-      LEFT JOIN course_teachers ct
-        ON ct.course_id = c.id
-      GROUP BY
-        c.id,
-        c.title,
-        c.description,
-        c.teacher_id,
-        c.school_id,
-        c.term_id,
-        c.created_at
       ORDER BY c.id ASC
     `);
 
@@ -1635,6 +1721,45 @@ app.get("/api/classes", async (req, res) => {
   } catch (err) {
     console.error("GET /api/classes failed:", err);
     return res.status(500).json({ error: "Failed to fetch classes" });
+  }
+});
+
+/* GET COURSES FOR ONE STUDENT */
+app.get("/api/students/:email/classes", async (req, res) => {
+  try {
+    const studentEmail = String(req.params.email || "").trim().toLowerCase();
+
+    if (!studentEmail) {
+      return res.status(400).json({ error: "Student email is required" });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        c.id,
+        c.title AS class_name,
+        c.title,
+        c.description,
+        c.teacher_id,
+        c.school_id,
+        c.term_id,
+        c.created_at,
+        '[]'::json AS shared_teacher_ids
+      FROM users u
+      JOIN class_enrollments ce
+        ON ce.student_user_id = u.id
+      JOIN courses c
+        ON c.id = ce.class_id
+      WHERE LOWER(u.email) = $1
+      ORDER BY c.title ASC, c.id ASC
+      `,
+      [studentEmail]
+    );
+
+    return res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/students/:email/classes failed:", err);
+    return res.status(500).json({ error: "Failed to fetch student classes" });
   }
 });
 
@@ -2406,16 +2531,14 @@ app.get("/api/assignments", async (req, res) => {
         COUNT(s.id)::INTEGER AS submission_count,
         COUNT(s.id) FILTER (
           WHERE s.score IS NOT NULL
-             OR s.grade IS NOT NULL
-             OR s.feedback IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.grade, '')), '') IS NOT NULL
              OR s.rubric_selection IS NOT NULL
         )::INTEGER AS graded_count,
         (
           COUNT(s.id) -
           COUNT(s.id) FILTER (
             WHERE s.score IS NOT NULL
-               OR s.grade IS NOT NULL
-               OR s.feedback IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(s.grade, '')), '') IS NOT NULL
                OR s.rubric_selection IS NOT NULL
           )
         )::INTEGER AS ungraded_count
@@ -3154,6 +3277,116 @@ app.delete("/api/assignments/:assignmentId", async (req, res) => {
 });
 
 
+/* GET STUDENT COURSE DASHBOARD V1 */
+app.get("/api/students/:studentEmail/courses/:courseId/dashboard", async (req, res) => {
+  try {
+    const studentEmail = String(req.params.studentEmail || "").trim().toLowerCase();
+    const courseId = Number(req.params.courseId);
+
+    if (!studentEmail) {
+      return res.status(400).json({ error: "studentEmail is required" });
+    }
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    const courseResult = await pool.query(
+      `
+      SELECT *
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const assignmentsResult = await pool.query(
+      `
+      SELECT
+        a.*,
+        cs.name AS subcategory_name,
+        cc.name AS category_name,
+        cc.weight_percent AS category_weight_percent,
+        cs.weight_percent_of_parent
+      FROM assignments a
+      LEFT JOIN LATERAL (
+        SELECT
+          cs_inner.*
+        FROM category_subcategories cs_inner
+        LEFT JOIN course_categories cc_inner
+          ON cc_inner.id = cs_inner.course_category_id
+        WHERE cs_inner.id = a.subcategory_id
+        ORDER BY
+          CASE WHEN cc_inner.course_id = a.class_id THEN 0 ELSE 1 END,
+          cs_inner.course_category_id ASC,
+          cs_inner.id ASC
+        LIMIT 1
+      ) cs ON true
+      LEFT JOIN course_categories cc
+        ON cc.id = cs.course_category_id
+      WHERE a.class_id = $1
+      ORDER BY COALESCE(a.sort_order, a.id), a.id
+      `,
+      [courseId]
+    );
+
+    const submissionsResult = await pool.query(
+      `
+      SELECT
+        s.id,
+        s.assignment_id,
+        s.student_name,
+        s.student_email,
+        s.content,
+        s.score,
+        s.feedback,
+        s.grade,
+        s.rubric_selection
+      FROM submissions s
+      INNER JOIN assignments a
+        ON a.id = s.assignment_id
+      WHERE a.class_id = $1
+        AND LOWER(s.student_email) = $2
+      `,
+      [courseId, studentEmail]
+    );
+
+    const submissionsByAssignmentId = {};
+    submissionsResult.rows.forEach((submission) => {
+      submissionsByAssignmentId[String(submission.assignment_id)] = submission;
+    });
+
+    const submissionStatesByAssignmentId = {};
+    assignmentsResult.rows.forEach((assignment) => {
+      const assignmentId = String(assignment.id);
+      const submission = submissionsByAssignmentId[assignmentId] || null;
+      const hasSubmittedContent =
+        submission && String(submission.content || "").trim() !== "";
+
+      submissionStatesByAssignmentId[assignmentId] = {
+        assignment,
+        submission,
+        submission_status: hasSubmittedContent ? "submitted" : "not_submitted",
+      };
+    });
+
+    return res.json({
+      course: courseResult.rows[0],
+      assignments: assignmentsResult.rows,
+      lessons: [],
+      submissionStatesByAssignmentId,
+    });
+  } catch (err) {
+    console.error("GET /api/students/:studentEmail/courses/:courseId/dashboard failed:", err);
+    return res.status(500).json({ error: "Failed to load student course dashboard" });
+  }
+});
+
 /* GET SINGLE STUDENT SUBMISSION FOR ASSIGNMENT */
 app.get(
   "/api/assignments/:assignmentId/student-submission",
@@ -3247,8 +3480,19 @@ app.post("/api/assignments/:assignmentId/student-submit", async (req, res) => {
       return res.status(400).json({ error: "student_email is required" });
     }
 
-    if (!content) {
-      return res.status(400).json({ error: "Submission content is required" });
+    const existingAttachmentSubmissionResult = await pool.query(
+      `
+      SELECT id
+      FROM submissions
+      WHERE assignment_id = $1
+        AND LOWER(student_email) = $2
+      LIMIT 1
+      `,
+      [assignmentId, studentEmail]
+    );
+
+    if (!content && existingAttachmentSubmissionResult.rows.length === 0) {
+      return res.status(400).json({ error: "Submission content or attachment is required" });
     }
 
     const assignmentResult = await pool.query(
@@ -3265,16 +3509,7 @@ app.post("/api/assignments/:assignmentId/student-submit", async (req, res) => {
       return res.status(404).json({ error: "Assignment not found" });
     }
 
-    const existingResult = await pool.query(
-      `
-      SELECT id
-      FROM submissions
-      WHERE assignment_id = $1
-        AND LOWER(student_email) = $2
-      LIMIT 1
-      `,
-      [assignmentId, studentEmail]
-    );
+    const existingResult = existingAttachmentSubmissionResult;
 
     if (existingResult.rows.length > 0) {
       const updatedResult = await pool.query(
@@ -3424,7 +3659,7 @@ app.post(
 
       const assignmentResult = await pool.query(
         `
-        SELECT id
+        SELECT id, teacher_id, class_id, title
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -3452,13 +3687,20 @@ app.post(
       if (!submissionId) {
         const userResult = await pool.query(
           `
-          SELECT name
+          SELECT id, name
           FROM users
           WHERE LOWER(email) = $1
+            AND role = 'student'
           LIMIT 1
           `,
           [studentEmail]
         );
+
+        const studentUserId = userResult.rows[0]?.id || null;
+
+        if (!studentUserId) {
+          return res.status(404).json({ error: "Student user account not found" });
+        }
 
         const studentName = userResult.rows[0]?.name || studentEmail;
 
@@ -3466,6 +3708,13 @@ app.post(
           `
           INSERT INTO submissions (
             assignment_id,
+            student_id,
+            teacher_id,
+            course_id,
+            assignment_title,
+            original_file_name,
+            stored_file_name,
+            file_path,
             student_name,
             student_email,
             content,
@@ -3474,10 +3723,26 @@ app.post(
             grade,
             rubric_selection
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           RETURNING id
           `,
-          [assignmentId, studentName, studentEmail, "", null, "", null, null]
+          [
+            assignmentId,
+            studentUserId,
+            assignmentResult.rows[0].teacher_id,
+            assignmentResult.rows[0].class_id,
+            assignmentResult.rows[0].title || "Untitled Assignment",
+            req.file.originalname || req.file.filename,
+            req.file.filename,
+            `/uploads/${req.file.filename}`,
+            studentName,
+            studentEmail,
+            "",
+            null,
+            "",
+            null,
+            null,
+          ]
         );
 
         submissionId = insertedSubmissionResult.rows[0].id;
@@ -3613,6 +3878,7 @@ app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
       `
       SELECT
         id,
+        class_id,
         title,
         scoring_method,
         single_score_know_percent,
@@ -6811,9 +7077,7 @@ app.get("/api/teachers/:teacherId/dashboard", async (req, res) => {
       `
       SELECT DISTINCT c.*
       FROM courses c
-      JOIN course_teachers ct
-        ON ct.course_id = c.id
-      WHERE ct.teacher_id = $1
+      WHERE c.teacher_id = $1
       ORDER BY c.id ASC
       `,
       [teacherId]

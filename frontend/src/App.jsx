@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import Layout from "./components/Layout.jsx";
+import AdminLayout from "./components/admin/AdminLayout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 
 import AssignmentsPage from "./pages/AssignmentsPage.jsx";
@@ -29,15 +30,20 @@ import StudentSnapshotPage from "./pages/StudentSnapshotPage.jsx";
 import TimetableBuilderPage from "./pages/TimetableBuilderPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
 
-/* FIXED LOGIN ROUTE */
+import AdminDashboardPage from "./pages/admin/AdminDashboardPage.jsx";
+import AdminCoursesPage from "./pages/admin/CoursesPage.jsx";
+import AdminCourseWorkspacePage from "./pages/admin/AdminCourseWorkspacePage.jsx";
+import AdminCourseLearningPathsPage from "./pages/admin/AdminCourseLearningPathsPage.jsx";
+import AdminCourseLessonsPage from "./pages/admin/AdminCourseLessonsPage.jsx";
+import AdminCourseStudentsPage from "./pages/admin/AdminCourseStudentsPage.jsx";
+import AdminCourseTeacherPage from "./pages/admin/AdminCourseTeacherPage.jsx";
+
 function LoginRoute() {
   const { user } = useAuth();
   const location = useLocation();
 
-  // If not logged in → show login
   if (!user) return <LoginPage />;
 
-  // If already logged in → go where they intended OR stay put
   if (user.role === "student") {
     return <Navigate to="/student" replace />;
   }
@@ -50,13 +56,25 @@ function LoginRoute() {
     return <Navigate to="/observer" replace />;
   }
 
+  if (user.role === "admin") {
+    return <Navigate to="/admin" replace />;
+  }
+
   return <Navigate to="/dashboard" replace />;
 }
 
-function ProtectedAppLayout() {
+function TeacherProtectedLayout() {
   return (
     <ProtectedRoute allowedRoles={["teacher", "admin"]}>
       <Layout />
+    </ProtectedRoute>
+  );
+}
+
+function AdminProtectedLayout() {
+  return (
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <AdminLayout />
     </ProtectedRoute>
   );
 }
@@ -84,7 +102,7 @@ function App() {
         }
       />
 
-      <Route element={<ProtectedAppLayout />}>
+      <Route element={<TeacherProtectedLayout />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/users" element={<UsersPage />} />
@@ -102,6 +120,20 @@ function App() {
         <Route path="/enrolled-students" element={<EnrolledStudentsPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/student-snapshot/:courseId/:studentEmail" element={<StudentSnapshotPage />} />
+      </Route>
+
+      <Route element={<AdminProtectedLayout />}>
+        <Route path="/admin" element={<AdminDashboardPage />} />
+        <Route path="/admin/courses" element={<AdminCoursesPage />} />
+        <Route path="/admin/courses/:courseName" element={<AdminCourseWorkspacePage />} />
+        <Route path="/admin/courses/:courseName/assignments" element={<CourseAssignmentsPage />} />
+        <Route path="/admin/courses/:courseId/learning-paths" element={<AdminCourseLearningPathsPage />} />
+        <Route path="/admin/courses/:courseId/lessons" element={<AdminCourseLessonsPage />} />
+        <Route path="/admin/courses/:courseId/students" element={<AdminCourseStudentsPage />} />
+        <Route path="/admin/courses/:courseId/teacher" element={<AdminCourseTeacherPage />} />
+        <Route path="/admin/courses/:courseId/reports" element={<ReportsPage />} />
+        <Route path="/admin/courses/:courseId/attendance" element={<AttendancePage />} />
+        <Route path="/admin/courses/:courseId/analytics" element={<DashboardPage />} />
       </Route>
 
       <Route
