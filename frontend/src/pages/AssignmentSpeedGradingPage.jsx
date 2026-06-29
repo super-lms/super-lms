@@ -1243,6 +1243,50 @@ export default function AssignmentSpeedGradingPage() {
                 <>
                   <div
                     style={{
+                      border: "1px solid #d7dce5",
+                      borderRadius: "14px",
+                      padding: "16px",
+                      background: "#ffffff",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#6b7280",
+                        fontWeight: 800,
+                        marginBottom: "6px",
+                      }}
+                    >
+                      Assignment
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: "26px",
+                        fontWeight: 900,
+                        color: "#111827",
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {assignment?.title || assignment?.name || `Assignment ${assignmentId}`}
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        color: "#4b5563",
+                        fontSize: "14px",
+                      }}
+                    >
+                      {assignment?.category_name || assignment?.subcategory_name
+                        ? `${assignment?.category_name || "Assessment"}${assignment?.subcategory_name ? ` • ${assignment.subcategory_name}` : ""}`
+                        : "Speed Grader"}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
