@@ -453,7 +453,7 @@ export default function AssignmentSpeedGradingPage() {
 
   async function reloadAfterRawMarkSave(nextSelectedEmail = null, options = {}) {
     const targetEmail = options.advanceToNextStudent
-      ? getNextStudentEmail()
+      ? getNextUngradedStudentEmail() || getNextStudentEmail()
       : nextSelectedEmail || selectedRow?.student_email || null;
 
     await loadSectionScores();
@@ -835,7 +835,9 @@ export default function AssignmentSpeedGradingPage() {
           );
         }, 1400);
       }
-      const nextSelectedEmail = options.advanceToNextStudent ? getNextStudentEmail() : selectedRow?.student_email;
+      const nextSelectedEmail = options.advanceToNextStudent
+        ? getNextUngradedStudentEmail() || getNextStudentEmail()
+        : selectedRow?.student_email;
       await loadGradebook(nextSelectedEmail);
 
       if (options.goToDashboard) {
