@@ -1252,93 +1252,38 @@ export default function AssignmentSpeedGradingPage() {
                   >
                     <div
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "12px",
-                        flexWrap: "wrap",
-                        alignItems: "flex-start",
-                        marginBottom: "10px",
+                        fontSize: "14px",
+                        color: "#6b7280",
+                        fontWeight: 800,
+                        marginBottom: "6px",
                       }}
                     >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: "14px",
-                            color: "#6b7280",
-                            fontWeight: 800,
-                            marginBottom: "6px",
-                          }}
-                        >
-                          {assignment?.course_title || `Course ${assignment?.class_id || ""}`.trim() || "Course"}
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: "26px",
-                            fontWeight: 900,
-                            color: "#111827",
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          {assignment?.title || assignment?.name || `Assignment ${assignmentId}`}
-                        </div>
-                      </div>
-
-                      <span style={contextPillStyle}>
-                        {assignment?.published || assignment?.is_published || String(assignment?.status || "").toLowerCase() === "published"
-                          ? "Published"
-                          : "Draft"}
-                      </span>
+                      Assignment
                     </div>
 
                     <div
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                        gap: "10px",
-                        marginTop: "12px",
+                        fontSize: "26px",
+                        fontWeight: 900,
+                        color: "#111827",
+                        lineHeight: 1.2,
                       }}
                     >
-                      <div style={contextInfoBoxStyle}>
-                        <div style={contextInfoLabelStyle}>Assessment Group</div>
-                        <div style={contextInfoValueStyle}>
-                          {assignment?.category_name || "Assessment"}
-                          {assignment?.subcategory_name ? ` • ${assignment.subcategory_name}` : ""}
-                        </div>
-                      </div>
-
-                      <div style={contextInfoBoxStyle}>
-                        <div style={contextInfoLabelStyle}>Weight</div>
-                        <div style={contextInfoValueStyle}>
-                          {assignment?.calculated_weight !== null && assignment?.calculated_weight !== undefined
-                            ? `${Number(assignment.calculated_weight).toFixed(1)}%`
-                            : "Not set"}
-                        </div>
-                      </div>
-
-                      <div style={contextInfoBoxStyle}>
-                        <div style={contextInfoLabelStyle}>Due Date</div>
-                        <div style={contextInfoValueStyle}>
-                          {assignment?.due_date ? String(assignment.due_date).slice(0, 10) : "No due date"}
-                        </div>
-                      </div>
-
-                      <div style={contextInfoBoxStyle}>
-                        <div style={contextInfoLabelStyle}>Submissions</div>
-                        <div style={contextInfoValueStyle}>
-                          {assignment?.submission_count ?? "—"} submitted · {assignment?.ungraded_count ?? "—"} ungraded
-                        </div>
-                      </div>
+                      {assignment?.title || assignment?.name || `Assignment ${assignmentId}`}
                     </div>
 
                     <div
                       style={{
-                        marginTop: "12px",
+                        marginTop: "10px",
                         display: "flex",
                         gap: "8px",
                         flexWrap: "wrap",
                       }}
                     >
+                      <span style={contextPillStyle}>
+                        Class ID: {assignment?.class_id || assignment?.course_id || "—"}
+                      </span>
+
                       <span style={contextPillStyle}>
                         Student {rows.findIndex((row) => row.student_email === selectedRow.student_email) + 1} of {rows.length}
                       </span>
@@ -1354,6 +1299,18 @@ export default function AssignmentSpeedGradingPage() {
                       <span style={contextPillStyle}>
                         {assignment?.scoring_method === "single_score_kdu" ? "Single Score KDU" : "KDU Rubric"}
                       </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        color: "#4b5563",
+                        fontSize: "14px",
+                      }}
+                    >
+                      {assignment?.category_name || assignment?.subcategory_name
+                        ? `${assignment?.category_name || "Assessment"}${assignment?.subcategory_name ? ` • ${assignment.subcategory_name}` : ""}`
+                        : "Speed Grader"}
                     </div>
                   </div>
 
@@ -1941,29 +1898,6 @@ const inputStyle = {
   fontSize: "1rem",
   boxSizing: "border-box",
 };
-
-const contextInfoBoxStyle = {
-  border: "1px solid #e5e7eb",
-  borderRadius: "12px",
-  padding: "10px 12px",
-  background: "#f8fafc",
-}
-
-const contextInfoLabelStyle = {
-  fontSize: "12px",
-  color: "#6b7280",
-  fontWeight: 900,
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-  marginBottom: "4px",
-}
-
-const contextInfoValueStyle = {
-  fontSize: "14px",
-  color: "#111827",
-  fontWeight: 800,
-  lineHeight: 1.35,
-}
 
 const contextPillStyle = {
   border: "1px solid #d0d7de",
