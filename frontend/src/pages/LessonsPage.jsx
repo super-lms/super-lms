@@ -175,6 +175,31 @@ function LessonsPage() {
     return groups;
   }, {});
 
+  const lessonsWithContent = lessons.filter((lesson) => String(lesson.content || "").trim().length > 0);
+  const lessonsWithFiles = lessons.filter((lesson) => Array.isArray(lesson.files) && lesson.files.length > 0);
+  const lessonsMissingContent = lessons.length - lessonsWithContent.length;
+  const lessonsMissingFiles = lessons.length - lessonsWithFiles.length;
+  const courseCountWithLessons = Object.keys(groupedLessons).length;
+  const lessonReadinessScore = lessons.length === 0
+    ? 0
+    : Math.round(
+        (
+          (lessonsWithContent.length / lessons.length) * 50 +
+          (lessonsWithFiles.length / lessons.length) * 50
+        )
+      );
+
+  const lessonReadinessLabel =
+    lessons.length === 0
+      ? "No Lessons Yet"
+      : lessonReadinessScore === 100
+        ? "Lesson Workspace Ready"
+        : lessonReadinessScore >= 75
+          ? "Lessons Mostly Ready"
+          : lessonReadinessScore >= 50
+            ? "Lessons Need Some Attention"
+            : "Lessons Need Setup";
+
   return (
     <div>
       <header
@@ -191,6 +216,86 @@ function LessonsPage() {
         </h2>
         <p style={{ margin: 0, fontSize: "20px" }}>{message}</p>
       </header>
+
+      <section
+        style={{
+          background: "#ffffff",
+          padding: "24px",
+          borderRadius: "10px",
+          marginBottom: "24px",
+          border: "1px solid #cbd5e1",
+        }}
+      >
+        <h3 style={{ marginTop: 0, marginBottom: "16px", fontSize: "32px" }}>
+          Lesson Status
+        </h3>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: "14px",
+            marginBottom: "18px",
+          }}
+        >
+          <div style={statusCardStyle}>
+            <div style={statusLabelStyle}>Total Lessons</div>
+            <div style={statusValueStyle}>{lessons.length}</div>
+          </div>
+
+          <div style={statusCardStyle}>
+            <div style={statusLabelStyle}>Courses With Lessons</div>
+            <div style={statusValueStyle}>{courseCountWithLessons}</div>
+          </div>
+
+          <div style={statusCardStyle}>
+            <div style={statusLabelStyle}>With Content</div>
+            <div style={statusValueStyle}>{lessonsWithContent.length}</div>
+          </div>
+
+          <div style={statusCardStyle}>
+            <div style={statusLabelStyle}>With Files</div>
+            <div style={statusValueStyle}>{lessonsWithFiles.length}</div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            border: "1px solid #d7dce5",
+            borderRadius: "10px",
+            padding: "14px",
+            background: "#f8fafc",
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ fontWeight: 900, marginBottom: "6px" }}>
+            Lesson Readiness: {lessonReadinessScore}%
+          </div>
+          <div style={{ fontWeight: 800, marginBottom: "8px" }}>
+            {lessonReadinessLabel}
+          </div>
+
+          <div style={{ display: "grid", gap: "5px" }}>
+            <div>{lessons.length > 0 ? "☑" : "☐"} Lessons Created</div>
+            <div>{lessonsMissingContent === 0 && lessons.length > 0 ? "☑" : "☐"} Lesson Content Added</div>
+            <div>{lessonsMissingFiles === 0 && lessons.length > 0 ? "☑" : "☐"} Lesson Files Attached</div>
+          </div>
+
+          {lessons.length === 0 ? (
+            <div style={{ marginTop: "10px", color: "#4b5563" }}>
+              Next Step: Create the first lesson for one of your courses.
+            </div>
+          ) : lessonsMissingContent > 0 || lessonsMissingFiles > 0 ? (
+            <div style={{ marginTop: "10px", color: "#4b5563" }}>
+              Next Step: Review lessons missing content or attached files.
+            </div>
+          ) : (
+            <div style={{ marginTop: "10px", color: "#4b5563" }}>
+              All lessons currently have content and attached files.
+            </div>
+          )}
+        </div>
+      </section>
 
       <section
         style={{
@@ -382,7 +487,7 @@ function LessonsPage() {
                               {lesson.files.map((file) => (
                                 <li key={file.id} style={{ marginBottom: "10px" }}>
                                   <a
-                                    href={`http://localhost:3000${file.file_path}`}
+                                    href={`${API_BASE}${file.file_path}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     style={{
@@ -460,6 +565,28 @@ const primaryButtonStyle = {
   backgroundColor: "#1f2937",
   color: "#ffffff",
   cursor: "pointer",
+};
+
+const statusCardStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "10px",
+  padding: "16px",
+  backgroundColor: "#ffffff",
+};
+
+const statusLabelStyle = {
+  fontSize: "14px",
+  fontWeight: 800,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  marginBottom: "8px",
+};
+
+const statusValueStyle = {
+  fontSize: "30px",
+  fontWeight: 900,
+  color: "#0f172a",
 };
 
 const deleteButtonStyle = {
