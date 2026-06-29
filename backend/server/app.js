@@ -3877,15 +3877,66 @@ app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
     const assignmentResult = await pool.query(
       `
       SELECT
-        id,
-        class_id,
-        title,
-        scoring_method,
-        single_score_know_percent,
-        single_score_do_percent,
-        single_score_understand_percent
-      FROM assignments
-      WHERE id = $1
+        a.id,
+        a.class_id,
+        a.title,
+        a.due_date,
+        a.status,
+        a.published,
+        a.is_published,
+        a.scoring_method,
+        a.single_score_know_percent,
+        a.single_score_do_percent,
+        a.single_score_understand_percent,
+        c.title AS course_title,
+        c.class_name AS course_class_name,
+        cs.name AS subcategory_name,
+        cc.name AS category_name,
+        cc.weight_percent AS category_weight_percent,
+        cs.weight_percent_of_parent,
+        COUNT(s.id)::INTEGER AS submission_count,
+        COUNT(s.id) FILTER (
+          WHERE s.score IS NOT NULL
+             OR NULLIF(TRIM(COALESCE(s.grade, '')), '') IS NOT NULL
+             OR s.rubric_selection IS NOT NULL
+        )::INTEGER AS graded_count,
+        (
+          COUNT(s.id) -
+          COUNT(s.id) FILTER (
+            WHERE s.score IS NOT NULL
+               OR NULLIF(TRIM(COALESCE(s.grade, '')), '') IS NOT NULL
+               OR s.rubric_selection IS NOT NULL
+          )
+        )::INTEGER AS ungraded_count
+      FROM assignments a
+      LEFT JOIN courses c
+        ON c.id = a.class_id
+      LEFT JOIN LATERAL (
+        SELECT
+          cs_inner.*
+        FROM category_subcategories cs_inner
+        LEFT JOIN course_categories cc_inner
+          ON cc_inner.id = cs_inner.course_category_id
+        WHERE cs_inner.id = a.subcategory_id
+        ORDER BY
+          CASE WHEN cc_inner.course_id = a.class_id THEN 0 ELSE 1 END,
+          cs_inner.course_category_id ASC,
+          cs_inner.id ASC
+        LIMIT 1
+      ) cs ON true
+      LEFT JOIN course_categories cc
+        ON cc.id = cs.course_category_id
+      LEFT JOIN submissions s
+        ON s.assignment_id = a.id
+      WHERE a.id = $1
+      GROUP BY
+        a.id,
+        c.title,
+        c.class_name,
+        cs.name,
+        cc.name,
+        cc.weight_percent,
+        cs.weight_percent_of_parent
       LIMIT 1
       `,
       [assignmentId]
@@ -3918,8 +3969,27 @@ app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
       [assignmentId]
     );
 
+    const assignmentContext = assignmentResult.rows[0] || null;
+
     return res.json({
-      assignment: assignmentResult.rows[0] || null,
+      assignment: assignmentContext
+        ? {
+            ...assignmentContext,
+            course_title:
+              assignmentContext.course_title ||
+              assignmentContext.course_class_name ||
+              `Course ${assignmentContext.class_id || ""}`.trim(),
+            calculated_weight:
+              assignmentContext.category_weight_percent !== null &&
+              assignmentContext.category_weight_percent !== undefined &&
+              assignmentContext.weight_percent_of_parent !== null &&
+              assignmentContext.weight_percent_of_parent !== undefined
+                ? (Number(assignmentContext.category_weight_percent) *
+                    Number(assignmentContext.weight_percent_of_parent)) /
+                  100
+                : null,
+          }
+        : null,
       rows: result.rows,
     });
   } catch (err) {
