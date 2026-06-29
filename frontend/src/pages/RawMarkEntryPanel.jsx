@@ -100,7 +100,12 @@ export default function RawMarkEntryPanel({
     );
   }, [sectionScoreRows, selectedRow]);
 
-  const studentUserId = studentSections[0]?.student_user_id || null;
+  const studentUserId =
+    studentSections[0]?.student_user_id ||
+    selectedRow?.student_user_id ||
+    selectedRow?.studentUserId ||
+    selectedRow?.user_id ||
+    null;
 
   useEffect(() => {
     setLocalScores({});

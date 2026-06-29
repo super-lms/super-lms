@@ -691,14 +691,18 @@ export default function AssignmentSpeedGradingPage() {
     };
   }, [shortcutBucket, selectedRow?.student_email, doScore, knowScore, understandScore]);
 
-  function getNextStudentEmail() {
+  function getSelectedStudentIndex() {
     if (!selectedRow?.student_email || filteredRows.length === 0) {
-      return null;
+      return -1;
     }
 
-    const currentIndex = filteredRows.findIndex(
+    return filteredRows.findIndex(
       (row) => row.student_email === selectedRow.student_email
     );
+  }
+
+  function getNextStudentEmail() {
+    const currentIndex = getSelectedStudentIndex();
 
     if (currentIndex === -1) {
       return filteredRows[0]?.student_email || null;
@@ -707,6 +711,72 @@ export default function AssignmentSpeedGradingPage() {
     const nextRow = filteredRows[currentIndex + 1];
 
     return nextRow?.student_email || selectedRow.student_email;
+  }
+
+  function isStudentGraded(row) {
+    return getSavedKduSummary(row).isGraded;
+  }
+
+  function getNextUngradedStudentEmail() {
+    if (filteredRows.length === 0) {
+      return null;
+    }
+
+    const currentIndex = getSelectedStudentIndex();
+
+    const afterCurrent =
+      currentIndex === -1
+        ? filteredRows
+        : filteredRows.slice(currentIndex + 1);
+
+    const beforeOrCurrent =
+      currentIndex === -1
+        ? []
+        : filteredRows.slice(0, currentIndex + 1);
+
+    const nextUngraded =
+      [...afterCurrent, ...beforeOrCurrent].find((row) => !isStudentGraded(row)) || null;
+
+    return nextUngraded?.student_email || selectedRow?.student_email || null;
+  }
+
+  function getUngradedCount() {
+    return filteredRows.filter((row) => !isStudentGraded(row)).length;
+  }
+
+  function getPreviousStudentEmail() {
+    const currentIndex = getSelectedStudentIndex();
+
+    if (currentIndex === -1) {
+      return filteredRows[0]?.student_email || null;
+    }
+
+    const previousRow = filteredRows[currentIndex - 1];
+
+    return previousRow?.student_email || selectedRow.student_email;
+  }
+
+  function selectStudentByEmail(studentEmail) {
+    if (!studentEmail) return;
+
+    const nextRow = filteredRows.find((row) => row.student_email === studentEmail);
+
+    if (nextRow) {
+      setSelectedRow(nextRow);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  function goToNextStudent() {
+    selectStudentByEmail(getNextStudentEmail());
+  }
+
+  function goToNextUngradedStudent() {
+    selectStudentByEmail(getNextUngradedStudentEmail());
+  }
+
+  function goToPreviousStudent() {
+    selectStudentByEmail(getPreviousStudentEmail());
   }
 
   async function saveKduScores(scoreOverrides = {}, toastTarget = null, options = {}) {
@@ -1311,6 +1381,46 @@ export default function AssignmentSpeedGradingPage() {
                       {assignment?.category_name || assignment?.subcategory_name
                         ? `${assignment?.category_name || "Assessment"}${assignment?.subcategory_name ? ` • ${assignment.subcategory_name}` : ""}`
                         : "Speed Grader"}
+                    </div>
+                  </div>
+
+                  <div style={speedGraderToolbarStyle}>
+                    <ActionButton
+                      quiet
+                      onClick={goToPreviousStudent}
+                      disabled={getSelectedStudentIndex() <= 0}
+                    >
+                      ← Previous Student
+                    </ActionButton>
+
+                    <div style={speedGraderToolbarCenterStyle}>
+                      <div style={speedGraderToolbarLabelStyle}>
+                        Student {getSelectedStudentIndex() + 1} of {filteredRows.length}
+                      </div>
+                      <div style={speedGraderToolbarNameStyle}>
+                        {selectedRow.student_name}
+                      </div>
+                    </div>
+
+                    <div style={speedGraderToolbarButtonGroupStyle}>
+                      <ActionButton
+                        quiet
+                        onClick={goToNextUngradedStudent}
+                        disabled={getUngradedCount() === 0}
+                      >
+                        Next Ungraded ({getUngradedCount()})
+                      </ActionButton>
+
+                      <ActionButton
+                        quiet
+                        onClick={goToNextStudent}
+                        disabled={
+                          getSelectedStudentIndex() === -1 ||
+                          getSelectedStudentIndex() >= filteredRows.length - 1
+                        }
+                      >
+                        Next Student →
+                      </ActionButton>
                     </div>
                   </div>
 
@@ -2109,6 +2219,45 @@ const floatingDashboardButtonWrapStyle = {
 };
 
 
+const speedGraderToolbarStyle = {
+  border: "2px solid #111",
+  borderRadius: "16px",
+  padding: "14px",
+  background: "#ffffff",
+  marginBottom: "16px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+};
+
+const speedGraderToolbarCenterStyle = {
+  textAlign: "center",
+  minWidth: "220px",
+  flex: "1 1 260px",
+};
+
+const speedGraderToolbarLabelStyle = {
+  fontSize: "0.95rem",
+  color: "#4b5563",
+  fontWeight: 900,
+  marginBottom: "4px",
+};
+
+const speedGraderToolbarNameStyle = {
+  fontSize: "1.4rem",
+  fontWeight: 900,
+  color: "#111827",
+};
+
+const speedGraderToolbarButtonGroupStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: "8px",
+  flexWrap: "wrap",
+};
 const kduTimestampStyle = {
   marginTop: "8px",
   fontSize: "13px",
