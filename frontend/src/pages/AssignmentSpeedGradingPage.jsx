@@ -1274,7 +1274,36 @@ export default function AssignmentSpeedGradingPage() {
 
                     <div
                       style={{
-                        marginTop: "8px",
+                        marginTop: "10px",
+                        display: "flex",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={contextPillStyle}>
+                        Class ID: {assignment?.class_id || assignment?.course_id || "—"}
+                      </span>
+
+                      <span style={contextPillStyle}>
+                        Student {rows.findIndex((row) => row.student_email === selectedRow.student_email) + 1} of {rows.length}
+                      </span>
+
+                      <span style={contextPillStyle}>
+                        Submission: {selectedRow.submission_status || "None"}
+                      </span>
+
+                      <span style={contextPillStyle}>
+                        Files: {studentAttachments.length}
+                      </span>
+
+                      <span style={contextPillStyle}>
+                        {assignment?.scoring_method === "single_score_kdu" ? "Single Score KDU" : "KDU Rubric"}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: "10px",
                         color: "#4b5563",
                         fontSize: "14px",
                       }}
@@ -1869,6 +1898,16 @@ const inputStyle = {
   fontSize: "1rem",
   boxSizing: "border-box",
 };
+
+const contextPillStyle = {
+  border: "1px solid #d0d7de",
+  borderRadius: "999px",
+  padding: "6px 10px",
+  background: "#f8fafc",
+  color: "#374151",
+  fontSize: "13px",
+  fontWeight: 800,
+}
 
 const teacherAttachmentViewerStyle = {
   border: "1px solid #d7dce5",
