@@ -778,390 +778,61 @@ export default function DashboardPage() {
       <div className="topbar">
         <h1>Teacher Dashboard</h1>
         <p className="topbar-subtitle">
-          Welcome back, {getTeacherName(teacher)}. Here is a clear view of your teaching workspace.
+          Welcome back, {getTeacherName(teacher)}. Your teaching workspace is ready.
         </p>
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", marginTop: "12px" }}>
-          <button
-            type="button"
-            onClick={() => {
-              window.location.assign("/courses?startCreate=1")
-            }}
-            style={{
-              border: "1px solid #111827",
-              borderRadius: "10px",
-              background: "#111827",
-              color: "#ffffff",
-              padding: "10px 14px",
-              font: "inherit",
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            Create New Course
-          </button>
-
-          <button
-            type="button"
-            onClick={resetDemoData}
-            disabled={resettingDemo || Boolean(loadingRoute)}
-            style={{
-              border: "1px solid #d0d7de",
-              borderRadius: "10px",
-              background: "#ffffff",
-              padding: "10px 14px",
-              font: "inherit",
-              fontWeight: 700,
-              cursor: resettingDemo || loadingRoute ? "default" : "pointer",
-              opacity: resettingDemo || loadingRoute ? 0.7 : 1,
-            }}
-          >
-            {resettingDemo ? "Resetting Demo..." : "Reset Demo Data"}
-          </button>
-        </div>
       </div>
 
-      <div className="content-area" style={{ display: "grid", gap: "24px" }}>
-        <section
-          className="panel"
-          style={{
-            ...shellCardStyle,
-            padding: "0",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 2fr) minmax(320px, 1fr)",
-            }}
-          >
-            <div
-              style={{
-                padding: "24px",
-                borderRight: "1px solid #e5e7eb",
-                display: "grid",
-                gap: "20px",
-                background: "#ffffff",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: "0.82rem",
-                    fontWeight: 800,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    color: "#4b5563",
-                    marginBottom: "10px",
-                  }}
-                >
-                  Home
-                </div>
+      <div className="content-area" style={{ display: "grid", gap: "18px" }}>
+        <section className="panel">
+          <h2 style={{ marginTop: 0, fontSize: "28px" }}>My Teaching Dashboard</h2>
 
-                <h2 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 800, lineHeight: 1.2 }}>
-                  {getTeacherName(teacher)}
-                </h2>
+          <p style={{ fontSize: "16px", color: "#4b5563", maxWidth: "900px", lineHeight: 1.6 }}>
+            A compact teacher control centre for courses, lessons, learning paths, assignments,
+            gradebooks, students, and classroom action.
+          </p>
 
-                <p
-                  style={{
-                    margin: "10px 0 0 0",
-                    fontSize: "1rem",
-                    lineHeight: 1.6,
-                    color: "#4b5563",
-                    maxWidth: "760px",
-                  }}
-                >
-                  This dashboard keeps the teacher demo focused: start from today’s status, move
-                  into assignments and grading, and quickly confirm courses, enrolled students, and
-                  recent performance data.
-                </p>
-              </div>
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+            <DashboardActionCard title="My Courses" description={topCourseName} meta={`${courses.length} ${courses.length === 1 ? "course" : "courses"}`} onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
+            <DashboardActionCard title="Lessons" description="Plan and manage lesson content." meta="Open lessons workspace" onClick={() => goTo("/lessons")} active={loadingRoute === "/lessons"} />
+            <DashboardActionCard title="Learning Paths" description="Sequence lessons and assignments." meta="Open course workspace" onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
+            <DashboardActionCard title="Assignments" description="Create, review, and grade work." meta={`${grades.length} grade records`} onClick={() => goTo(courses.length > 0 && courses[0]?.id ? `/courses/${courses[0].id}/assignments` : "/assignments")} active={Boolean(loadingRoute)} />
+            <DashboardActionCard title="Gradebook" description={gradeCoverageText} meta={`Current standing: ${averageLetter}`} onClick={() => goTo(primaryGradebookPath)} active={loadingRoute === primaryGradebookPath} />
+            <DashboardActionCard title="Students" description={latestStudentName} meta={`${students.length} ${students.length === 1 ? "student" : "students"}`} onClick={() => goTo(primaryEnrolledStudentPath)} active={loadingRoute === primaryEnrolledStudentPath} />
+          </div>
+        </section>
 
-              {courses.length === 0 ? (
-                <div
-                  style={{
-                    border: "2px solid #111827",
-                    borderRadius: "16px",
-                    padding: "20px",
-                    background: "#ffffff",
-                    display: "grid",
-                    gap: "14px",
-                  }}
-                >
-                  <div>
-                    <h2 style={{ margin: "0 0 8px 0" }}>
-                      Welcome to SUPER LMS
-                    </h2>
-                    <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.6 }}>
-                      It looks like this teacher account does not have any courses yet.
-                      Start by creating your first course, then SUPER LMS will guide you through
-                      students, assessment pathways, evidence tiers, assignments, and grading.
-                    </p>
-                  </div>
+        <section className="panel">
+          <SectionHeading title="Course Workspaces" subtitle="Open the course workspace or jump directly to assignments and gradebook." />
 
-                  <div
-                    style={{
-                      border: "1px solid #d0d7de",
-                      borderRadius: "12px",
-                      padding: "14px",
-                      background: "#f8fafc",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <strong>Recommended first step:</strong>
-                    <div>
-                      Create a new course such as <strong>Pre-Calculus 11</strong>, then follow the
-                      Course Health Check and Teacher Coach.
-                    </div>
-                  </div>
+          {courses.length === 0 ? (
+            <p>No classes assigned yet.</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+              {courses.map((course) => (
+                <div key={course.id} style={{ background: "white", border: "1px solid #d7d7d7", borderRadius: "14px", padding: "18px" }}>
+                  <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>Course Workspace</div>
+                  <div style={{ fontSize: "22px", fontWeight: 800, color: "#111827" }}>{getCourseTitle(course)}</div>
+                  <div style={{ marginTop: "8px", fontSize: "14px", color: "#4b5563" }}>Course ID: {course.id || "—"}</div>
 
-                  <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                    Use the <strong>Create New Course</strong> button at the top of this dashboard to create another course,
-                    or click <strong>Courses</strong> in the left menu to manage existing courses.
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "16px" }}>
+                    <button type="button" onClick={() => goTo(`/admin/courses/${course.id}`)} style={{ border: "1px solid #d0d7de", borderRadius: "10px", background: "#ffffff", padding: "9px 11px", font: "inherit", fontWeight: 800, cursor: "pointer" }}>Open Workspace</button>
+                    <button type="button" onClick={() => goTo(`/courses/${course.id}/assignments`)} style={{ border: "1px solid #d0d7de", borderRadius: "10px", background: "#ffffff", padding: "9px 11px", font: "inherit", fontWeight: 800, cursor: "pointer" }}>Assignments</button>
+                    <button type="button" onClick={() => goTo(`/gradebook?classId=${course.id}`)} style={{ border: "1px solid #d0d7de", borderRadius: "10px", background: "#ffffff", padding: "9px 11px", font: "inherit", fontWeight: 800, cursor: "pointer" }}>Gradebook</button>
                   </div>
                 </div>
-              ) : null}
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                  gap: "16px",
-                }}
-              >
-                <SummaryCard
-                  eyebrow="Courses"
-                  value={courses.length}
-                  title="Active teaching load"
-                  detail={topCourseName}
-                />
-                <SummaryCard
-                  eyebrow="Enrolled Students"
-                  value={students.length}
-                  title="Enrollment visibility"
-                  detail={latestStudentName}
-                />
-                <SummaryCard
-                  eyebrow="Grade Records"
-                  value={grades.length}
-                  title="Assessment data"
-                  detail={gradeCoverageText}
-                />
-                <SummaryCard
-                  eyebrow="Current Letter"
-                  value={averageLetter}
-                  title="Overall standing"
-                  detail="Calculated from available numeric grades"
-                />
-              </div>
-
-              <div
-                style={{
-                  ...shellCardStyle,
-                  background: "#f8fafc",
-                  padding: "18px",
-                }}
-              >
-                <SectionHeading
-                  title="Your Classes"
-                  subtitle="Classes assigned to this teacher account."
-                />
-
-                {courses.length === 0 ? (
-                  <p style={{ marginTop: 0 }}>No classes assigned yet.</p>
-                ) : (
-                  <div style={{ display: "grid", gap: "12px", marginBottom: "18px" }}>
-                    {courses.map((course) => (
-                      <div
-                        key={course.id}
-                        style={{
-                          border: "1px solid #d0d7de",
-                          borderRadius: "12px",
-                          background: "#ffffff",
-                          padding: "14px",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: "12px",
-                          alignItems: "center",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 900, fontSize: "1rem" }}>
-                            {getCourseTitle(course)}
-                          </div>
-                          <div style={{ fontSize: "0.9rem", color: "#4b5563", marginTop: "4px" }}>
-                            Course ID: {course.id || "—"}
-                          </div>
-                        </div>
-
-                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                          <button
-                            type="button"
-                            onClick={() => goTo(`/assignments?classId=${course.id}`)}
-                            style={{
-                              border: "1px solid #d0d7de",
-                              borderRadius: "10px",
-                              background: "#ffffff",
-                              padding: "10px 12px",
-                              font: "inherit",
-                              fontWeight: 800,
-                              cursor: "pointer",
-                            }}
-                          >
-                            Assignments
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => goTo(`/gradebook?classId=${course.id}`)}
-                            style={{
-                              border: "1px solid #d0d7de",
-                              borderRadius: "10px",
-                              background: "#ffffff",
-                              padding: "10px 12px",
-                              font: "inherit",
-                              fontWeight: 800,
-                              cursor: "pointer",
-                            }}
-                          >
-                            Gradebook
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <SectionHeading
-                  title="Continue your day"
-                  subtitle="Use the shortest demo-friendly path from dashboard to classroom actions."
-                />
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                    gap: "12px",
-                  }}
-                >
-                  <DashboardActionCard
-                    title="Assignments"
-                    description="Open assignment tools, review current work, and continue with the teacher-facing workflow."
-                    meta="Best demo path for showing classroom organization"
-                    onClick={() => goTo(`/assignments?classId=${course.id}`)}
-                    active={loadingRoute === "/assignments"}
-                  />
-
-                  <DashboardActionCard
-                    title="Gradebook"
-                    description="Jump into grading and land in the teacher's current class instead of a generic gradebook start page."
-                    meta={
-                      courses.length > 0
-                        ? `Direct target: ${getCourseTitle(courses[0])}`
-                        : "No class target available yet"
-                    }
-                    onClick={() => goTo(primaryGradebookPath)}
-                    active={loadingRoute === primaryGradebookPath}
-                  />
-
-                  <DashboardActionCard
-                    title="Courses"
-                    description="Review course structure and confirm the teacher’s assigned classes."
-                    meta={`${courses.length} ${courses.length === 1 ? "course" : "courses"} available`}
-                    onClick={() => goTo("/courses")}
-                    active={loadingRoute === "/courses"}
-                  />
-
-                  <DashboardActionCard
-                    title="Enrolled Students"
-                    description="Open enrolled student records and land on a real student target instead of a generic list page."
-                    meta={
-                      students.length > 0
-                        ? `Direct target: ${getStudentName(students[0])}`
-                        : "No student target available yet"
-                    }
-                    onClick={() => goTo(primaryEnrolledStudentPath)}
-                    active={loadingRoute === primaryEnrolledStudentPath}
-                  />
-                </div>
-              </div>
+              ))}
             </div>
+          )}
+        </section>
 
-            <div
-              style={{
-                padding: "18px",
-                background: "#fbfbfc",
-                display: "grid",
-                gap: "12px",
-                alignContent: "start",
-              }}
-            >
-              <div
-                style={{
-                  ...shellCardStyle,
-                  padding: "12px",
-                }}
-              >
-                <SectionHeading
-                  title="Teacher account"
-                  subtitle="Current signed-in profile and platform status"
-                />
+        <section className="panel">
+          <SectionHeading title="Quick Doors" subtitle="Move quickly into common teacher workspaces." />
 
-                <div
-                  style={{
-                    display: "grid",
-                    gap: "12px",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#6b7280" }}>
-                      Name
-                    </div>
-                    <div style={{ fontWeight: 800, marginTop: "4px" }}>{getTeacherName(teacher)}</div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#6b7280" }}>
-                      Email
-                    </div>
-                    <div style={{ marginTop: "4px" }}>{teacher.email || "—"}</div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#6b7280" }}>
-                      Role
-                    </div>
-                    <div style={{ marginTop: "4px" }}>{teacher.role || "teacher"}</div>
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#6b7280" }}>
-                      Teacher ID
-                    </div>
-                    <div style={{ marginTop: "4px" }}>{teacher.id || "—"}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  ...shellCardStyle,
-                  padding: "16px",
-                }}
-              >
-                <SectionHeading
-                  title="Today at a glance"
-                  subtitle="A simple status board for a polished teacher homepage"
-                />
-
-                <div style={{ display: "grid", gap: "10px" }}>
-                  {dashboardChecklist.map((item, index) => (
-                    <ChecklistItem key={index} title={item.title} detail={item.detail} />
-                  ))}
-                </div>
-              </div>
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+            <DashboardActionCard title="Create New Course" description="Add a new teaching course." meta="Start" onClick={() => goTo("/courses?startCreate=1")} active={loadingRoute === "/courses?startCreate=1"} />
+            <DashboardActionCard title="Assignments" description="Current assignment workflow." meta="Open" onClick={() => goTo(courses.length > 0 && courses[0]?.id ? `/courses/${courses[0].id}/assignments` : "/assignments")} active={Boolean(loadingRoute)} />
+            <DashboardActionCard title="Gradebook" description="Current class grading." meta="Open" onClick={() => goTo(primaryGradebookPath)} active={loadingRoute === primaryGradebookPath} />
+            <DashboardActionCard title="Enrolled Students" description="Student records and support." meta="Open" onClick={() => goTo(primaryEnrolledStudentPath)} active={loadingRoute === primaryEnrolledStudentPath} />
           </div>
         </section>
 
