@@ -66,6 +66,47 @@ export default function CourseAssignmentsPage() {
     return assignments.filter((assignment) => String(assignment.class_id) === String(courseId))
   }, [assignments, courseId])
 
+  const assignmentTruth = useMemo(() => {
+    const totalAssignments = courseAssignments.length
+    const publishedCount = courseAssignments.filter((assignment) => getPublishedLabel(assignment) === "Published").length
+    const draftCount = totalAssignments - publishedCount
+    const totalSubmissions = courseAssignments.reduce((sum, assignment) => sum + Number(assignment?.submission_count || 0), 0)
+    const gradedSubmissions = courseAssignments.reduce((sum, assignment) => sum + Number(assignment?.graded_count || 0), 0)
+    const ungradedSubmissions = courseAssignments.reduce((sum, assignment) => sum + Number(assignment?.ungraded_count || 0), 0)
+    const assignmentsWithPathway = courseAssignments.filter((assignment) => assignment?.category_name || assignment?.subcategory_name).length
+    const assignmentsWithoutPathway = totalAssignments - assignmentsWithPathway
+    const assignmentsWithWeight = courseAssignments.filter((assignment) => Number.isFinite(Number(assignment?.calculated_weight))).length
+
+    let readiness = "Needs Setup"
+    let nextStep = "Create the first assignment for this course."
+
+    if (totalAssignments > 0 && assignmentsWithoutPathway > 0) {
+      nextStep = "Connect assignments to grading pathways and evidence tiers."
+    } else if (totalAssignments > 0 && publishedCount === 0) {
+      nextStep = "Publish at least one assignment when it is ready for students."
+    } else if (ungradedSubmissions > 0) {
+      readiness = "Ready to Grade"
+      nextStep = "Open Speed Grading and grade submitted student work."
+    } else if (publishedCount > 0 && assignmentsWithoutPathway === 0) {
+      readiness = "Ready For Teaching"
+      nextStep = "Assignments are connected. Continue monitoring submissions and grading progress."
+    }
+
+    return {
+      totalAssignments,
+      publishedCount,
+      draftCount,
+      totalSubmissions,
+      gradedSubmissions,
+      ungradedSubmissions,
+      assignmentsWithPathway,
+      assignmentsWithoutPathway,
+      assignmentsWithWeight,
+      readiness,
+      nextStep,
+    }
+  }, [courseAssignments])
+
   const coachRecommendation = useMemo(() => {
     const count = courseAssignments.length
 
@@ -80,6 +121,28 @@ export default function CourseAssignmentsPage() {
       }
     }
 
+    if (assignmentTruth.ungradedSubmissions > 0) {
+      return {
+        title: "Grade submitted work",
+        reason:
+          "Students have submitted work that has not been graded yet. This is the highest-value next action for keeping the course current.",
+        action:
+          "Open Speed Grading for assignments with ungraded submissions, enter marks, and save feedback.",
+        readiness: `${assignmentTruth.ungradedSubmissions} ungraded submission${assignmentTruth.ungradedSubmissions === 1 ? "" : "s"} found.`,
+      }
+    }
+
+    if (assignmentTruth.assignmentsWithoutPathway > 0) {
+      return {
+        title: "Connect assignments to evidence tiers",
+        reason:
+          "Some assignments are not connected to grading pathways or evidence tiers, which weakens gradebook and reporting accuracy.",
+        action:
+          "Open each assignment and confirm the grading pathway, evidence tier, section structure, and KDU setup.",
+        readiness: `${assignmentTruth.assignmentsWithoutPathway} assignment${assignmentTruth.assignmentsWithoutPathway === 1 ? "" : "s"} need pathway review.`,
+      }
+    }
+
     return {
       title: "Check assignment sections before grading",
       reason:
@@ -88,7 +151,7 @@ export default function CourseAssignmentsPage() {
         "Choose an assignment, click Edit Sections, confirm the section names, KDU buckets, out-of marks, and weights. Then use Open Speed Grading when you are ready to enter marks.",
       readiness: `${count} assignment${count === 1 ? "" : "s"} found. Next step is to verify grading structure.`,
     }
-  }, [courseAssignments])
+  }, [courseAssignments, assignmentTruth])
 
   function formatDate(value) {
     if (!value) return "No due date"
@@ -188,7 +251,7 @@ export default function CourseAssignmentsPage() {
     }
 
     const confirmed = window.confirm(
-      `Duplicate assignment "${currentTitle}" as "${title}"?\n\nThis will copy the assignment details and exam sections.\n\nIt will not copy student submissions, grades, rubric scores, feedback, or student work.`
+      `Duplicate assignment "${currentTitle}" as "${title}"?This will copy the assignment details and exam sections.It will not copy student submissions, grades, rubric scores, feedback, or student work.`
     )
 
     if (!confirmed) return
@@ -230,7 +293,7 @@ export default function CourseAssignmentsPage() {
     }
 
     const confirmed = window.confirm(
-      `Delete assignment "${assignmentTitle}"?\n\nThis will remove the assignment. This should only be used when you are sure.`
+      `Delete assignment "${assignmentTitle}"?This will remove the assignment. This should only be used when you are sure.`
     )
 
     if (!confirmed) return
@@ -294,6 +357,31 @@ export default function CourseAssignmentsPage() {
             <div style={noticeBoxStyle}>{message}</div>
           </section>
         ) : null}
+
+        <section className="panel">
+          <div style={truthHeaderStyle}>
+            <div>
+              <div style={truthEyebrowStyle}>Truth on Open</div>
+              <h2 style={{ marginTop: "6px", marginBottom: "6px" }}>Assignment Health</h2>
+              <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>{assignmentTruth.nextStep}</p>
+            </div>
+
+            <div style={truthStatusStyle}>
+              <strong>Status:</strong> {assignmentTruth.readiness}
+            </div>
+          </div>
+
+          <div style={truthGridStyle}>
+            <TruthCard label="Assignments" value={assignmentTruth.totalAssignments} />
+            <TruthCard label="Published" value={assignmentTruth.publishedCount} />
+            <TruthCard label="Draft" value={assignmentTruth.draftCount} />
+            <TruthCard label="Submissions" value={assignmentTruth.totalSubmissions} />
+            <TruthCard label="Graded" value={assignmentTruth.gradedSubmissions} />
+            <TruthCard label="Ungraded" value={assignmentTruth.ungradedSubmissions} />
+            <TruthCard label="With Pathway" value={assignmentTruth.assignmentsWithPathway} />
+            <TruthCard label="Needs Pathway" value={assignmentTruth.assignmentsWithoutPathway} />
+          </div>
+        </section>
 
         <section className="panel">
           <div style={sectionHeaderStyle}>
@@ -365,6 +453,15 @@ export default function CourseAssignmentsPage() {
   )
 }
 
+function TruthCard({ label, value }) {
+  return (
+    <div style={truthCardStyle}>
+      <div style={truthValueStyle}>{value}</div>
+      <div style={truthLabelStyle}>{label}</div>
+    </div>
+  )
+}
+
 const sectionHeaderStyle = {
   display: "flex",
   justifyContent: "space-between",
@@ -419,4 +516,54 @@ const errorBoxStyle = {
   borderRadius: "12px",
   padding: "14px 16px",
   background: "#fff8f8",
+}
+const truthHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "16px",
+  flexWrap: "wrap",
+}
+
+const truthEyebrowStyle = {
+  fontSize: "13px",
+  fontWeight: 900,
+  color: "#6b7280",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}
+
+const truthStatusStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  padding: "12px 14px",
+  background: "#f8fafc",
+  color: "#111827",
+}
+
+const truthGridStyle = {
+  marginTop: "16px",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: "12px",
+}
+
+const truthCardStyle = {
+  border: "1px solid #e5e7eb",
+  borderRadius: "12px",
+  padding: "14px",
+  background: "#f8fafc",
+}
+
+const truthValueStyle = {
+  fontSize: "26px",
+  fontWeight: 900,
+  color: "#111827",
+}
+
+const truthLabelStyle = {
+  marginTop: "4px",
+  fontSize: "13px",
+  fontWeight: 800,
+  color: "#4b5563",
 }
