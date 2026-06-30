@@ -145,6 +145,21 @@ function getProficiencyLabel(scoreOutOfSix) {
   return "Emerging";
 }
 
+function convertOverallPercentToSixPointScore(percentValue) {
+  const percent = Number(percentValue);
+
+  if (!Number.isFinite(percent)) {
+    return "";
+  }
+
+  if (percent >= 92) return "6";
+  if (percent >= 80) return "5";
+  if (percent >= 67) return "4";
+  if (percent >= 50) return "3";
+  if (percent >= 35) return "2";
+  return "1";
+}
+
 function getRubricCriterion(criteria, bucket, fallback) {
   const match =
     criteria.find(
@@ -1840,7 +1855,18 @@ export default function AssignmentSpeedGradingPage() {
                             min="0"
                             max="100"
                             value={overallScore}
-                            onChange={(event) => setOverallScore(event.target.value)}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              setOverallScore(value);
+
+                              const converted = convertOverallPercentToSixPointScore(value);
+
+                              if (converted !== "") {
+                                setDoScore(converted);
+                                setKnowScore(converted);
+                                setUnderstandScore(converted);
+                              }
+                            }}
                             style={inputStyle}
                             placeholder="Example: 84"
                           />
