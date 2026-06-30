@@ -125,6 +125,18 @@ async function ensureRubricFrameworkTables() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS teacher_designed_rubrics (
+      id SERIAL PRIMARY KEY,
+      assignment_id INTEGER REFERENCES assignments(id) ON DELETE CASCADE UNIQUE,
+      title TEXT DEFAULT '',
+      level_count INTEGER DEFAULT 4,
+      criteria_json JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     ALTER TABLE assignment_rubrics
     ADD COLUMN IF NOT EXISTS full_rubric_json JSONB
   `);
@@ -4161,6 +4173,82 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
 });
 
 /* GET KDU RUBRIC FOR ASSIGNMENT */
+app.get("/api/assignments/:assignmentId/teacher-designed-rubric", async (req, res) => {
+  const assignmentId = Number(req.params.assignmentId);
+
+  if (!Number.isFinite(assignmentId)) {
+    return res.status(400).json({ error: "Valid assignment id is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        SELECT id, assignment_id, title, level_count, criteria_json, created_at, updated_at
+        FROM teacher_designed_rubrics
+        WHERE assignment_id = $1
+      `,
+      [assignmentId]
+    );
+
+    return res.json({
+      rubric: result.rows[0] || null,
+    });
+  } catch (err) {
+    console.error("GET /api/assignments/:assignmentId/teacher-designed-rubric failed:", err);
+    return res.status(500).json({ error: "Failed to load teacher designed rubric" });
+  }
+});
+
+app.put("/api/assignments/:assignmentId/teacher-designed-rubric", async (req, res) => {
+  const assignmentId = Number(req.params.assignmentId);
+  const title = String(req.body.title || "").trim();
+  const levelCount = Number(req.body.level_count || req.body.levelCount || 4);
+  const criteria = Array.isArray(req.body.criteria) ? req.body.criteria : [];
+
+  if (!Number.isFinite(assignmentId)) {
+    return res.status(400).json({ error: "Valid assignment id is required" });
+  }
+
+  if (!title) {
+    return res.status(400).json({ error: "Rubric title is required" });
+  }
+
+  if (![4, 5, 6].includes(levelCount)) {
+    return res.status(400).json({ error: "Performance levels must be 4, 5, or 6" });
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        INSERT INTO teacher_designed_rubrics (
+          assignment_id,
+          title,
+          level_count,
+          criteria_json,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4::jsonb, NOW())
+        ON CONFLICT (assignment_id)
+        DO UPDATE SET
+          title = EXCLUDED.title,
+          level_count = EXCLUDED.level_count,
+          criteria_json = EXCLUDED.criteria_json,
+          updated_at = NOW()
+        RETURNING id, assignment_id, title, level_count, criteria_json, created_at, updated_at
+      `,
+      [assignmentId, title, levelCount, JSON.stringify(criteria)]
+    );
+
+    return res.json({
+      success: true,
+      rubric: result.rows[0],
+    });
+  } catch (err) {
+    console.error("PUT /api/assignments/:assignmentId/teacher-designed-rubric failed:", err);
+    return res.status(500).json({ error: "Failed to save teacher designed rubric" });
+  }
+});
+
 app.get("/api/assignments/:assignmentId/kdu-rubric", async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
