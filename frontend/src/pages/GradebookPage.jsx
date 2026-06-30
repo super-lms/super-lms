@@ -128,6 +128,9 @@ export default function GradebookPage() {
   const [expandedCompetencyStudents, setExpandedCompetencyStudents] = useState({});
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("");
   const [activeGradebookSection, setActiveGradebookSection] = useState("student-standing");
+  const [communicationType, setCommunicationType] = useState("progress-update");
+  const [communicationRecipient, setCommunicationRecipient] = useState("parent");
+  const [communicationNotes, setCommunicationNotes] = useState("");
   const autosaveTimersRef = useRef({});
 
   async function loadCourses() {
@@ -345,6 +348,104 @@ export default function GradebookPage() {
       ...current,
       [studentId]: !current[studentId],
     }));
+  }
+
+  function getCommunicationTypeLabel(type) {
+    if (type === "academic-concern") return "Academic Concern";
+    if (type === "missing-work") return "Missing Work";
+    if (type === "meeting-request") return "Parent Meeting Request";
+    if (type === "intervention-update") return "Intervention Update";
+    if (type === "custom") return "Custom Communication";
+    return "Positive Progress Update";
+  }
+
+  function getStudentMissingAssignments(student) {
+    return assignments.filter((assignment) => {
+      const match = (student?.assignment_scores || []).find(
+        (item) => item.assignment_id === assignment.id
+      );
+
+      return !match || match.score === null || match.score === undefined;
+    });
+  }
+
+  function getStudentAssignmentSummary(student) {
+    const graded = (student?.assignment_scores || []).filter((item) =>
+      Number.isFinite(Number(item.score))
+    );
+
+    if (graded.length === 0) {
+      return "No graded assignments yet.";
+    }
+
+    return graded
+      .slice(0, 8)
+      .map((item) => {
+        const assignment = assignments.find((assignmentItem) => assignmentItem.id === item.assignment_id);
+        return `${assignment?.title || assignment?.name || "Assignment"}: ${formatPercent(item.score)}`;
+      })
+      .join("\n");
+  }
+
+  function getStudentKduSummary(student) {
+    const scored = (student?.assignment_scores || []).filter(
+      (item) => item.rubric_selection
+    );
+
+    if (scored.length === 0) {
+      return "No KDU evidence has been scored yet.";
+    }
+
+    return scored
+      .slice(0, 8)
+      .map((item) => {
+        const assignment = assignments.find((assignmentItem) => assignmentItem.id === item.assignment_id);
+        const rubric = item.rubric_selection || {};
+        return `${assignment?.title || assignment?.name || "Assignment"}: KNOW ${rubric.KNOW ?? "—"}, DO ${rubric.DO ?? "—"}, UNDERSTAND ${rubric.UNDERSTAND ?? "—"}`;
+      })
+      .join("\n");
+  }
+
+  function createStudentCommunicationEmail(student) {
+    if (!student) return;
+
+    const communicationLabel = getCommunicationTypeLabel(communicationType);
+    const missingAssignments = getStudentMissingAssignments(student);
+    const selectedCourse =
+      courses.find((course) => String(course.id) === String(selectedCourseId)) || null;
+
+    const subject = `CBC Wenzhou - ${communicationLabel} - ${student.student_name}`;
+
+    const bodyLines = [
+      "Good afternoon,",
+      "",
+      `I am writing with a student progress update for ${student.student_name}.`,
+      "",
+      `Communication Type: ${communicationLabel}`,
+      `Course: ${selectedCourse?.class_name || selectedCourse?.title || "Selected Course"}`,
+      `Current Course Grade: ${formatPercent(student.current_percent)}`,
+      `Current Proficiency: ${getProficiency(student.current_percent)}`,
+      "",
+      "Assignment Summary:",
+      getStudentAssignmentSummary(student),
+      "",
+      "KDU Summary:",
+      getStudentKduSummary(student),
+      "",
+      "Missing / Not Yet Graded Assignments:",
+      missingAssignments.length === 0
+        ? "None currently showing in the gradebook."
+        : missingAssignments.map((assignment) => `- ${assignment.title || assignment.name || "Assignment"}`).join("\n"),
+      "",
+      "Additional Teacher Notes:",
+      communicationNotes.trim() || "(Add comments here before sending.)",
+      "",
+      "Thank you,",
+      "",
+    ];
+
+    const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+    window.location.href = mailtoUrl;
   }
 
   const students = gradebook?.students || [];
@@ -850,6 +951,100 @@ export default function GradebookPage() {
                     </div>
                     )
                   ) : null}
+
+                  <div style={studentSuccessCommunicationCentreStyle}>
+                    <div>
+                      <h3 style={{ marginTop: 0, marginBottom: "6px" }}>
+                        Student Success Communication Centre
+                      </h3>
+                      <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+                        Create a ready-to-edit email snapshot for parent, student, homeroom,
+                        counselling, administrator, or teacher communication.
+                      </div>
+                    </div>
+
+                    <div style={communicationGridStyle}>
+                      <label className="form-field">
+                        <span className="form-label">Communication Type</span>
+                        <select
+                          className="form-input"
+                          value={communicationType}
+                          onChange={(event) => setCommunicationType(event.target.value)}
+                        >
+                          <option value="progress-update">Positive Progress Update</option>
+                          <option value="academic-concern">Academic Concern</option>
+                          <option value="missing-work">Missing Work</option>
+                          <option value="meeting-request">Parent Meeting Request</option>
+                          <option value="intervention-update">Intervention Update</option>
+                          <option value="custom">Custom Communication</option>
+                        </select>
+                      </label>
+
+                      <label className="form-field">
+                        <span className="form-label">Recipient</span>
+                        <select
+                          className="form-input"
+                          value={communicationRecipient}
+                          onChange={(event) => setCommunicationRecipient(event.target.value)}
+                        >
+                          <option value="parent">Parent / Guardian</option>
+                          <option value="student">Student</option>
+                          <option value="homeroom">Homeroom Teacher</option>
+                          <option value="course-teacher">Course Teacher</option>
+                          <option value="counsellor">Counsellor</option>
+                          <option value="administrator">Administrator</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div style={communicationSnapshotStyle}>
+                      <div style={{ fontWeight: 900, marginBottom: "8px" }}>
+                        Snapshot Included
+                      </div>
+                      <div>Student: <strong>{student.student_name}</strong></div>
+                      <div>Current Grade: <strong>{formatPercent(student.current_percent)}</strong></div>
+                      <div>Proficiency: <strong>{getProficiency(student.current_percent)}</strong></div>
+                      <div>Assignments: <strong>{assignmentCount}</strong></div>
+                      <div>
+                        Missing / Not Yet Graded:{" "}
+                        <strong>{getStudentMissingAssignments(student).length}</strong>
+                      </div>
+                    </div>
+
+                    <label className="form-field">
+                      <span className="form-label">Additional Teacher Notes</span>
+                      <textarea
+                        className="form-input"
+                        value={communicationNotes}
+                        onChange={(event) => setCommunicationNotes(event.target.value)}
+                        rows={5}
+                        placeholder="Add comments that should appear in the email body..."
+                      />
+                    </label>
+
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={() => createStudentCommunicationEmail(student)}
+                      >
+                        Create Email Snapshot
+                      </button>
+
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setCommunicationNotes("")}
+                      >
+                        Clear Notes
+                      </button>
+                    </div>
+
+                    <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+                      Phase 1 opens a prepared email draft in your default mail app.
+                      Direct sending, CC lists, communication history, and PDF snapshots can be added later.
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1179,6 +1374,30 @@ const focusedStudentRowStyle = {
   outline: "3px solid #111",
   outlineOffset: "2px",
   background: "#f8fafc",
+};
+
+const studentSuccessCommunicationCentreStyle = {
+  border: "2px solid #111827",
+  borderRadius: "16px",
+  background: "#ffffff",
+  padding: "16px",
+  marginTop: "18px",
+  display: "grid",
+  gap: "14px",
+};
+
+const communicationGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: "12px",
+};
+
+const communicationSnapshotStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  background: "#f8fafc",
+  padding: "12px",
+  lineHeight: 1.6,
 };
 
 const focusedKduBoxStyle = {
