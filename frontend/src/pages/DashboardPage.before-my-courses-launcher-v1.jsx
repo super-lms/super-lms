@@ -791,22 +791,38 @@ export default function DashboardPage() {
             gradebooks, students, and classroom action.
           </p>
 
-          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
-            {courses.length === 0 ? (
-              <DashboardActionCard title="My Courses" description="No courses assigned yet." meta="0 courses" onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
-            ) : (
-              courses.map((course) => (
-                <DashboardActionCard
-                  key={course.id || getCourseTitle(course)}
-                  title="My Courses"
-                  description={getCourseTitle(course)}
-                  meta="Open course"
-                  onClick={() => goTo("/courses")}
-                  active={loadingRoute === "/courses"}
-                />
-              ))
-            )}
+          <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+            <DashboardActionCard title="My Courses" description={topCourseName} meta={`${courses.length} ${courses.length === 1 ? "course" : "courses"}`} onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
+            <DashboardActionCard title="Lessons" description="Plan and manage lesson content." meta="Open lessons workspace" onClick={() => goTo("/lessons")} active={loadingRoute === "/lessons"} />
+            <DashboardActionCard title="Learning Paths" description="Sequence lessons and assignments." meta="Open course workspace" onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
+            <DashboardActionCard title="Assignments" description="Create, review, and grade work." meta={`${grades.length} grade records`} onClick={() => goTo(courses.length > 0 && courses[0]?.id ? `/courses/${courses[0].id}/assignments` : "/assignments")} active={Boolean(loadingRoute)} />
+            <DashboardActionCard title="Gradebook" description={gradeCoverageText} meta={`Current standing: ${averageLetter}`} onClick={() => goTo(primaryGradebookPath)} active={loadingRoute === primaryGradebookPath} />
+            <DashboardActionCard title="Students" description={latestStudentName} meta={`${students.length} ${students.length === 1 ? "student" : "students"}`} onClick={() => goTo(primaryEnrolledStudentPath)} active={loadingRoute === primaryEnrolledStudentPath} />
           </div>
+        </section>
+
+        <section className="panel">
+          <SectionHeading title="Course Workspaces" subtitle="Open the course workspace or jump directly to assignments and gradebook." />
+
+          {courses.length === 0 ? (
+            <p>No classes assigned yet.</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+              {courses.map((course) => (
+                <div key={course.id} style={{ background: "white", border: "1px solid #d7d7d7", borderRadius: "14px", padding: "18px" }}>
+                  <div style={{ fontSize: "14px", color: "#6b7280", marginBottom: "8px" }}>Course Workspace</div>
+                  <div style={{ fontSize: "22px", fontWeight: 800, color: "#111827" }}>{getCourseTitle(course)}</div>
+                  <div style={{ marginTop: "8px", fontSize: "14px", color: "#4b5563" }}>Course ID: {course.id || "—"}</div>
+
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "16px" }}>
+                    <button type="button" onClick={() => goTo(`/admin/courses/${course.id}`)} style={{ border: "1px solid #d0d7de", borderRadius: "10px", background: "#ffffff", padding: "9px 11px", font: "inherit", fontWeight: 800, cursor: "pointer" }}>Open Workspace</button>
+                    <button type="button" onClick={() => goTo(`/courses/${course.id}/assignments`)} style={{ border: "1px solid #d0d7de", borderRadius: "10px", background: "#ffffff", padding: "9px 11px", font: "inherit", fontWeight: 800, cursor: "pointer" }}>Assignments</button>
+                    <button type="button" onClick={() => goTo(`/gradebook?classId=${course.id}`)} style={{ border: "1px solid #d0d7de", borderRadius: "10px", background: "#ffffff", padding: "9px 11px", font: "inherit", fontWeight: 800, cursor: "pointer" }}>Gradebook</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel">
