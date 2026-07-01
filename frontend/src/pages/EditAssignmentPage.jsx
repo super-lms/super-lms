@@ -9,6 +9,7 @@ import {
 import AssignmentHealthCheck from "../components/AssignmentHealthCheck.jsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import API_BASE from "../apiBase";
+import TeacherDesignedRubricWorkspace from "../components/rubrics/TeacherDesignedRubricWorkspace.jsx";
 
 
 function formatPercent(value) {
@@ -1269,11 +1270,16 @@ export default function EditAssignmentPage() {
               <div>
                 <EditAssignmentFieldLabel>Assignment Scoring Method</EditAssignmentFieldLabel>
                 <select value={scoringMethod} onChange={(e) => setScoringMethod(e.target.value)} style={inputStyle}>
-                  <option value="rubric">Rubric Assessment</option>
-                  <option value="raw_sections">Raw Mark Sections</option>
-                  <option value="single_score_kdu">Single Score KDU Split</option>
+                  <option value="rubric">KDU Competency Rubric</option>
+                  <option value="teacher_designed_rubric_ho">Teacher Designed Rubric (HO)</option>
+                  <option value="single_score_kdu">Single Score → KDU</option>
+                  <option value="raw_sections">Raw Marks → KDU</option>
                 </select>
               </div>
+
+              {scoringMethod === "teacher_designed_rubric_ho" ? (
+                <TeacherDesignedRubricWorkspace assignmentId={assignmentId} />
+              ) : null}
 
               {scoringMethod === "single_score_kdu" ? (
                 <div style={{ display: "grid", gap: "12px" }}>
