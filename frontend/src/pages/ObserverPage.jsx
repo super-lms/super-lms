@@ -7,14 +7,6 @@ function toArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-function InfoLine({ label, value }) {
-  return (
-    <div style={{ marginBottom: "6px" }}>
-      <strong>{label}:</strong> {value || "-"}
-    </div>
-  )
-}
-
 function Card({ children, onClick, active = false }) {
   const Tag = onClick ? "button" : "div"
 
@@ -48,6 +40,14 @@ function MetricCard({ title, value }) {
   )
 }
 
+function InfoLine({ label, value }) {
+  return (
+    <div style={{ marginBottom: "6px" }}>
+      <strong>{label}:</strong> {value || "-"}
+    </div>
+  )
+}
+
 export default function ObserverPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -61,7 +61,8 @@ export default function ObserverPage() {
   })
 
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
-  const [selectedCourseId, setSelectedCourseId] = useState("all")
+  const [selectedCourseId, setSelectedCourseId] = useState("")
+  const [viewMode, setViewMode] = useState("students")
 
   function handleLogout() {
     logout()
@@ -90,17 +91,11 @@ export default function ObserverPage() {
           throw new Error((data && data.error) || "Failed to load observer dashboard")
         }
 
-        const students = toArray(data?.students)
-
         setObserverData({
           observer: data?.observer || null,
-          students,
+          students: toArray(data?.students),
           submissions: toArray(data?.submissions),
         })
-
-        if (students.length > 0) {
-          setSelectedStudentEmail(String(students[0].student_email || "").toLowerCase())
-        }
       } catch (err) {
         setError(err.message || "Failed to load observer dashboard")
       } finally {
@@ -157,25 +152,24 @@ export default function ObserverPage() {
     )
   }, [observerData.students, selectedStudentEmail])
 
-  const filteredSubmissions = useMemo(() => {
+  const selectedCourse = useMemo(() => {
+    return coursesForSelectedStudent.find((course) => String(course.class_id) === String(selectedCourseId)) || null
+  }, [coursesForSelectedStudent, selectedCourseId])
+
+  const courseSubmissions = useMemo(() => {
     return observerData.submissions.filter((submission) => {
-      const studentMatches =
-        !selectedStudentEmail ||
-        String(submission.student_email || "").trim().toLowerCase() === selectedStudentEmail
-
-      const courseMatches =
-        selectedCourseId === "all" ||
+      return (
+        String(submission.student_email || "").trim().toLowerCase() === selectedStudentEmail &&
         String(submission.class_id || "") === String(selectedCourseId)
-
-      return studentMatches && courseMatches
+      )
     })
   }, [observerData.submissions, selectedStudentEmail, selectedCourseId])
 
-  const gradedSubmissions = filteredSubmissions.filter((submission) => {
+  const gradedSubmissions = courseSubmissions.filter((submission) => {
     return submission.score !== null && submission.score !== undefined && submission.score !== ""
   })
 
-  const missingSubmissions = filteredSubmissions.filter((submission) => {
+  const missingSubmissions = courseSubmissions.filter((submission) => {
     return submission.score === null || submission.score === undefined || submission.score === ""
   })
 
@@ -187,13 +181,35 @@ export default function ObserverPage() {
         )
       : null
 
+  function openStudent(student) {
+    setSelectedStudentEmail(student.student_email)
+    setSelectedCourseId("")
+    setViewMode("courses")
+  }
+
+  function openCourse(course) {
+    setSelectedCourseId(course.class_id)
+    setViewMode("progress")
+  }
+
+  function backToStudents() {
+    setViewMode("students")
+    setSelectedStudentEmail("")
+    setSelectedCourseId("")
+  }
+
+  function backToCourses() {
+    setViewMode("courses")
+    setSelectedCourseId("")
+  }
+
   return (
     <div className="page">
       <div style={topBarStyle}>
         <div>
           <h1 style={{ marginBottom: "6px" }}>Observer Portal</h1>
           <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-            Select a student, then choose a course to review progress, assignments, grades, feedback, and missing work.
+            Select a student, choose a course, then review progress and evidence.
           </p>
         </div>
 
@@ -205,97 +221,84 @@ export default function ObserverPage() {
       {loading ? <p>Loading observer portal...</p> : null}
       {error ? <p style={{ color: "#991b1b" }}>{error}</p> : null}
 
-      {!loading && !error ? (
+      {!loading && !error && viewMode === "students" ? (
+        <section style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>My Students</h2>
+
+          {uniqueStudents.length === 0 ? (
+            <p>No linked students found. Ask the school office to link students to this observer email.</p>
+          ) : (
+            <div style={cardGridStyle}>
+              {uniqueStudents.map((student) => (
+                <Card key={student.student_email} onClick={() => openStudent(student)}>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{student.student_name}</div>
+                  <div style={{ marginTop: "6px", color: "#4b5563" }}>{student.student_email}</div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Student →</div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {!loading && !error && viewMode === "courses" && selectedStudent ? (
+        <section style={sectionStyle}>
+          <button type="button" onClick={backToStudents} style={backButtonStyle}>
+            ← Back to Students
+          </button>
+
+          <h2 style={sectionTitleStyle}>{selectedStudent.student_name}</h2>
+          <p style={{ marginTop: 0, color: "#4b5563" }}>
+            Choose a course to view progress, assignments, grades, feedback, and missing work.
+          </p>
+
+          {coursesForSelectedStudent.length === 0 ? (
+            <p>No courses found for this student.</p>
+          ) : (
+            <div style={cardGridStyle}>
+              {coursesForSelectedStudent.map((course) => (
+                <Card key={course.class_id} onClick={() => openCourse(course)}>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{course.class_name}</div>
+                  <div style={{ marginTop: "8px", color: "#4b5563" }}>
+                    Course progress and learning evidence.
+                  </div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Course →</div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {!loading && !error && viewMode === "progress" && selectedStudent && selectedCourse ? (
         <div style={{ display: "grid", gap: "18px" }}>
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>My Students</h2>
+            <button type="button" onClick={backToCourses} style={backButtonStyle}>
+              ← Back to Courses
+            </button>
 
-            {uniqueStudents.length === 0 ? (
-              <p>No linked students found. Ask the school office to link students to this observer email.</p>
-            ) : (
-              <div style={cardGridStyle}>
-                {uniqueStudents.map((student) => (
-                  <Card
-                    key={student.student_email}
-                    active={student.student_email === selectedStudentEmail}
-                    onClick={() => {
-                      setSelectedStudentEmail(student.student_email)
-                      setSelectedCourseId("all")
-                    }}
-                  >
-                    <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>
-                      {student.student_name}
-                    </div>
-                    <div style={{ marginTop: "6px", color: "#4b5563" }}>
-                      {student.student_email}
-                    </div>
-                    <div style={{ marginTop: "12px", fontWeight: 800 }}>
-                      Open Student →
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <h2 style={sectionTitleStyle}>{selectedCourse.class_name}</h2>
+            <p style={{ marginTop: 0, color: "#4b5563" }}>
+              Progress view for {selectedStudent.student_name}.
+            </p>
+
+            <div style={metricGridStyle}>
+              <MetricCard title="Visible Assignments" value={courseSubmissions.length} />
+              <MetricCard title="Missing / Needs Attention" value={missingSubmissions.length} />
+              <MetricCard title="Average Score" value={averageScore === null ? "N/A" : `${averageScore}%`} />
+            </div>
           </section>
-
-          {selectedStudent ? (
-            <section style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>{selectedStudent.student_name}</h2>
-              <p style={{ marginTop: 0, color: "#4b5563" }}>
-                Select a course to focus the progress view.
-              </p>
-
-              <div style={cardGridStyle}>
-                <Card
-                  active={selectedCourseId === "all"}
-                  onClick={() => setSelectedCourseId("all")}
-                >
-                  <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>All Courses</div>
-                  <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                    View all visible assignments and progress.
-                  </div>
-                </Card>
-
-                {coursesForSelectedStudent.map((course) => (
-                  <Card
-                    key={course.class_id}
-                    active={String(course.class_id) === String(selectedCourseId)}
-                    onClick={() => setSelectedCourseId(course.class_id)}
-                  >
-                    <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>
-                      {course.class_name}
-                    </div>
-                    <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                      Course progress and evidence.
-                    </div>
-                    <div style={{ marginTop: "12px", fontWeight: 800 }}>
-                      Open Course →
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <div style={metricGridStyle}>
-            <MetricCard title="Courses" value={coursesForSelectedStudent.length} />
-            <MetricCard title="Visible Assignments" value={filteredSubmissions.length} />
-            <MetricCard title="Missing / Needs Attention" value={missingSubmissions.length} />
-            <MetricCard title="Average Score" value={averageScore === null ? "N/A" : `${averageScore}%`} />
-          </div>
 
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>Missing Work / Needs Attention</h2>
 
             {missingSubmissions.length === 0 ? (
-              <p>No missing or ungraded work found for the selected view.</p>
+              <p>No missing or ungraded work found for this course.</p>
             ) : (
               <div style={{ display: "grid", gap: "10px" }}>
                 {missingSubmissions.map((submission) => (
                   <Card key={`missing-${submission.id}`}>
                     <div style={{ fontWeight: 900 }}>{submission.assignment_title || "Assignment"}</div>
-                    <InfoLine label="Student" value={submission.student_name} />
-                    <InfoLine label="Course" value={submission.class_name} />
                     <InfoLine label="Status" value="Missing, ungraded, or needs teacher attention" />
                     <InfoLine label="Feedback" value={submission.feedback || "No feedback yet"} />
                   </Card>
@@ -307,18 +310,15 @@ export default function ObserverPage() {
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>Student Work, Grades, Feedback, and Attachments</h2>
 
-            {filteredSubmissions.length === 0 ? (
-              <p>No assignments or submissions found for the selected view.</p>
+            {courseSubmissions.length === 0 ? (
+              <p>No assignments or submissions found for this course.</p>
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
-                {filteredSubmissions.map((submission) => (
+                {courseSubmissions.map((submission) => (
                   <Card key={submission.id}>
                     <div style={{ fontSize: "1.1rem", fontWeight: 900, marginBottom: "8px" }}>
                       {submission.assignment_title || "Assignment"}
                     </div>
-
-                    <InfoLine label="Student" value={submission.student_name} />
-                    <InfoLine label="Course" value={submission.class_name} />
 
                     <div style={{ marginTop: "8px", marginBottom: "8px", lineHeight: 1.5 }}>
                       {submission.content || "No text submission"}
@@ -411,4 +411,15 @@ const logoutButtonStyle = {
   fontWeight: 800,
   cursor: "pointer",
   fontSize: "1rem",
+}
+
+const backButtonStyle = {
+  border: "1px solid #111827",
+  borderRadius: "10px",
+  background: "#ffffff",
+  padding: "10px 14px",
+  font: "inherit",
+  fontWeight: 800,
+  cursor: "pointer",
+  marginBottom: "14px",
 }
