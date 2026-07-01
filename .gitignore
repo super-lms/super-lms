@@ -137,3 +137,24 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# SUPER LMS local/dev cleanup
+.DS_Store
+**/.DS_Store
+
+# Local generated uploads and test files
+backend/server/uploads/
+backend/server/data/
+backend/app-output.txt
+backend/nodemon
+
+# Local scratch files
+dashboard-route.txt
+roster-block.js
+
+# Local backup/scratch SQL dumps
+*_backup_*.sql
+*before*.sql
+
+# Local historical archive kept on development machine
+archive/
