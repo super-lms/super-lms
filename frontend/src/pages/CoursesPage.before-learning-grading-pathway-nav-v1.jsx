@@ -2855,7 +2855,7 @@ export default function CoursesPage() {
                       disabled={learningPathLoadingCourseId === course.id}
                       style={buttonStyle}
                     >
-                      {competencyLoadingCourseId === course.id ? "Loading Learning / Grading Pathways..." : isCompetenciesOpen ? "Hide Learning / Grading Pathways" : "Learning / Grading Pathways"}
+                      {learningPathLoadingCourseId === course.id ? "Loading Paths..." : isLearningPathsOpen ? "Hide Learning Paths" : "Learning Paths"}
                     </button>
 
                     <button
