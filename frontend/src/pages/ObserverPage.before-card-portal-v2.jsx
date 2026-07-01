@@ -3,8 +3,20 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 
-function toArray(value) {
-  return Array.isArray(value) ? value : []
+function DetailCard({ title, children }) {
+  return (
+    <div
+      style={{
+        border: "1px solid #d7dce5",
+        borderRadius: "14px",
+        padding: "16px",
+        background: "#ffffff",
+      }}
+    >
+      <h2 style={{ marginTop: 0, marginBottom: "12px", fontSize: "1.15rem" }}>{title}</h2>
+      {children}
+    </div>
+  )
 }
 
 function InfoLine({ label, value }) {
@@ -12,39 +24,6 @@ function InfoLine({ label, value }) {
     <div style={{ marginBottom: "6px" }}>
       <strong>{label}:</strong> {value || "-"}
     </div>
-  )
-}
-
-function Card({ children, onClick, active = false }) {
-  const Tag = onClick ? "button" : "div"
-
-  return (
-    <Tag
-      type={onClick ? "button" : undefined}
-      onClick={onClick}
-      style={{
-        border: active ? "2px solid #111827" : "1px solid #d7dce5",
-        borderRadius: "16px",
-        padding: "16px",
-        background: "#ffffff",
-        textAlign: "left",
-        font: "inherit",
-        cursor: onClick ? "pointer" : "default",
-        boxShadow: "0 1px 2px rgba(16, 24, 40, 0.05)",
-        width: "100%",
-      }}
-    >
-      {children}
-    </Tag>
-  )
-}
-
-function MetricCard({ title, value }) {
-  return (
-    <Card>
-      <div style={{ fontWeight: 800, marginBottom: "8px" }}>{title}</div>
-      <div style={{ fontSize: "2rem", fontWeight: 900 }}>{value}</div>
-    </Card>
   )
 }
 
@@ -90,15 +69,15 @@ export default function ObserverPage() {
           throw new Error((data && data.error) || "Failed to load observer dashboard")
         }
 
-        const students = toArray(data?.students)
+        const students = Array.isArray(data?.students) ? data.students : []
 
         setObserverData({
           observer: data?.observer || null,
           students,
-          submissions: toArray(data?.submissions),
+          submissions: Array.isArray(data?.submissions) ? data.submissions : [],
         })
 
-        if (students.length > 0) {
+        if (!selectedStudentEmail && students.length > 0) {
           setSelectedStudentEmail(String(students[0].student_email || "").toLowerCase())
         }
       } catch (err) {
@@ -157,6 +136,18 @@ export default function ObserverPage() {
     )
   }, [observerData.students, selectedStudentEmail])
 
+  useEffect(() => {
+    if (selectedCourseId === "all") return
+
+    const courseStillAvailable = coursesForSelectedStudent.some((course) => {
+      return String(course.class_id) === String(selectedCourseId)
+    })
+
+    if (!courseStillAvailable) {
+      setSelectedCourseId("all")
+    }
+  }, [coursesForSelectedStudent, selectedCourseId])
+
   const filteredSubmissions = useMemo(() => {
     return observerData.submissions.filter((submission) => {
       const studentMatches =
@@ -175,25 +166,24 @@ export default function ObserverPage() {
     return submission.score !== null && submission.score !== undefined && submission.score !== ""
   })
 
-  const missingSubmissions = filteredSubmissions.filter((submission) => {
+  const ungradedSubmissions = filteredSubmissions.filter((submission) => {
     return submission.score === null || submission.score === undefined || submission.score === ""
   })
 
-  const averageScore =
-    gradedSubmissions.length > 0
-      ? Math.round(
-          gradedSubmissions.reduce((sum, submission) => sum + Number(submission.score || 0), 0) /
-            gradedSubmissions.length
-        )
-      : null
+  const averageScore = gradedSubmissions.length > 0
+    ? Math.round(
+        gradedSubmissions.reduce((sum, submission) => sum + Number(submission.score || 0), 0) /
+          gradedSubmissions.length
+      )
+    : null
 
   return (
     <div className="page">
       <div style={topBarStyle}>
         <div>
-          <h1 style={{ marginBottom: "6px" }}>Observer Portal</h1>
+          <h1 style={{ marginBottom: "6px" }}>Homeroom Observer Portal</h1>
           <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-            Select a student, then choose a course to review progress, assignments, grades, feedback, and missing work.
+            Monitor linked students, courses, assignments, grades, feedback, and attachments.
           </p>
         </div>
 
@@ -202,118 +192,136 @@ export default function ObserverPage() {
         </button>
       </div>
 
-      {loading ? <p>Loading observer portal...</p> : null}
+      {loading ? <p>Loading homeroom observer dashboard...</p> : null}
       {error ? <p style={{ color: "#991b1b" }}>{error}</p> : null}
 
       {!loading && !error ? (
         <div style={{ display: "grid", gap: "18px" }}>
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>My Students</h2>
+          <DetailCard title="Observer Information">
+            <InfoLine label="Name" value={observerData.observer?.name || user?.name || "Observer"} />
+            <InfoLine label="Email" value={observerData.observer?.email || user?.email || ""} />
+            <InfoLine label="Role" value={observerData.observer?.role || user?.role || "observer"} />
+          </DetailCard>
 
+          <DetailCard title="Student & Course Filters">
             {uniqueStudents.length === 0 ? (
-              <p>No linked students found. Ask the school office to link students to this observer email.</p>
+              <p style={{ margin: 0 }}>
+                No linked students found. Ask the school office to link students to this observer email.
+              </p>
             ) : (
-              <div style={cardGridStyle}>
-                {uniqueStudents.map((student) => (
-                  <Card
-                    key={student.student_email}
-                    active={student.student_email === selectedStudentEmail}
-                    onClick={() => {
-                      setSelectedStudentEmail(student.student_email)
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "14px" }}>
+                <div>
+                  <label style={labelStyle}>Student</label>
+                  <select
+                    value={selectedStudentEmail}
+                    onChange={(event) => {
+                      setSelectedStudentEmail(event.target.value)
                       setSelectedCourseId("all")
                     }}
+                    style={inputStyle}
                   >
-                    <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>
-                      {student.student_name}
-                    </div>
-                    <div style={{ marginTop: "6px", color: "#4b5563" }}>
-                      {student.student_email}
-                    </div>
-                    <div style={{ marginTop: "12px", fontWeight: 800 }}>
-                      Open Student →
-                    </div>
-                  </Card>
-                ))}
+                    {uniqueStudents.map((student) => (
+                      <option key={student.student_email} value={student.student_email}>
+                        {student.student_name} — {student.student_email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Course</label>
+                  <select
+                    value={selectedCourseId}
+                    onChange={(event) => setSelectedCourseId(event.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="all">All Courses</option>
+                    {coursesForSelectedStudent.map((course) => (
+                      <option key={course.class_id} value={course.class_id}>
+                        {course.class_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
-          </section>
+          </DetailCard>
 
-          {selectedStudent ? (
-            <section style={sectionStyle}>
-              <h2 style={sectionTitleStyle}>{selectedStudent.student_name}</h2>
-              <p style={{ marginTop: 0, color: "#4b5563" }}>
-                Select a course to focus the progress view.
-              </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "14px" }}>
+            <DetailCard title="Linked Students">
+              <div style={metricStyle}>{uniqueStudents.length}</div>
+            </DetailCard>
 
-              <div style={cardGridStyle}>
-                <Card
-                  active={selectedCourseId === "all"}
-                  onClick={() => setSelectedCourseId("all")}
-                >
-                  <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>All Courses</div>
-                  <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                    View all visible assignments and progress.
-                  </div>
-                </Card>
+            <DetailCard title="Courses">
+              <div style={metricStyle}>{coursesForSelectedStudent.length}</div>
+            </DetailCard>
 
-                {coursesForSelectedStudent.map((course) => (
-                  <Card
-                    key={course.class_id}
-                    active={String(course.class_id) === String(selectedCourseId)}
-                    onClick={() => setSelectedCourseId(course.class_id)}
-                  >
-                    <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>
-                      {course.class_name}
-                    </div>
-                    <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                      Course progress and evidence.
-                    </div>
-                    <div style={{ marginTop: "12px", fontWeight: 800 }}>
-                      Open Course →
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          ) : null}
+            <DetailCard title="Visible Assignments">
+              <div style={metricStyle}>{filteredSubmissions.length}</div>
+            </DetailCard>
 
-          <div style={metricGridStyle}>
-            <MetricCard title="Courses" value={coursesForSelectedStudent.length} />
-            <MetricCard title="Visible Assignments" value={filteredSubmissions.length} />
-            <MetricCard title="Missing / Needs Attention" value={missingSubmissions.length} />
-            <MetricCard title="Average Score" value={averageScore === null ? "N/A" : `${averageScore}%`} />
+            <DetailCard title="Average Score">
+              <div style={metricStyle}>{averageScore === null ? "N/A" : `${averageScore}%`}</div>
+            </DetailCard>
           </div>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Missing Work / Needs Attention</h2>
+          <DetailCard title="Selected Student Summary">
+            {selectedStudent ? (
+              <div style={{ lineHeight: 1.6 }}>
+                <InfoLine label="Student" value={selectedStudent.student_name} />
+                <InfoLine label="Student Email" value={selectedStudent.student_email} />
+                <InfoLine label="Student ID" value={selectedStudent.student_id || "Not set"} />
+                <InfoLine label="Missing / Needs Attention" value={String(ungradedSubmissions.length)} />
+              </div>
+            ) : (
+              <p style={{ margin: 0 }}>No student selected.</p>
+            )}
+          </DetailCard>
 
-            {missingSubmissions.length === 0 ? (
-              <p>No missing or ungraded work found for the selected view.</p>
+          <DetailCard title="Missing Work / Needs Attention">
+            {ungradedSubmissions.length === 0 ? (
+              <p style={{ margin: 0 }}>No missing or ungraded work found for the current filters.</p>
             ) : (
               <div style={{ display: "grid", gap: "10px" }}>
-                {missingSubmissions.map((submission) => (
-                  <Card key={`missing-${submission.id}`}>
-                    <div style={{ fontWeight: 900 }}>{submission.assignment_title || "Assignment"}</div>
+                {ungradedSubmissions.map((submission) => (
+                  <div
+                    key={`missing-${submission.id}`}
+                    style={{
+                      border: "1px solid #d7dce5",
+                      borderRadius: "12px",
+                      padding: "12px",
+                      background: "#f9fafb",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>
+                      {submission.assignment_title || "Assignment"}
+                    </div>
                     <InfoLine label="Student" value={submission.student_name} />
                     <InfoLine label="Course" value={submission.class_name} />
                     <InfoLine label="Status" value="Missing, ungraded, or needs teacher attention" />
                     <InfoLine label="Feedback" value={submission.feedback || "No feedback yet"} />
-                  </Card>
+                  </div>
                 ))}
               </div>
             )}
-          </section>
+          </DetailCard>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Student Work, Grades, Feedback, and Attachments</h2>
-
+          <DetailCard title="Student Work, Grades, Feedback, and Attachments">
             {filteredSubmissions.length === 0 ? (
-              <p>No assignments or submissions found for the selected view.</p>
+              <p style={{ margin: 0 }}>No assignments or submissions found for the current filters.</p>
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
                 {filteredSubmissions.map((submission) => (
-                  <Card key={submission.id}>
-                    <div style={{ fontSize: "1.1rem", fontWeight: 900, marginBottom: "8px" }}>
+                  <div
+                    key={submission.id}
+                    style={{
+                      border: "1px solid #d7dce5",
+                      borderRadius: "12px",
+                      padding: "14px",
+                      background: "#f9fafb",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, marginBottom: "6px" }}>
                       {submission.assignment_title || "Assignment"}
                     </div>
 
@@ -335,7 +343,7 @@ export default function ObserverPage() {
                     <InfoLine label="Grade" value={submission.grade || "Not graded"} />
                     <InfoLine label="Feedback" value={submission.feedback || "No feedback yet"} />
 
-                    {toArray(submission.files).length > 0 ? (
+                    {Array.isArray(submission.files) && submission.files.length > 0 ? (
                       <div style={{ marginTop: "10px" }}>
                         <strong>Attachments:</strong>
                         <div style={{ display: "grid", gap: "6px", marginTop: "6px" }}>
@@ -357,11 +365,11 @@ export default function ObserverPage() {
                         </div>
                       </div>
                     ) : null}
-                  </Card>
+                  </div>
                 ))}
               </div>
             )}
-          </section>
+          </DetailCard>
         </div>
       ) : null}
     </div>
@@ -377,31 +385,6 @@ const topBarStyle = {
   flexWrap: "wrap",
 }
 
-const sectionStyle = {
-  border: "1px solid #d7dce5",
-  borderRadius: "18px",
-  padding: "18px",
-  background: "#f8fafc",
-}
-
-const sectionTitleStyle = {
-  marginTop: 0,
-  marginBottom: "14px",
-  fontSize: "1.35rem",
-}
-
-const cardGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-  gap: "14px",
-}
-
-const metricGridStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: "14px",
-}
-
 const logoutButtonStyle = {
   border: "1px solid #111",
   background: "#ffffff",
@@ -411,4 +394,23 @@ const logoutButtonStyle = {
   fontWeight: 800,
   cursor: "pointer",
   fontSize: "1rem",
+}
+
+const labelStyle = {
+  display: "block",
+  fontWeight: 800,
+  marginBottom: "6px",
+}
+
+const inputStyle = {
+  width: "100%",
+  padding: "12px",
+  borderRadius: "10px",
+  border: "1px solid #cbd5e1",
+  fontSize: "1rem",
+}
+
+const metricStyle = {
+  fontSize: "2rem",
+  fontWeight: 900,
 }
