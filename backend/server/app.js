@@ -1114,45 +1114,6 @@ async function ensureLearningPathItemTables() {
     )
   `);
 
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'lesson'
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS resource_url TEXT DEFAULT ''
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS assignment_id INTEGER REFERENCES assignments(id) ON DELETE SET NULL
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 1
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NULL DEFAULT true
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()
-  `);
-
-  await pool.query(`
-    ALTER TABLE learning_path_items
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()
-  `);
 }
 
 
@@ -1440,15 +1401,6 @@ async function ensureLessonsTables() {
     ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0
   `);
 
-  await pool.query(`
-    ALTER TABLE lessons
-    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()
-  `);
-
-  await pool.query(`
-    ALTER TABLE lessons
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()
-  `);
 }
 
 /* LESSONS API */
@@ -2555,7 +2507,6 @@ app.get("/api/assignments", async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS sort_order INTEGER,
       ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
@@ -2841,7 +2792,6 @@ app.post("/api/assignments", async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS sort_order INTEGER,
       ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
@@ -3039,7 +2989,6 @@ app.post("/api/assignments/:assignmentId/reorder", async (req, res) => {
 
     await client.query(`
       ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS sort_order INTEGER,
       ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
@@ -5518,7 +5467,8 @@ app.get("/api/courses/:courseId/learning-paths", async (req, res) => {
     });
   } catch (err) {
     console.error("GET /api/courses/:courseId/learning-paths failed:", err);
-    return res.status(500).json({ error: "Failed to load learning paths" });
+    console.error(err);
+return res.status(500).json({ error: err.message });
   }
 });
 
@@ -5933,27 +5883,21 @@ app.get("/api/learning-paths/:learningPathId/items", async (req, res) => {
     const result = await pool.query(
       `
       SELECT
-        lpi.id,
-        lpi.learning_path_id,
-        lpi.item_type,
-        lpi.title,
-        lpi.description,
-        lpi.resource_url,
-        lpi.assignment_id,
-        lpi.lesson_id,
-        a.title AS assignment_title,
-        les.title AS lesson_title,
-        lpi.sort_order,
-        lpi.is_required,
-        lpi.created_at,
-        lpi.updated_at
-      FROM learning_path_items lpi
-      LEFT JOIN assignments a
-        ON a.id = lpi.assignment_id
-      LEFT JOIN lessons les
-        ON les.id = lpi.lesson_id
-      WHERE lpi.learning_path_id = $1
-      ORDER BY lpi.sort_order ASC, lpi.id ASC
+  lpi.id,
+  lpi.learning_path_id,
+  lpi.item_type,
+  lpi.title,
+  lpi.description,
+  lpi.resource_url,
+  a.title AS assignment_title,
+  lpi.sort_order,
+  lpi.is_required,
+  lpi.created_at,
+  lpi.updated_at
+FROM learning_path_items lpi
+LEFT JOIN assignments a ON a.id = lpi.assignment_id
+WHERE lpi.learning_path_id = $1
+ORDER BY lpi.sort_order ASC, lpi.id ASC
       `,
       [learningPathId]
     );
@@ -5965,7 +5909,7 @@ app.get("/api/learning-paths/:learningPathId/items", async (req, res) => {
     });
   } catch (err) {
     console.error("GET /api/learning-paths/:learningPathId/items failed:", err);
-    return res.status(500).json({ error: "Failed to load learning path items" });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -6073,12 +6017,7 @@ app.post("/api/learning-paths/:learningPathId/create-lesson", async (req, res) =
     await ensureLearningPathItemTables();
     await ensureLessonsTables();
 
-    await client.query(`
-      ALTER TABLE learning_path_items
-      ADD COLUMN IF NOT EXISTS lesson_id INTEGER REFERENCES lessons(id) ON DELETE SET NULL
-    `);
-
-    const learningPathId = Number(req.params.learningPathId);
+      const learningPathId = Number(req.params.learningPathId);
     const title = String(req.body.title || "").trim();
     const content = String(req.body.content || "").trim();
 
@@ -6162,7 +6101,6 @@ app.post("/api/learning-paths/:learningPathId/create-lesson", async (req, res) =
         title,
         description,
         resource_url,
-        lesson_id,
         sort_order,
         is_required,
         created_at,
