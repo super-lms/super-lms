@@ -1706,6 +1706,168 @@ app.get("/api/admin/courses/:courseId/students", async (req, res) => {
   }
 });
 
+
+/* GET OBSERVER STUDENT LINKS - ADMIN USER PERMISSIONS */
+app.get("/api/admin/observer-links/:observerId", async (req, res) => {
+  try {
+    const observerId = Number(req.params.observerId);
+
+    if (!observerId) {
+      return res.status(400).json({ error: "Valid observerId is required" });
+    }
+
+    const observerResult = await pool.query(
+      `
+      SELECT id, name, email, role
+      FROM users
+      WHERE id = $1
+        AND LOWER(COALESCE(role, '')) IN ('observer', 'parent')
+      LIMIT 1
+      `,
+      [observerId]
+    );
+
+    if (observerResult.rows.length === 0) {
+      return res.status(404).json({ error: "Observer user not found" });
+    }
+
+    const linksResult = await pool.query(
+      `
+      SELECT
+        osl.relationship,
+        u.id AS student_user_id,
+        u.name AS student_name,
+        u.email AS student_email,
+        u.student_id,
+        u.first_name,
+        u.last_name
+      FROM observer_student_links osl
+      JOIN users u
+        ON u.id = osl.student_user_id
+      WHERE osl.observer_user_id = $1
+      ORDER BY u.first_name ASC, u.last_name ASC, u.name ASC, u.email ASC
+      `,
+      [observerId]
+    );
+
+    const relationship = linksResult.rows[0]?.relationship || "parent";
+
+    return res.json({
+      success: true,
+      observer: observerResult.rows[0],
+      relationship,
+      studentIds: linksResult.rows.map((row) => row.student_user_id),
+      students: linksResult.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/admin/observer-links/:observerId failed:", err);
+    return res.status(500).json({ error: "Failed to load observer links" });
+  }
+});
+
+/* SAVE OBSERVER STUDENT LINKS - ADMIN USER PERMISSIONS */
+app.post("/api/admin/observer-links/:observerId", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const observerId = Number(req.params.observerId);
+    const relationship = String(req.body.relationship || "parent").trim();
+    const requestedStudentIds = Array.isArray(req.body.studentIds)
+      ? req.body.studentIds.map(Number).filter(Boolean)
+      : [];
+
+    if (!observerId) {
+      return res.status(400).json({ error: "Valid observerId is required" });
+    }
+
+    if (!["parent", "chinese_homeroom_teacher"].includes(relationship)) {
+      return res.status(400).json({ error: "Invalid observer relationship" });
+    }
+
+    const uniqueStudentIds = [...new Set(requestedStudentIds)];
+
+    const observerResult = await client.query(
+      `
+      SELECT id, name, email, role
+      FROM users
+      WHERE id = $1
+        AND LOWER(COALESCE(role, '')) IN ('observer', 'parent')
+      LIMIT 1
+      `,
+      [observerId]
+    );
+
+    if (observerResult.rows.length === 0) {
+      return res.status(404).json({ error: "Observer user not found" });
+    }
+
+    if (uniqueStudentIds.length > 0) {
+      const validStudentsResult = await client.query(
+        `
+        SELECT id
+        FROM users
+        WHERE LOWER(COALESCE(role, '')) = 'student'
+          AND id = ANY($1::int[])
+        `,
+        [uniqueStudentIds]
+      );
+
+      if (validStudentsResult.rows.length !== uniqueStudentIds.length) {
+        return res.status(400).json({
+          error: "One or more selected students are invalid",
+        });
+      }
+    }
+
+    await client.query("BEGIN");
+
+    await client.query(
+      `
+      DELETE FROM observer_student_links
+      WHERE observer_user_id = $1
+      `,
+      [observerId]
+    );
+
+    for (const studentId of uniqueStudentIds) {
+      await client.query(
+        `
+        INSERT INTO observer_student_links (
+          observer_user_id,
+          student_user_id,
+          relationship,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (observer_user_id, student_user_id)
+        DO UPDATE SET
+          relationship = EXCLUDED.relationship,
+          updated_at = CURRENT_TIMESTAMP
+        `,
+        [observerId, studentId, relationship]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      observer: observerResult.rows[0],
+      relationship,
+      studentIds: uniqueStudentIds,
+      linkedCount: uniqueStudentIds.length,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("POST /api/admin/observer-links/:observerId failed:", err);
+    return res.status(500).json({ error: "Failed to save observer links" });
+  } finally {
+    client.release();
+  }
+});
+
+
 /* GET CLASSES FOR GRADEBOOK */
 app.get("/api/classes", async (req, res) => {
   try {
@@ -2595,6 +2757,329 @@ app.get("/api/assignments", async (req, res) => {
   }
 });
 
+async function getObserverStudents(observerEmail) {
+  const linkedStudentsResult = await pool.query(
+    `
+    SELECT
+      u.id AS student_user_id,
+      CONCAT(u.first_name, ' ', u.last_name) AS student_name,
+      u.email AS student_email,
+      u.student_id,
+      u.parent_email,
+      c.id AS class_id,
+      c.title AS class_name
+    FROM observer_student_links osl
+    JOIN users observer_user
+      ON observer_user.id = osl.observer_user_id
+    JOIN users u
+      ON u.id = osl.student_user_id
+    LEFT JOIN class_enrollments ce
+      ON ce.student_user_id = u.id
+    LEFT JOIN courses c
+      ON c.id = ce.class_id
+    WHERE LOWER(observer_user.email) = $1
+      AND LOWER(COALESCE(u.role, '')) = 'student'
+    ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC
+    `,
+    [observerEmail]
+  );
+
+  if (linkedStudentsResult.rows.length > 0) {
+    return {
+      source: "observer_student_links",
+      rows: linkedStudentsResult.rows,
+      studentUserIds: [...new Set(linkedStudentsResult.rows.map((row) => row.student_user_id).filter(Boolean))],
+    };
+  }
+
+  const parentEmailStudentsResult = await pool.query(
+    `
+    SELECT
+      u.id AS student_user_id,
+      CONCAT(u.first_name, ' ', u.last_name) AS student_name,
+      u.email AS student_email,
+      u.student_id,
+      u.parent_email,
+      c.id AS class_id,
+      c.title AS class_name
+    FROM users u
+    LEFT JOIN class_enrollments ce
+      ON ce.student_user_id = u.id
+    LEFT JOIN courses c
+      ON c.id = ce.class_id
+    WHERE LOWER(COALESCE(u.parent_email, '')) = $1
+      AND LOWER(COALESCE(u.role, '')) = 'student'
+    ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC
+    `,
+    [observerEmail]
+  );
+
+  if (parentEmailStudentsResult.rows.length > 0) {
+    return {
+      source: "parent_email",
+      rows: parentEmailStudentsResult.rows,
+      studentUserIds: [...new Set(parentEmailStudentsResult.rows.map((row) => row.student_user_id).filter(Boolean))],
+    };
+  }
+
+  const grade11StudentsResult = await pool.query(
+    `
+    SELECT
+      u.id AS student_user_id,
+      COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), ms.display_name) AS student_name,
+      COALESCE(u.email, ms.student_email) AS student_email,
+      COALESCE(u.student_id, ms.student_id) AS student_id,
+      COALESCE(u.parent_email, ms.parent_email) AS parent_email,
+      c.id AS class_id,
+      c.title AS class_name
+    FROM master_students ms
+    LEFT JOIN users u
+      ON LOWER(u.email) = LOWER(ms.student_email)
+     AND LOWER(COALESCE(u.role, '')) = 'student'
+    LEFT JOIN class_enrollments ce
+      ON ce.student_user_id = u.id
+    LEFT JOIN courses c
+      ON c.id = ce.class_id
+    WHERE TRIM(ms.current_grade::TEXT) = '11'
+      AND COALESCE(ms.student_email, '') <> ''
+    ORDER BY COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), ms.display_name) ASC, c.title ASC NULLS LAST, ms.pen ASC
+    `
+  );
+
+  return {
+    source: "grade_11_fallback",
+    rows: grade11StudentsResult.rows,
+    studentUserIds: [...new Set(grade11StudentsResult.rows.map((row) => row.student_user_id).filter(Boolean))],
+  };
+}
+
+
+/* OBSERVER GRADE 11 ROSTER CANDIDATES - HOMEROOM SELF-LINKING V1 */
+app.get("/api/observers/:email/grade-roster", async (req, res) => {
+  try {
+    await ensureStudentInfoColumns();
+
+    const observerEmail = String(req.params.email || "").trim().toLowerCase();
+    const currentGrade = Number(req.query.current_grade || 11);
+    const search = String(req.query.search || "").trim().toLowerCase();
+
+    if (!observerEmail) {
+      return res.status(400).json({ error: "Observer email is required" });
+    }
+
+    if (currentGrade !== 11) {
+      return res.status(403).json({ error: "Observer roster self-linking is limited to Grade 11 in V1." });
+    }
+
+    const observerResult = await pool.query(
+      `
+      SELECT id, name, email, role
+      FROM users
+      WHERE LOWER(email) = $1
+        AND LOWER(COALESCE(role, '')) IN ('observer', 'parent')
+      LIMIT 1
+      `,
+      [observerEmail]
+    );
+
+    if (observerResult.rows.length === 0) {
+      return res.status(404).json({ error: "Observer user not found" });
+    }
+
+    const values = [currentGrade, observerResult.rows[0].id];
+    const filters = [
+      "TRIM(ms.current_grade::TEXT) = $1::TEXT",
+      "LOWER(COALESCE(ms.status, 'active')) = 'active'",
+      "COALESCE(ms.student_email, '') <> ''"
+    ];
+
+    if (search) {
+      values.push(`%${search}%`);
+      filters.push(`LOWER(COALESCE(ms.display_name, '') || ' ' || COALESCE(ms.student_email, '') || ' ' || COALESCE(ms.student_id, '') || ' ' || COALESCE(ms.pen, '')) LIKE $${values.length}`);
+    }
+
+    const result = await pool.query(
+      `
+      SELECT
+        ms.id AS master_student_id,
+        ms.pen,
+        ms.student_id,
+        ms.display_name,
+        ms.student_email,
+        ms.parent_email,
+        ms.current_grade,
+        ms.current_homeform,
+        u.id AS student_user_id,
+        CASE WHEN osl.id IS NULL THEN false ELSE true END AS already_linked
+      FROM master_students ms
+      LEFT JOIN users u
+        ON LOWER(u.email) = LOWER(ms.student_email)
+       AND LOWER(COALESCE(u.role, '')) = 'student'
+      LEFT JOIN observer_student_links osl
+        ON osl.student_user_id = u.id
+       AND osl.observer_user_id = $2
+      WHERE ${filters.join(" AND ")}
+      ORDER BY ms.current_homeform ASC NULLS LAST, ms.display_name ASC, ms.pen ASC
+      LIMIT 300
+      `,
+      values
+    );
+
+    return res.json({
+      success: true,
+      observer: observerResult.rows[0],
+      current_grade: currentGrade,
+      students: result.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/observers/:email/grade-roster failed:", err);
+    return res.status(500).json({ error: "Failed to load observer grade roster" });
+  }
+});
+
+/* OBSERVER SAVE GRADE 11 STUDENT LINKS - HOMEROOM SELF-LINKING V1 */
+app.post("/api/observers/:email/grade-roster-links", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureStudentInfoColumns();
+
+    const observerEmail = String(req.params.email || "").trim().toLowerCase();
+    const currentGrade = Number(req.body?.current_grade || 11);
+    const requestedMasterStudentIds = Array.isArray(req.body?.masterStudentIds)
+      ? req.body.masterStudentIds.map(Number).filter(Boolean)
+      : [];
+
+    if (!observerEmail) {
+      return res.status(400).json({ error: "Observer email is required" });
+    }
+
+    if (currentGrade !== 11) {
+      return res.status(403).json({ error: "Observer roster self-linking is limited to Grade 11 in V1." });
+    }
+
+    const uniqueMasterStudentIds = [...new Set(requestedMasterStudentIds)];
+
+    const observerResult = await client.query(
+      `
+      SELECT id, name, email, role
+      FROM users
+      WHERE LOWER(email) = $1
+        AND LOWER(COALESCE(role, '')) IN ('observer', 'parent')
+      LIMIT 1
+      `,
+      [observerEmail]
+    );
+
+    if (observerResult.rows.length === 0) {
+      return res.status(404).json({ error: "Observer user not found" });
+    }
+
+    const masterStudentsResult = uniqueMasterStudentIds.length > 0
+      ? await client.query(
+          `
+          SELECT
+            id,
+            display_name,
+            student_email,
+            parent_email,
+            student_id,
+            current_grade
+          FROM master_students
+          WHERE id = ANY($1::int[])
+            AND TRIM(current_grade::TEXT) = $2::TEXT
+            AND LOWER(COALESCE(status, 'active')) = 'active'
+            AND COALESCE(student_email, '') <> ''
+          ORDER BY display_name ASC, pen ASC
+          `,
+          [uniqueMasterStudentIds, currentGrade]
+        )
+      : { rows: [] };
+
+    if (masterStudentsResult.rows.length !== uniqueMasterStudentIds.length) {
+      return res.status(400).json({
+        error: "One or more selected students are not valid Grade 11 roster students.",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const linkedStudentIds = [];
+
+    for (const masterStudent of masterStudentsResult.rows) {
+      const displayName = String(masterStudent.display_name || "").trim() || "Student User";
+      const firstName = displayName.split(/\s+/)[0] || "Student";
+      const lastName = displayName.split(/\s+/).slice(1).join(" ") || "User";
+      const studentEmail = String(masterStudent.student_email || "").trim().toLowerCase();
+
+      const userResult = await client.query(
+        `
+        INSERT INTO users (name, first_name, last_name, email, role, parent_email, student_id, password_hash)
+        VALUES ($1, $2, $3, $4, 'student', $5, $6, 'STUDENT_PENDING_PASSWORD')
+        ON CONFLICT (email) DO UPDATE
+        SET name = EXCLUDED.name,
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
+            role = 'student',
+            parent_email = COALESCE(EXCLUDED.parent_email, users.parent_email),
+            student_id = COALESCE(EXCLUDED.student_id, users.student_id),
+            password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)
+        RETURNING id
+        `,
+        [
+          displayName,
+          firstName,
+          lastName,
+          studentEmail,
+          masterStudent.parent_email || null,
+          masterStudent.student_id || null,
+        ]
+      );
+
+      const studentUserId = userResult.rows[0]?.id;
+
+      if (studentUserId) {
+        linkedStudentIds.push(studentUserId);
+
+        await client.query(
+          `
+          INSERT INTO observer_student_links (
+            observer_user_id,
+            student_user_id,
+            relationship,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, 'chinese_homeroom_teacher', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT (observer_user_id, student_user_id)
+          DO UPDATE SET
+            relationship = EXCLUDED.relationship,
+            updated_at = CURRENT_TIMESTAMP
+          `,
+          [observerResult.rows[0].id, studentUserId]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      observer: observerResult.rows[0],
+      current_grade: currentGrade,
+      linkedStudentIds,
+      linkedCount: linkedStudentIds.length,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("POST /api/observers/:email/grade-roster-links failed:", err);
+    return res.status(500).json({ error: "Failed to save observer grade roster links" });
+  } finally {
+    client.release();
+  }
+});
+
+
 app.get("/api/observers/:email/dashboard", async (req, res) => {
   try {
     await ensureStudentInfoColumns();
@@ -2615,105 +3100,64 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
       [observerEmail]
     );
 
-    let studentsResult = await pool.query(
-      `
-      SELECT
-        u.id AS student_user_id,
-        CONCAT(u.first_name, ' ', u.last_name) AS student_name,
-        u.email AS student_email,
-        u.student_id,
-        u.parent_email,
-        c.id AS class_id,
-        c.title AS class_name
-      FROM users u
-      LEFT JOIN class_enrollments ce
-        ON ce.student_user_id = u.id
-      LEFT JOIN courses c
-        ON c.id = ce.class_id
-      WHERE LOWER(COALESCE(u.parent_email, '')) = $1
-        AND LOWER(COALESCE(u.role, '')) = 'student'
-      ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC
-      `,
-      [observerEmail]
-    );
+    const observerStudents = await getObserverStudents(observerEmail);
+    const studentsResult = { rows: observerStudents.rows };
 
-    if (studentsResult.rows.length === 0) {
-      studentsResult = await pool.query(
+    let submissionsResult = { rows: [] };
+
+    if (observerStudents.studentUserIds.length > 0) {
+      submissionsResult = await pool.query(
         `
         SELECT
-          u.id AS student_user_id,
-          COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), ms.display_name) AS student_name,
-          COALESCE(u.email, ms.student_email) AS student_email,
-          COALESCE(u.student_id, ms.student_id) AS student_id,
-          COALESCE(u.parent_email, ms.parent_email) AS parent_email,
+          s.id,
+          s.assignment_id,
+          a.title AS assignment_title,
           c.id AS class_id,
-          c.title AS class_name
-        FROM master_students ms
-        LEFT JOIN users u
-          ON LOWER(u.email) = LOWER(ms.student_email)
-         AND LOWER(COALESCE(u.role, '')) = 'student'
-        LEFT JOIN class_enrollments ce
-          ON ce.student_user_id = u.id
+          c.title AS class_name,
+          CONCAT(u.first_name, ' ', u.last_name) AS student_name,
+          u.email AS student_email,
+          s.content,
+          NULL AS score,
+          NULL AS grade,
+          NULL AS feedback,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', sa.id,
+                'file_name', sa.original_name,
+                'file_path', sa.file_path
+              )
+            ) FILTER (WHERE sa.id IS NOT NULL),
+            '[]'
+          ) AS files
+        FROM users u
+        JOIN submissions s
+          ON s.student_id = u.id
+        JOIN assignments a
+          ON a.id = s.assignment_id
         LEFT JOIN courses c
-          ON c.id = ce.class_id
-        WHERE TRIM(ms.current_grade::TEXT) = '11'
-          AND COALESCE(ms.student_email, '') <> ''
-        ORDER BY COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), ms.display_name) ASC, c.title ASC NULLS LAST, ms.pen ASC
-        `
+          ON c.id = a.class_id
+        LEFT JOIN submission_attachments sa
+          ON sa.submission_id = s.id
+        WHERE u.id = ANY($1::int[])
+          AND LOWER(COALESCE(u.role, '')) = 'student'
+        GROUP BY
+          s.id,
+          s.assignment_id,
+          a.title,
+          c.id,
+          c.title,
+          u.first_name,
+          u.last_name,
+          u.email,
+          s.content
+        ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC, a.title ASC
+        `,
+        [observerStudents.studentUserIds]
       );
     }
 
-    let submissionsResult = await pool.query(
-      `
-      SELECT
-        s.id,
-        s.assignment_id,
-        a.title AS assignment_title,
-        c.id AS class_id,
-        c.title AS class_name,
-        CONCAT(u.first_name, ' ', u.last_name) AS student_name,
-        u.email AS student_email,
-        s.content,
-        NULL AS score,
-        NULL AS grade,
-        NULL AS feedback,
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'id', sa.id,
-              'file_name', sa.original_name,
-              'file_path', sa.file_path
-            )
-          ) FILTER (WHERE sa.id IS NOT NULL),
-          '[]'
-        ) AS files
-      FROM users u
-      JOIN submissions s
-        ON s.user_id = u.id
-      JOIN assignments a
-        ON a.id = s.assignment_id
-      LEFT JOIN courses c
-        ON c.id = a.class_id
-      LEFT JOIN submission_attachments sa
-        ON sa.submission_id = s.id
-      WHERE LOWER(COALESCE(u.parent_email, '')) = $1
-        AND LOWER(COALESCE(u.role, '')) = 'student'
-      GROUP BY
-        s.id,
-        s.assignment_id,
-        a.title,
-        c.id,
-        c.title,
-        u.first_name,
-        u.last_name,
-        u.email,
-        s.content
-      ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC, a.title ASC
-      `,
-      [observerEmail]
-    );
-
-    if (submissionsResult.rows.length === 0) {
+    if (submissionsResult.rows.length === 0 && observerStudents.source === "grade_11_fallback") {
       submissionsResult = await pool.query(
         `
         SELECT
@@ -2742,7 +3186,7 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
           ON LOWER(u.email) = LOWER(ms.student_email)
          AND LOWER(COALESCE(u.role, '')) = 'student'
         JOIN submissions s
-          ON s.user_id = u.id
+          ON s.student_id = u.id
         JOIN assignments a
           ON a.id = s.assignment_id
         LEFT JOIN courses c
@@ -7067,9 +7511,11 @@ app.post("/api/teachers", async (req, res) => {
       return res.status(400).json({ error: "Teacher email is required" });
     }
 
-    const nameParts = name.split(/\s+/).filter(Boolean);
+    const cleanName = name.trim();
+    const nameParts = cleanName.split(/\s+/).filter(Boolean);
     const firstName = nameParts[0] || "Teacher";
     const lastName = nameParts.slice(1).join(" ") || "User";
+    const fullName = `${firstName} ${lastName}`.trim();
 
     const existingUserResult = await pool.query(
       `
@@ -7085,11 +7531,12 @@ app.post("/api/teachers", async (req, res) => {
       const updatedResult = await pool.query(
         `
         UPDATE users
-        SET first_name = $1,
-            last_name = $2,
+        SET name = $1,
+            first_name = $2,
+            last_name = $3,
             role = 'teacher',
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
+        WHERE id = $4
         RETURNING
           id,
           CONCAT(first_name, ' ', last_name) AS name,
@@ -7099,7 +7546,7 @@ app.post("/api/teachers", async (req, res) => {
           role,
           created_at
         `,
-        [firstName, lastName, existingUserResult.rows[0].id]
+        [fullName, firstName, lastName, existingUserResult.rows[0].id]
       );
 
       return res.json({
@@ -7111,8 +7558,8 @@ app.post("/api/teachers", async (req, res) => {
 
     const insertedResult = await pool.query(
       `
-      INSERT INTO users (first_name, last_name, email, role)
-      VALUES ($1, $2, $3, 'teacher')
+      INSERT INTO users (name, first_name, last_name, email, role, password_hash)
+      VALUES ($1, $2, $3, $4, 'teacher', 'TEACHER_PENDING_PASSWORD')
       RETURNING
         id,
         CONCAT(first_name, ' ', last_name) AS name,
@@ -7122,7 +7569,7 @@ app.post("/api/teachers", async (req, res) => {
         role,
         created_at
       `,
-      [firstName, lastName, email]
+      [fullName, firstName, lastName, email]
     );
 
     return res.json({
@@ -7133,6 +7580,100 @@ app.post("/api/teachers", async (req, res) => {
   } catch (err) {
     console.error("POST /api/teachers failed:", err);
     return res.status(500).json({ error: "Failed to create teacher" });
+  }
+});
+
+/* CREATE STUDENT */
+app.post("/api/students", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const studentId = String(req.body.student_id || "").trim();
+    const parentEmail = String(req.body.parent_email || "").trim().toLowerCase();
+
+    if (!name) {
+      return res.status(400).json({ error: "Student name is required" });
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: "Student email is required" });
+    }
+
+    const cleanName = name.trim();
+    const nameParts = cleanName.split(/\s+/).filter(Boolean);
+    const firstName = nameParts[0] || "Student";
+    const lastName = nameParts.slice(1).join(" ") || "User";
+    const fullName = `${firstName} ${lastName}`.trim();
+
+    const existingUserResult = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(email) = $1
+      LIMIT 1
+      `,
+      [email]
+    );
+
+    if (existingUserResult.rows.length > 0) {
+      const updatedResult = await pool.query(
+        `
+        UPDATE users
+        SET name = $1,
+            first_name = $2,
+            last_name = $3,
+            role = 'student',
+            student_id = $4,
+            parent_email = $5,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $6
+        RETURNING
+          id,
+          CONCAT(first_name, ' ', last_name) AS name,
+          first_name,
+          last_name,
+          email,
+          role,
+          student_id,
+          parent_email,
+          created_at
+        `,
+        [fullName, firstName, lastName, studentId || null, parentEmail || null, existingUserResult.rows[0].id]
+      );
+
+      return res.json({
+        success: true,
+        action: "updated_existing_user_to_student",
+        student: updatedResult.rows[0],
+      });
+    }
+
+    const insertedResult = await pool.query(
+      `
+      INSERT INTO users (name, first_name, last_name, email, role, student_id, parent_email, password_hash)
+      VALUES ($1, $2, $3, $4, 'student', $5, $6, 'STUDENT_PENDING_PASSWORD')
+      RETURNING
+        id,
+        CONCAT(first_name, ' ', last_name) AS name,
+        first_name,
+        last_name,
+        email,
+        role,
+        student_id,
+        parent_email,
+        created_at
+      `,
+      [fullName, firstName, lastName, email, studentId || null, parentEmail || null]
+    );
+
+    return res.json({
+      success: true,
+      action: "created_student",
+      student: insertedResult.rows[0],
+    });
+  } catch (err) {
+    console.error("POST /api/students failed:", err);
+    return res.status(500).json({ error: "Failed to create student" });
   }
 });
 
@@ -7209,16 +7750,16 @@ app.get("/api/teachers/:teacherId/dashboard", async (req, res) => {
           s.id,
           a.class_id,
           c.title AS course_title,
-          COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'Unknown student') AS student_name,
-          u.email AS student_email,
-          NULL AS score,
-          NULL AS grade,
-          NULL AS rubric_selection
+          COALESCE(NULLIF(TRIM(s.student_name), ''), NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), s.student_email, 'Unknown student') AS student_name,
+          COALESCE(NULLIF(TRIM(s.student_email), ''), u.email, '') AS student_email,
+          s.score,
+          s.grade,
+          s.rubric_selection
         FROM submissions s
         JOIN assignments a
           ON a.id = s.assignment_id
         LEFT JOIN users u
-          ON u.id = s.user_id
+          ON LOWER(u.email) = LOWER(s.student_email)
         LEFT JOIN courses c
           ON c.id = a.class_id
         WHERE a.class_id = ANY($1::int[])
@@ -7788,21 +8329,27 @@ app.post("/api/class-roster/:courseId/students", async (req, res) => {
       return res.status(404).json({ error: "Course not found" });
     }
 
+    const firstName = name.split(/\s+/)[0] || "Student";
+    const lastName = name.split(/\s+/).slice(1).join(" ") || "User";
+
     const userResult = await pool.query(
       `
-      INSERT INTO users (first_name, last_name, email, role, parent_email, student_id)
-      VALUES ($1, $2, $3, 'student', $4, $5)
+      INSERT INTO users (name, first_name, last_name, email, role, parent_email, student_id, password_hash)
+      VALUES ($1, $2, $3, $4, 'student', $5, $6, 'STUDENT_PENDING_PASSWORD')
       ON CONFLICT (email) DO UPDATE
-      SET first_name = EXCLUDED.first_name,
+      SET name = EXCLUDED.name,
+          first_name = EXCLUDED.first_name,
           last_name = EXCLUDED.last_name,
           role = 'student',
           parent_email = EXCLUDED.parent_email,
-          student_id = EXCLUDED.student_id
-      RETURNING id, CONCAT(first_name, ' ', last_name) AS name, email, parent_email, student_id
+          student_id = EXCLUDED.student_id,
+          password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)
+      RETURNING id, name, email, parent_email, student_id
       `,
       [
-        (name.split(/\s+/)[0] || "Student"),
-        (name.split(/\s+/).slice(1).join(" ") || "User"),
+        name,
+        firstName,
+        lastName,
         email,
         parentEmail || null,
         studentId || null

@@ -2,6 +2,13 @@ import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import API_BASE from "../../apiBase"
 
+const emptyEnrollForm = {
+  name: "",
+  email: "",
+  student_id: "",
+  parent_email: "",
+}
+
 export default function AdminCourseStudentsPage() {
   const { courseId } = useParams()
 
@@ -11,44 +18,106 @@ export default function AdminCourseStudentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
+  const [enrollForm, setEnrollForm] = useState(emptyEnrollForm)
+  const [enrollMessage, setEnrollMessage] = useState("")
+  const [enrollError, setEnrollError] = useState("")
+  const [enrolling, setEnrolling] = useState(false)
+
+  async function loadStudents() {
+    try {
+      setLoading(true)
+      setError("")
+
+      const response = await fetch(`${API_BASE}/api/admin/courses/${courseId}/students`)
+      const data = await response.json()
+
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || "Failed to load course students")
+      }
+
+      setCourse(data?.course || null)
+      setStudents(Array.isArray(data?.students) ? data.students : [])
+    } catch (err) {
+      setError(err.message || "Failed to load course students")
+      setCourse(null)
+      setStudents([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     let isCancelled = false
 
-    async function loadStudents() {
-      try {
-        setLoading(true)
-        setError("")
-
-        const response = await fetch(`${API_BASE}/api/admin/courses/${courseId}/students`)
-        const data = await response.json()
-
-        if (!response.ok || data?.success === false) {
-          throw new Error(data?.error || "Failed to load course students")
-        }
-
-        if (!isCancelled) {
-          setCourse(data?.course || null)
-          setStudents(Array.isArray(data?.students) ? data.students : [])
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          setError(err.message || "Failed to load course students")
-          setCourse(null)
-          setStudents([])
-        }
-      } finally {
-        if (!isCancelled) {
-          setLoading(false)
-        }
-      }
+    async function loadSafely() {
+      if (isCancelled) return
+      await loadStudents()
     }
 
-    loadStudents()
+    loadSafely()
 
     return () => {
       isCancelled = true
     }
   }, [courseId])
+
+  function updateEnrollForm(field, value) {
+    setEnrollForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+    setEnrollMessage("")
+    setEnrollError("")
+  }
+
+  async function handleEnrollStudent(event) {
+    event.preventDefault()
+
+    const cleanStudent = {
+      name: String(enrollForm.name || "").trim(),
+      email: String(enrollForm.email || "").trim().toLowerCase(),
+      student_id: String(enrollForm.student_id || "").trim(),
+      parent_email: String(enrollForm.parent_email || "").trim().toLowerCase(),
+    }
+
+    if (!cleanStudent.name) {
+      setEnrollError("Student name is required.")
+      return
+    }
+
+    if (!cleanStudent.email) {
+      setEnrollError("Student email is required.")
+      return
+    }
+
+    try {
+      setEnrolling(true)
+      setEnrollMessage("")
+      setEnrollError("")
+
+      const response = await fetch(`${API_BASE}/api/class-roster/${courseId}/students`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(cleanStudent),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to enroll student")
+      }
+
+      setEnrollForm(emptyEnrollForm)
+      setEnrollMessage(data?.message || "Student enrolled successfully.")
+      await loadStudents()
+    } catch (err) {
+      setEnrollError(err.message || "Failed to enroll student.")
+    } finally {
+      setEnrolling(false)
+    }
+  }
 
   const filteredStudents = useMemo(() => {
     const query = searchText.trim().toLowerCase()
@@ -102,6 +171,73 @@ export default function AdminCourseStudentsPage() {
               <div style={summaryValueStyle}>{filteredStudents.length}</div>
             </div>
           </div>
+
+          <form onSubmit={handleEnrollStudent} style={formBoxStyle}>
+            <h2 style={{ margin: "0 0 8px 0", fontSize: "22px", color: "#111827" }}>
+              Enroll Student in This Course
+            </h2>
+
+            <p style={{ margin: "0 0 16px 0", color: "#4b5563", lineHeight: 1.5 }}>
+              Add an existing student or create/enroll a student directly into this course roster.
+            </p>
+
+            <div style={formGridStyle}>
+              <div>
+                <label style={searchLabelStyle}>Student Name</label>
+                <input
+                  value={enrollForm.name}
+                  onChange={(event) => updateEnrollForm("name", event.target.value)}
+                  placeholder="Example: David Fang"
+                  disabled={enrolling}
+                  style={searchInputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={searchLabelStyle}>Student Email</label>
+                <input
+                  type="email"
+                  value={enrollForm.email}
+                  onChange={(event) => updateEnrollForm("email", event.target.value)}
+                  placeholder="student@school.ca"
+                  disabled={enrolling}
+                  style={searchInputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={searchLabelStyle}>Student ID</label>
+                <input
+                  value={enrollForm.student_id}
+                  onChange={(event) => updateEnrollForm("student_id", event.target.value)}
+                  placeholder="Optional student ID"
+                  disabled={enrolling}
+                  style={searchInputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={searchLabelStyle}>Parent Email</label>
+                <input
+                  type="email"
+                  value={enrollForm.parent_email}
+                  onChange={(event) => updateEnrollForm("parent_email", event.target.value)}
+                  placeholder="Optional parent email"
+                  disabled={enrolling}
+                  style={searchInputStyle}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginTop: "16px" }}>
+              <button type="submit" disabled={enrolling} style={primaryButtonStyle}>
+                {enrolling ? "Enrolling Student..." : "Enroll Student"}
+              </button>
+            </div>
+
+            {enrollMessage ? <div style={noticeStyle}>{enrollMessage}</div> : null}
+            {enrollError ? <div style={errorStyle}>{enrollError}</div> : null}
+          </form>
 
           <div style={searchBoxStyle}>
             <label style={searchLabelStyle}>Search students</label>
@@ -200,6 +336,20 @@ const summaryValueStyle = {
   color: "#111827",
 }
 
+const formBoxStyle = {
+  marginTop: "18px",
+  background: "white",
+  border: "1px solid #d7d7d7",
+  borderRadius: "14px",
+  padding: "18px",
+}
+
+const formGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: "14px",
+}
+
 const searchBoxStyle = {
   marginTop: "18px",
   background: "white",
@@ -224,6 +374,17 @@ const searchInputStyle = {
   padding: "11px 12px",
   fontSize: "16px",
   boxSizing: "border-box",
+}
+
+const primaryButtonStyle = {
+  border: "1px solid #111827",
+  background: "#111827",
+  color: "white",
+  borderRadius: "10px",
+  padding: "11px 16px",
+  fontSize: "15px",
+  fontWeight: 800,
+  cursor: "pointer",
 }
 
 const studentListStyle = {
