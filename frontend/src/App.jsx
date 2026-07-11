@@ -21,6 +21,7 @@ import LoginPage from "./pages/LoginPage.jsx";
 import ObserverPage from "./pages/ObserverPage.jsx";
 import ParentDashboardPage from "./pages/ParentDashboardPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
+import RubricRepositoryPage from "./pages/RubricRepositoryPage.jsx";
 import StudentDashboardPage from "./pages/StudentDashboardPage.jsx";
 import StudentImportPage from "./pages/StudentImportPage.jsx";
 import StudentLearningPathsPage from "./pages/StudentLearningPathsPage.jsx";
@@ -37,6 +38,13 @@ import AdminCourseLearningPathsPage from "./pages/admin/AdminCourseLearningPaths
 import AdminCourseLessonsPage from "./pages/admin/AdminCourseLessonsPage.jsx";
 import AdminCourseStudentsPage from "./pages/admin/AdminCourseStudentsPage.jsx";
 import AdminCourseTeacherPage from "./pages/admin/AdminCourseTeacherPage.jsx";
+import AdminTeachersPage from "./pages/admin/AdminTeachersPage.jsx";
+import AdminStudentsPage from "./pages/admin/AdminStudentsPage.jsx";
+import AdminGradebooksPage from "./pages/admin/AdminGradebooksPage.jsx";
+import AdminReportsPage from "./pages/admin/AdminReportsPage.jsx";
+import AdminAnalyticsPage from "./pages/admin/AdminAnalyticsPage.jsx";
+import AdminSchoolSettingsPage from "./pages/admin/AdminSchoolSettingsPage.jsx";
+import AdminSystemPage from "./pages/admin/AdminSystemPage.jsx";
 
 function LoginRoute() {
   const { user } = useAuth();
@@ -112,6 +120,7 @@ function App() {
         <Route path="/assignments" element={<AssignmentsPage />} />
         <Route path="/gradebook" element={<GradebookPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/rubric-repository" element={<RubricRepositoryPage />} />
         <Route path="/timetable-builder" element={<TimetableBuilderPage />} />
         <Route path="/student-import" element={<StudentImportPage />} />
         <Route path="/homeform-assignment" element={<HomeformAssignmentPage />} />
@@ -125,6 +134,14 @@ function App() {
       <Route element={<AdminProtectedLayout />}>
         <Route path="/admin" element={<AdminDashboardPage />} />
         <Route path="/admin/courses" element={<AdminCoursesPage />} />
+        <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/teachers" element={<AdminTeachersPage />} />
+        <Route path="/admin/students" element={<AdminStudentsPage />} />
+        <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
+        <Route path="/admin/reports" element={<AdminReportsPage />} />
+        <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
+        <Route path="/admin/settings" element={<AdminSchoolSettingsPage />} />
+        <Route path="/admin/system" element={<AdminSystemPage />} />
         <Route path="/admin/courses/:courseName" element={<AdminCourseWorkspacePage />} />
         <Route path="/admin/courses/:courseName/assignments" element={<CourseAssignmentsPage />} />
         <Route path="/admin/courses/:courseId/learning-paths" element={<AdminCourseLearningPathsPage />} />

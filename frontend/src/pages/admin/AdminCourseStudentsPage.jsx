@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import API_BASE from "../../apiBase"
+import authFetch from "../../services/authFetch"
 
 const emptyEnrollForm = {
   name: "",
@@ -28,7 +28,7 @@ export default function AdminCourseStudentsPage() {
       setLoading(true)
       setError("")
 
-      const response = await fetch(`${API_BASE}/api/admin/courses/${courseId}/students`)
+      const response = await authFetch(`/api/admin/courses/${courseId}/students`)
       const data = await response.json()
 
       if (!response.ok || data?.success === false) {
@@ -95,7 +95,7 @@ export default function AdminCourseStudentsPage() {
       setEnrollMessage("")
       setEnrollError("")
 
-      const response = await fetch(`${API_BASE}/api/class-roster/${courseId}/students`, {
+      const response = await authFetch(`/api/class-roster/${courseId}/students`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

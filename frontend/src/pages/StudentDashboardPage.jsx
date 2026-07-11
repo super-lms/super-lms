@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx"
 import StudentCourseCard from "../components/student/StudentCourseCard.jsx"
 import StudentSummaryCards from "../components/student/StudentSummaryCards.jsx"
@@ -615,8 +616,8 @@ export default function StudentDashboardPage() {
         const results = await Promise.all(
           assignmentsNeedingStatus.map(async (assignment) => {
             const assignmentId = String(assignment.id)
-            const response = await fetch(
-              `${API_BASE}/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
+            const response = await authFetch(
+              `/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
             )
             const data = await response.json()
 
@@ -692,8 +693,8 @@ export default function StudentDashboardPage() {
     setAttachmentErrorText("")
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/student-attachments?student_email=${encodeURIComponent(studentEmail)}`
+      const response = await authFetch(
+        `/api/assignments/${assignmentId}/student-attachments?student_email=${encodeURIComponent(studentEmail)}`
       )
       const data = await response.json()
       console.log("SAVE SUBMISSION RESPONSE", response.status, data)
@@ -733,8 +734,8 @@ export default function StudentDashboardPage() {
     }
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
+      const response = await authFetch(
+        `/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
       )
       const data = await response.json()
 
@@ -782,7 +783,7 @@ export default function StudentDashboardPage() {
       setAttachmentErrorText("")
       setAttachmentSuccessText("")
 
-      const response = await fetch(`${API_BASE}/api/student-attachments/${attachmentId}`, {
+      const response = await authFetch(`/api/student-attachments/${attachmentId}`, {
         method: "DELETE",
       })
 
@@ -839,7 +840,7 @@ export default function StudentDashboardPage() {
     setAttachmentSuccessText("")
 
     try {
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/student-attachments`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}/student-attachments`, {
         method: "POST",
         body: formData,
       })
@@ -902,7 +903,7 @@ export default function StudentDashboardPage() {
     setSubmissionSaveMessage("")
 
     try {
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/student-submit`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}/student-submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

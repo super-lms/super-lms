@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import RawMarkEntryPanel from "./RawMarkEntryPanel";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import API_BASE from "../apiBase";
+import authFetch from "../services/authFetch";
 
 
 function ActionButton({
@@ -264,7 +265,7 @@ export default function AssignmentSpeedGradingPage() {
 
   async function loadGradebook(nextSelectedEmail = null) {
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE}/api/assignments/${assignmentId}/gradebook`
       );
 
@@ -296,7 +297,7 @@ export default function AssignmentSpeedGradingPage() {
     try {
       setRubricLoading(true);
 
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE}/api/assignments/${assignmentId}/kdu-rubric`
       );
 
@@ -321,7 +322,7 @@ export default function AssignmentSpeedGradingPage() {
     try {
       setFullRubricLoading(true);
 
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE}/api/assignments/${assignmentId}/full-kdu-rubric`
       );
 
@@ -354,7 +355,7 @@ export default function AssignmentSpeedGradingPage() {
       setSectionScoresLoading(true);
       setSectionScoresMessage("");
 
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}/section-scores`);
+      const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/section-scores`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -385,7 +386,7 @@ export default function AssignmentSpeedGradingPage() {
       setStudentAttachmentsLoading(true);
       setStudentAttachmentsMessage("");
 
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE}/api/assignments/${assignmentId}/student-attachments?student_email=${encodeURIComponent(cleanStudentEmail)}`
       );
 
@@ -443,7 +444,7 @@ export default function AssignmentSpeedGradingPage() {
       setDeletingAttachmentId(String(attachmentId));
       setStudentAttachmentsMessage("Deleting attachment...");
 
-      const res = await fetch(`${API_BASE}/api/student-attachments/${attachmentId}`, {
+      const res = await authFetch(`${API_BASE}/api/student-attachments/${attachmentId}`, {
         method: "DELETE",
       });
 
@@ -479,7 +480,7 @@ export default function AssignmentSpeedGradingPage() {
     }
 
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `${API_BASE}/api/assignments/${assignmentId}/gradebook`
       );
 
@@ -812,7 +813,7 @@ export default function AssignmentSpeedGradingPage() {
         setSaveToastTarget({ ...toastTarget, status: "Saving..." });
       }
 
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}/kdu-scores`, {
+      const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/kdu-scores`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

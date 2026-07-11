@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import API_BASE from "../../apiBase"
+import authFetch from "../../services/authFetch"
 
 const departmentRules = [
   {
@@ -42,7 +42,7 @@ export default function AdminCoursesPage() {
         setLoading(true)
         setError("")
 
-        const response = await fetch(`${API_BASE}/api/classes`)
+        const response = await authFetch("/api/classes")
         const data = await response.json()
 
         if (!response.ok) {

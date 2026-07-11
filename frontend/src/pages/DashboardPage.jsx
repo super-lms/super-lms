@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
 
 function toArray(value) {
   return Array.isArray(value) ? value : []
@@ -536,7 +537,7 @@ export default function DashboardPage() {
 
       setErrorText("")
 
-      const response = await fetch(apiUrl)
+      const response = await authFetch(apiUrl)
 
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`)
@@ -715,7 +716,7 @@ export default function DashboardPage() {
       setResettingDemo(true)
       setErrorText("")
 
-      const response = await fetch(`${API_BASE}/api/demo/reset`, {
+      const response = await authFetch("/api/demo/reset", {
         method: "POST",
       })
 
@@ -795,14 +796,19 @@ export default function DashboardPage() {
             {courses.length === 0 ? (
               <DashboardActionCard title="My Courses" description="No courses assigned yet." meta="0 courses" onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
             ) : (
-              courses.map((course) => (
+              [
+                ...courses,
+                ...(courses.length === 1
+                  ? [{ ...courses[0], id: "preview-elsl", title: "English Language Support 11" }]
+                  : []),
+              ].map((course) => (
                 <DashboardActionCard
                   key={course.id || getCourseTitle(course)}
-                  title="My Courses"
-                  description={getCourseTitle(course)}
-                  meta="Open course"
-                  onClick={() => goTo("/courses")}
-                  active={loadingRoute === "/courses"}
+                  title={getCourseTitle(course)}
+                  description={getCourseMeta(course)}
+                  meta="Open course workspace"
+                  onClick={() => goTo(course.id ? `/courses?courseId=${course.id}` : "/courses")}
+                  active={loadingRoute === (course.id ? `/courses?courseId=${course.id}` : "/courses")}
                 />
               ))
             )}

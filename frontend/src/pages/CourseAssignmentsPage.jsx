@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
 import AssignmentCardsView from "../components/courseAssignments/AssignmentCardsView"
 import TeachersPublishedAssignmentsView from "../components/courseAssignments/TeachersPublishedAssignmentsView"
 import TeacherCoachPanel from "../components/courseAssignments/TeacherCoachPanel"
@@ -30,8 +31,8 @@ export default function CourseAssignmentsPage() {
       setError("")
 
       const [classesRes, assignmentsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/classes`),
-        fetch(`${API_BASE}/api/assignments`),
+        authFetch("/api/classes"),
+        authFetch("/api/assignments"),
       ])
 
       const classesData = await classesRes.json()
@@ -54,7 +55,7 @@ export default function CourseAssignmentsPage() {
   }
 
   async function refreshAssignments() {
-    const assignmentsRes = await fetch(`${API_BASE}/api/assignments`)
+    const assignmentsRes = await authFetch("/api/assignments")
     const assignmentsData = await assignmentsRes.json()
 
     if (!assignmentsRes.ok) throw new Error(assignmentsData.error || "Failed to reload assignments")
@@ -206,7 +207,7 @@ export default function CourseAssignmentsPage() {
       setError("")
       setMessage("")
 
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/reorder`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction }),
@@ -261,7 +262,7 @@ export default function CourseAssignmentsPage() {
       setError("")
       setMessage("")
 
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/duplicate`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}/duplicate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -303,7 +304,7 @@ export default function CourseAssignmentsPage() {
       setError("")
       setMessage("")
 
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}`, {
         method: "DELETE",
       })
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import API_BASE from "../apiBase";
+import authFetch from "../services/authFetch";
 
 
 function convertPercentToLevel(earned, max) {
@@ -140,7 +141,7 @@ export default function RawMarkEntryPanel({
       setSaving(true);
       setMessage("Saving raw marks...");
 
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}/section-scores`, {
+      const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/section-scores`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

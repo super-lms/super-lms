@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
+import authFetch from "../services/authFetch"
 import API_BASE from "../apiBase"
 
 function toArray(value) {
@@ -48,6 +49,95 @@ function InfoLine({ label, value }) {
   )
 }
 
+const translations = {
+  en: {
+    observerPortal: "Observer Portal",
+    observerSubtitle: "Review linked students, course progress, teacher feedback, assignments, and learning evidence.",
+    logout: "Logout",
+    loadingPortal: "Loading observer portal...",
+    observerDashboard: "Observer Dashboard",
+    welcomeBack: "Welcome back",
+    linkedStudents: "Linked Students",
+    visibleAssignments: "Visible Assignments",
+    needsAttention: "Missing / Needs Attention",
+    averageScore: "Average Score",
+    quickActions: "Quick Actions",
+    viewStudents: "View Students",
+    viewStudentsHelp: "Open the full list of linked students.",
+    openStudents: "Open Students →",
+    needsAttentionTitle: "Needs Attention",
+    needsAttentionHelp: "Review missing, ungraded, or needs-attention work for linked students.",
+    reviewStudents: "Review",
+    recentFeedback: "Recent Feedback",
+    recentFeedbackHelp: "Review the latest teacher feedback across linked students.",
+    viewFeedback: "View Feedback →",
+    manageHomeroom: "Manage My Homeroom",
+    manageHomeroomHelp: "Select homeroom students from the official grade roster.",
+    openHomeroom: "Open Homeroom →",
+    recentActivity: "Recent Activity",
+    noRecentActivity: "No recent student work or feedback is visible yet.",
+    course: "Course",
+    assignment: "Assignment",
+    feedback: "Feedback",
+    studentActivityRecorded: "Student activity recorded.",
+
+    backToDashboard: "← Back to Dashboard",
+    backToStudents: "← Back to Students",
+    backToCourses: "← Back to Courses",
+
+    myStudents: "My Students",
+    communicationTools: "Communication Tools",
+    studentWorkSection: "Student Work, Grades, Feedback, and Attachments",
+
+    language: "Language",
+    english: "English",
+    chinese: "简体中文",
+  },
+  zh: {
+    observerPortal: "家长 / 班主任观察门户",
+    observerSubtitle: "查看关联学生、课程进度、教师反馈、作业和学习表现证据。",
+    logout: "退出登录",
+    loadingPortal: "正在加载观察门户...",
+    observerDashboard: "观察者仪表盘",
+    welcomeBack: "欢迎回来",
+    linkedStudents: "关联学生",
+    visibleAssignments: "可查看作业",
+    needsAttention: "缺交 / 需要关注",
+    averageScore: "平均分",
+    quickActions: "快捷操作",
+    viewStudents: "查看学生",
+    viewStudentsHelp: "打开完整的关联学生列表。",
+    openStudents: "打开学生列表 →",
+    needsAttentionTitle: "需要关注",
+    needsAttentionHelp: "只查看缺交、未评分或需要关注的学生作业。",
+    reviewStudents: "查看",
+    recentFeedback: "最近反馈",
+    recentFeedbackHelp: "查看关联学生的最新教师反馈。",
+    viewFeedback: "查看反馈 →",
+    manageHomeroom: "管理我的班级",
+    manageHomeroomHelp: "从官方年级名单中选择本班学生。",
+    openHomeroom: "打开班级管理 →",
+    recentActivity: "最近活动",
+    noRecentActivity: "目前还没有可查看的学生作业或反馈。",
+    course: "课程",
+    assignment: "作业",
+    feedback: "反馈",
+    studentActivityRecorded: "已记录学生学习活动。",
+
+    backToDashboard: "← 返回观察者仪表盘",
+    backToStudents: "← 返回学生列表",
+    backToCourses: "← 返回课程列表",
+
+    myStudents: "我的学生",
+    communicationTools: "沟通工具",
+    studentWorkSection: "学生作业、成绩、教师反馈与附件",
+
+    language: "语言",
+    english: "English",
+    chinese: "简体中文",
+  },
+}
+
 export default function ObserverPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -64,6 +154,8 @@ export default function ObserverPage() {
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("")
   const [viewMode, setViewMode] = useState("dashboard")
+  const [language, setLanguage] = useState("en")
+  const t = translations[language] || translations.en
 
   const [homeroomRoster, setHomeroomRoster] = useState([])
   const [homeroomSearch, setHomeroomSearch] = useState("")
@@ -91,8 +183,8 @@ export default function ObserverPage() {
         setLoading(true)
         setError("")
 
-        const response = await fetch(
-          `${API_BASE}/api/observers/${encodeURIComponent(user.email)}/dashboard`
+        const response = await authFetch(
+          `/api/observers/${encodeURIComponent(user.email)}/dashboard`
         )
 
         const data = await response.json().catch(() => null)
@@ -119,8 +211,8 @@ export default function ObserverPage() {
   async function refreshObserverDashboard() {
     if (!user?.email) return
 
-    const response = await fetch(
-      `${API_BASE}/api/observers/${encodeURIComponent(user.email)}/dashboard`
+    const response = await authFetch(
+      `/api/observers/${encodeURIComponent(user.email)}/dashboard`
     )
 
     const data = await response.json().catch(() => null)
@@ -144,8 +236,8 @@ export default function ObserverPage() {
       setHomeroomError("")
       setHomeroomMessage("")
 
-      const response = await fetch(
-        `${API_BASE}/api/observers/${encodeURIComponent(user.email)}/grade-roster?current_grade=11`
+      const response = await authFetch(
+        `/api/observers/${encodeURIComponent(user.email)}/grade-roster?current_grade=11`
       )
 
       const data = await response.json().catch(() => null)
@@ -525,8 +617,8 @@ export default function ObserverPage() {
       setHomeroomMessage("")
       setHomeroomError("")
 
-      const response = await fetch(
-        `${API_BASE}/api/observers/${encodeURIComponent(user.email)}/grade-roster-links`,
+      const response = await authFetch(
+        `/api/observers/${encodeURIComponent(user.email)}/grade-roster-links`,
         {
           method: "POST",
           headers: {
@@ -572,88 +664,102 @@ export default function ObserverPage() {
     <div className="page">
       <div style={topBarStyle}>
         <div>
-          <h1 style={{ marginBottom: "6px" }}>Observer Portal</h1>
+          <h1 style={{ marginBottom: "6px" }}>{t.observerPortal}</h1>
           <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-            Review linked students, course progress, teacher feedback, assignments, and learning evidence.
+            {t.observerSubtitle}
           </p>
         </div>
 
-        <button type="button" onClick={handleLogout} style={logoutButtonStyle}>
-          Logout
-        </button>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ fontWeight: 800 }}>{t.language}</label>
+          <select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value)}
+            style={languageSelectStyle}
+          >
+            <option value="en">{t.english}</option>
+            <option value="zh">{t.chinese}</option>
+          </select>
+
+          <button type="button" onClick={handleLogout} style={logoutButtonStyle}>
+            {t.logout}
+          </button>
+        </div>
       </div>
 
-      {loading ? <p>Loading observer portal...</p> : null}
+      {loading ? <p>{t.loadingPortal}</p> : null}
       {error ? <p style={{ color: "#991b1b" }}>{error}</p> : null}
 
       {!loading && !error && viewMode === "dashboard" ? (
         <div style={{ display: "grid", gap: "18px" }}>
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Observer Dashboard</h2>
+            <h2 style={sectionTitleStyle}>{t.observerDashboard}</h2>
             <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
-              Welcome back, {observerData.observer?.name || user?.email || "Observer"}.
+              {t.welcomeBack}, {observerData.observer?.name || user?.email || "Observer"}.
             </p>
 
             <div style={metricGridStyle}>
-              <MetricCard title="Linked Students" value={uniqueStudents.length} />
-              <MetricCard title="Visible Assignments" value={allVisibleSubmissions.length} />
-              <MetricCard title="Missing / Needs Attention" value={allMissingSubmissions.length} />
-              <MetricCard title="Average Score" value={allAverageScore === null ? "N/A" : `${allAverageScore}%`} />
+              <MetricCard title={t.linkedStudents} value={uniqueStudents.length} />
+              <MetricCard title={t.visibleAssignments} value={allVisibleSubmissions.length} />
+              <MetricCard title={t.needsAttention} value={allMissingSubmissions.length} />
+              <MetricCard title={t.averageScore} value={allAverageScore === null ? "N/A" : `${allAverageScore}%`} />
             </div>
           </section>
 
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Quick Actions</h2>
+            <h2 style={sectionTitleStyle}>{t.quickActions}</h2>
             <div style={cardGridStyle}>
               <Card onClick={viewStudents}>
-                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>View Students</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.viewStudents}</div>
                 <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                  Open the complete linked student list.
+                  {t.viewStudentsHelp}
                 </div>
-                <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Students →</div>
+                <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openStudents}</div>
               </Card>
 
               <Card onClick={viewAttention}>
-                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>Needs Attention</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.needsAttentionTitle}</div>
                 <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                  Show only students with missing, ungraded, or attention-needed work.
+                  {t.needsAttentionHelp}
                 </div>
-                <div style={{ marginTop: "12px", fontWeight: 800 }}>Review {attentionStudents.length} Student{attentionStudents.length === 1 ? "" : "s"} →</div>
+                <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.reviewStudents} {attentionStudents.length} Student{attentionStudents.length === 1 ? "" : "s"} →</div>
               </Card>
 
               <Card onClick={viewFeedback}>
-                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>Recent Feedback</div>
+                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.recentFeedback}</div>
                 <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                  Review the latest teacher feedback across linked students.
+                  {t.recentFeedbackHelp}
                 </div>
-                <div style={{ marginTop: "12px", fontWeight: 800 }}>View Feedback →</div>
+                <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.viewFeedback}</div>
               </Card>
 
-              <Card onClick={viewManageHomeroom}>
-                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>Manage My Homeroom</div>
-                <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                  Select students from the official Grade roster for your homeroom list.
-                </div>
-                <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Homeroom →</div>
-              </Card>
+              {observerData.observer?.relationship === "chinese_homeroom_teacher" ? (
+                <Card onClick={viewManageHomeroom}>
+                  <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.manageHomeroom}</div>
+                  <div style={{ marginTop: "8px", color: "#4b5563" }}>
+                    {t.manageHomeroomHelp}
+                  </div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openHomeroom}</div>
+                </Card>
+              ) : null}
             </div>
           </section>
 
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Recent Activity</h2>
+            <h2 style={sectionTitleStyle}>{t.recentActivity}</h2>
 
             {recentActivity.length === 0 ? (
-              <p>No recent student work or feedback is visible yet.</p>
+              <p>{t.noRecentActivity}</p>
             ) : (
               <div style={{ display: "grid", gap: "10px" }}>
                 {recentActivity.map((submission) => (
                   <Card key={`activity-${submission.id}`}>
                     <div style={{ fontWeight: 900 }}>{submission.student_name || "Student"}</div>
                     <div style={{ marginTop: "4px", color: "#4b5563" }}>
-                      {submission.class_name || "Course"} • {submission.assignment_title || "Assignment"}
+                      {submission.class_name || t.course} • {submission.assignment_title || t.assignment}
                     </div>
                     <div style={{ marginTop: "6px" }}>
-                      {submission.feedback ? `Feedback: ${submission.feedback}` : submission.content || "Student activity recorded."}
+                      {submission.feedback ? `Feedback: ${submission.feedback}` : submission.content || t.studentActivityRecorded}
                     </div>
                   </Card>
                 ))}
@@ -666,10 +772,10 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "attention" ? (
         <section style={sectionStyle}>
           <button type="button" onClick={backToDashboard} style={backButtonStyle}>
-            ← Back to Observer Dashboard
+            {t.backToDashboard}
           </button>
 
-          <h2 style={sectionTitleStyle}>Needs Attention</h2>
+          <h2 style={sectionTitleStyle}>{t.needsAttentionTitle}</h2>
 
           {attentionStudents.length === 0 ? (
             <p>No students currently have missing or ungraded work.</p>
@@ -695,20 +801,23 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "feedback" ? (
         <section style={sectionStyle}>
           <button type="button" onClick={backToDashboard} style={backButtonStyle}>
-            ← Back to Observer Dashboard
+            {t.backToDashboard}
           </button>
 
-          <h2 style={sectionTitleStyle}>Recent Feedback</h2>
+          <h2 style={sectionTitleStyle}>{t.recentFeedback}</h2>
 
           {feedbackItems.length === 0 ? (
-            <p>No teacher feedback is visible yet.</p>
+            <div style={emptyStateStyle}>
+              <div style={emptyStateTitleStyle}>No teacher feedback is visible yet.</div>
+              <p style={emptyStateTextStyle}>Feedback will appear here after teachers enter comments for linked student work.</p>
+            </div>
           ) : (
             <div style={{ display: "grid", gap: "12px" }}>
               {feedbackItems.map((submission) => (
                 <Card key={`feedback-${submission.id}`} onClick={() => openStudentByEmail(String(submission.student_email || "").trim().toLowerCase())}>
                   <div style={{ fontSize: "1.1rem", fontWeight: 900 }}>{submission.student_name || "Student"}</div>
                   <div style={{ marginTop: "4px", color: "#4b5563" }}>
-                    {submission.class_name || "Course"} • {submission.assignment_title || "Assignment"}
+                    {submission.class_name || t.course} • {submission.assignment_title || t.assignment}
                   </div>
                   <div style={{ marginTop: "8px", lineHeight: 1.5 }}>
                     {submission.feedback}
@@ -724,10 +833,10 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "manageHomeroom" ? (
         <section style={sectionStyle}>
           <button type="button" onClick={backToDashboard} style={backButtonStyle}>
-            ← Back to Observer Dashboard
+            {t.backToDashboard}
           </button>
 
-          <h2 style={sectionTitleStyle}>Manage My Homeroom</h2>
+          <h2 style={sectionTitleStyle}>{t.manageHomeroom}</h2>
 
           <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
             Select students from the official Grade {homeroomGrade || "11"} roster. This updates your linked student list.
@@ -756,7 +865,10 @@ export default function ObserverPage() {
           {homeroomMessage ? <p style={{ color: "#14532d", fontWeight: 800 }}>{homeroomMessage}</p> : null}
 
           {!homeroomLoading && filteredHomeroomRoster.length === 0 ? (
-            <p>No roster students found.</p>
+            <div style={emptyStateStyle}>
+              <div style={emptyStateTitleStyle}>No roster students found.</div>
+              <p style={emptyStateTextStyle}>Try adjusting the search terms, student ID, PEN, or homeform filter.</p>
+            </div>
           ) : null}
 
           {!homeroomLoading && filteredHomeroomRoster.length > 0 ? (
@@ -807,13 +919,16 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "students" ? (
         <section style={sectionStyle}>
           <button type="button" onClick={backToDashboard} style={backButtonStyle}>
-            ← Back to Observer Dashboard
+            {t.backToDashboard}
           </button>
 
-          <h2 style={sectionTitleStyle}>My Students</h2>
+          <h2 style={sectionTitleStyle}>{t.myStudents}</h2>
 
           {uniqueStudents.length === 0 ? (
-            <p>No linked students found. Ask the school office to link students to this observer email.</p>
+            <div style={emptyStateStyle}>
+              <div style={emptyStateTitleStyle}>No linked students found.</div>
+              <p style={emptyStateTextStyle}>Ask the school office to link students to this observer email. Once linked, students will appear here automatically.</p>
+            </div>
           ) : (
             <div style={cardGridStyle}>
               {uniqueStudents.map((student) => (
@@ -831,16 +946,20 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "courses" && selectedStudent ? (
         <section style={sectionStyle}>
           <button type="button" onClick={backToStudents} style={backButtonStyle}>
-            ← Back to Students
+            {t.backToStudents}
           </button>
 
+          <div style={contextLabelStyle}>Student</div>
           <h2 style={sectionTitleStyle}>{selectedStudent.student_name}</h2>
           <p style={{ marginTop: 0, color: "#4b5563" }}>
-            Choose a course to view progress, assignments, grades, feedback, and missing work.
+            Choose a course for this student to view progress, assignments, grades, feedback, and missing work.
           </p>
 
           {coursesForSelectedStudent.length === 0 ? (
-            <p>No courses found for this student.</p>
+            <div style={emptyStateStyle}>
+              <div style={emptyStateTitleStyle}>No courses found for this student.</div>
+              <p style={emptyStateTextStyle}>This student does not currently have visible course records for this observer account.</p>
+            </div>
           ) : (
             <div style={cardGridStyle}>
               {coursesForSelectedStudent.map((course) => (
@@ -860,13 +979,23 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "progress" && selectedStudent && selectedCourse ? (
         <div style={{ display: "grid", gap: "18px" }}>
           <section style={sectionStyle}>
-            <button type="button" onClick={backToCourses} style={backButtonStyle}>
-              ← Back to Courses
-            </button>
+            <div style={backButtonRowStyle}>
+              <button type="button" onClick={backToCourses} style={backButtonStyle}>
+                {t.backToCourses}
+              </button>
+              <button type="button" onClick={backToStudents} style={backButtonStyle}>
+                {t.backToStudents}
+              </button>
+            </div>
 
+            <div style={contextLabelStyle}>Course</div>
             <h2 style={sectionTitleStyle}>{selectedCourse.class_name}</h2>
+            <div style={{ marginBottom: "12px" }}>
+              <div style={contextLabelStyle}>Student</div>
+              <div style={{ fontSize: "1.05rem", fontWeight: 900 }}>{selectedStudent.student_name}</div>
+            </div>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
-              Progress view for {selectedStudent.student_name}.
+              Course progress, assignments, grades, feedback, and learning evidence for this student.
             </p>
 
             <div style={metricGridStyle}>
@@ -877,7 +1006,7 @@ export default function ObserverPage() {
           </section>
 
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Communication Tools</h2>
+            <h2 style={sectionTitleStyle}>{t.communicationTools}</h2>
             <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
               Create a quick student progress snapshot for parent communication.
             </p>
@@ -900,10 +1029,13 @@ export default function ObserverPage() {
           </section>
 
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Missing Work / Needs Attention</h2>
+            <h2 style={sectionTitleStyle}>{t.needsAttention}</h2>
 
             {missingSubmissions.length === 0 ? (
-              <p>No missing or ungraded work found for this course.</p>
+              <div style={emptyStateStyle}>
+              <div style={emptyStateTitleStyle}>No missing or ungraded work found for this course.</div>
+              <p style={emptyStateTextStyle}>There are no missing, ungraded, or needs-attention items currently visible for this course.</p>
+            </div>
             ) : (
               <div style={{ display: "grid", gap: "10px" }}>
                 {missingSubmissions.map((submission) => (
@@ -918,10 +1050,13 @@ export default function ObserverPage() {
           </section>
 
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Student Work, Grades, Feedback, and Attachments</h2>
+            <h2 style={sectionTitleStyle}>{t.studentWorkSection}</h2>
 
             {courseSubmissions.length === 0 ? (
-              <p>No assignments or submissions found for this course.</p>
+              <div style={emptyStateStyle}>
+              <div style={emptyStateTitleStyle}>No assignments or submissions found for this course.</div>
+              <p style={emptyStateTextStyle}>Assignments and learning evidence will appear here after the teacher publishes work or the student submits learning evidence.</p>
+            </div>
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
                 {courseSubmissions.map((submission) => (
@@ -1000,6 +1135,33 @@ const sectionTitleStyle = {
   fontSize: "1.35rem",
 }
 
+const contextLabelStyle = {
+  color: "#4b5563",
+  fontSize: "0.78rem",
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  marginBottom: "4px",
+}
+
+const emptyStateStyle = {
+  border: "1px dashed #cbd5e1",
+  borderRadius: "14px",
+  padding: "16px",
+  background: "#ffffff",
+}
+
+const emptyStateTitleStyle = {
+  fontWeight: 900,
+  marginBottom: "6px",
+}
+
+const emptyStateTextStyle = {
+  margin: 0,
+  color: "#4b5563",
+  lineHeight: 1.5,
+}
+
 const cardGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -1013,6 +1175,12 @@ const metricGridStyle = {
 }
 
 const buttonRowStyle = {
+  display: "flex",
+  gap: "10px",
+  flexWrap: "wrap",
+}
+
+const backButtonRowStyle = {
   display: "flex",
   gap: "10px",
   flexWrap: "wrap",
@@ -1046,6 +1214,16 @@ const checkboxCardStyle = {
   borderRadius: "14px",
   padding: "14px",
   background: "#ffffff",
+  cursor: "pointer",
+}
+
+const languageSelectStyle = {
+  border: "1px solid #111827",
+  background: "#ffffff",
+  color: "#111827",
+  borderRadius: "10px",
+  padding: "9px 12px",
+  fontWeight: 800,
   cursor: "pointer",
 }
 

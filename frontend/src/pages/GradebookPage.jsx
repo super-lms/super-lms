@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import API_BASE from "../apiBase";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
+import authFetch from "../services/authFetch";
 
 const QUICK_SCORES = [1, 2, 3, 4, 5, 6];
 
@@ -135,7 +135,7 @@ export default function GradebookPage() {
 
   async function loadCourses() {
     try {
-      const response = await fetch(`${API_BASE}/api/classes`);
+      const response = await authFetch("/api/classes");
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.error || "Failed to load classes");
@@ -158,8 +158,8 @@ export default function GradebookPage() {
     setStatus("Loading KDU gradebook...");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/classes/${courseId}/kdu-gradebook`
+      const response = await authFetch(
+        `/api/classes/${courseId}/kdu-gradebook`
       );
       const data = await response.json();
 
@@ -290,8 +290,8 @@ export default function GradebookPage() {
     setStatus(`Auto-saving KDU score for ${student.student_name}...`);
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/assignments/${assignment.id}/kdu-scores`,
+      const response = await authFetch(
+        `/api/assignments/${assignment.id}/kdu-scores`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

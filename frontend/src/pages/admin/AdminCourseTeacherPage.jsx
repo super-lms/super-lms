@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import API_BASE from "../../apiBase"
+import authFetch from "../../services/authFetch"
 
 export default function AdminCourseTeacherPage() {
   const { courseId } = useParams()
@@ -18,7 +18,7 @@ export default function AdminCourseTeacherPage() {
         setLoading(true)
         setError("")
 
-        const response = await fetch(`${API_BASE}/api/admin/courses/${courseId}/teacher`)
+        const response = await authFetch(`/api/admin/courses/${courseId}/teacher`)
         const data = await response.json()
 
         if (!response.ok || data?.success === false) {

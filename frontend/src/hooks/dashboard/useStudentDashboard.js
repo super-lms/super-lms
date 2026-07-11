@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import API_BASE from "../../apiBase"
+import authFetch from "../../services/authFetch"
 
 function normalizeStudentEmail(email) {
   return String(email || "").trim().toLowerCase()
@@ -52,7 +52,7 @@ export default function useStudentDashboard(userEmail) {
     setErrorText("")
 
     try {
-      const response = await fetch(`${API_BASE}/api/students/${encodeURIComponent(studentEmail)}/classes`)
+      const response = await authFetch(`/api/students/${encodeURIComponent(studentEmail)}/classes`)
       const data = await response.json().catch(() => [])
 
       if (!response.ok) {
@@ -99,8 +99,8 @@ export default function useStudentDashboard(userEmail) {
       setErrorText("")
 
       try {
-        const response = await fetch(
-          `${API_BASE}/api/students/${encodeURIComponent(studentEmail)}/courses/${encodeURIComponent(nextCourseId)}/dashboard`
+        const response = await authFetch(
+          `/api/students/${encodeURIComponent(studentEmail)}/courses/${encodeURIComponent(nextCourseId)}/dashboard`
         )
         const data = await response.json().catch(() => ({}))
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
 
 function SectionHeader({ title, subtitle, action }) {
   return (
@@ -389,7 +390,7 @@ export default function AssignmentsPage() {
   }
 
   function loadAssignments() {
-    return fetch(`${API_BASE}/api/assignments`)
+    return authFetch("/api/assignments")
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load assignments")
         return res.json()
@@ -405,7 +406,7 @@ export default function AssignmentsPage() {
       return Promise.resolve()
     }
 
-    return fetch(`${API_BASE}/api/students/${encodeURIComponent(user.email)}/assignments`)
+    return authFetch(`/api/students/${encodeURIComponent(user.email)}/assignments`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load student assignments")
         return res.json()
@@ -421,7 +422,7 @@ export default function AssignmentsPage() {
       return Promise.resolve()
     }
 
-    return fetch(`${API_BASE}/api/students/${encodeURIComponent(user.email)}/submissions`)
+    return authFetch(`/api/students/${encodeURIComponent(user.email)}/submissions`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load student submissions")
         return res.json()
@@ -439,7 +440,7 @@ export default function AssignmentsPage() {
 
     setRosterLoading(true)
 
-    return fetch(`${API_BASE}/api/class-roster/${classId}`)
+    return authFetch(`/api/class-roster/${classId}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load class roster")
         return res.json()
@@ -467,7 +468,7 @@ export default function AssignmentsPage() {
       return Promise.resolve()
     }
 
-    return fetch(`${API_BASE}/api/courses/${classId}/categories`)
+    return authFetch(`/api/courses/${classId}/categories`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load grading categories")
         return res.json()
@@ -485,7 +486,7 @@ export default function AssignmentsPage() {
 
         return Promise.all(
           nextCategories.map((category) =>
-            fetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
+            authFetch(`/api/categories/${category.id}/subcategories`)
               .then((res) => {
                 if (!res.ok) throw new Error(`Failed to load subcategories for category ${category.id}`)
                 return res.json()
@@ -506,7 +507,7 @@ export default function AssignmentsPage() {
   }
 
   function loadClasses() {
-    return fetch(`${API_BASE}/api/classes`)
+    return authFetch("/api/classes")
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load classes")
         return res.json()
@@ -577,7 +578,9 @@ export default function AssignmentsPage() {
             : String(visibleClasses[0].id)
           const validRequestedSection = ["roster", "create", "import", "current"].includes(String(requestedSection || ""))
             ? String(requestedSection)
-            : "create"
+            : requestedClassExists
+              ? "current"
+              : "create"
 
           setSelectedClassId(firstClassId)
           setTeacherSection(validRequestedSection)
@@ -668,8 +671,8 @@ export default function AssignmentsPage() {
     setMessage("Setting up KDU structure...")
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/courses/${selectedClassId}/setup-kdu-assessment-structure`,
+      const response = await authFetch(
+        `/api/courses/${selectedClassId}/setup-kdu-assessment-structure`,
         {
           method: "POST",
           headers: {
@@ -728,7 +731,7 @@ export default function AssignmentsPage() {
     setMessage("")
     setAssignmentCreating(true)
 
-    fetch(`${API_BASE}/api/assignments`, {
+    authFetch(`/api/assignments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -780,7 +783,7 @@ export default function AssignmentsPage() {
     setMessage("")
     setCsvImportResult(null)
 
-    fetch(`${API_BASE}/api/assignments/import`, {
+    authFetch(`/api/assignments/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -834,7 +837,7 @@ export default function AssignmentsPage() {
       setError("")
       setMessage("")
 
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/reorder`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction }),
@@ -892,7 +895,7 @@ export default function AssignmentsPage() {
       setError("")
       setMessage("")
 
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}/duplicate`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}/duplicate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -934,7 +937,7 @@ export default function AssignmentsPage() {
     setError("")
     setMessage("")
 
-    fetch(`${API_BASE}/api/assignments/${assignmentId}`, {
+    authFetch(`/api/assignments/${assignmentId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -989,7 +992,7 @@ export default function AssignmentsPage() {
       setError("")
       setMessage("")
 
-      const response = await fetch(`${API_BASE}/api/assignments/${assignmentId}`, {
+      const response = await authFetch(`/api/assignments/${assignmentId}`, {
         method: "DELETE",
       })
 
@@ -1017,7 +1020,7 @@ export default function AssignmentsPage() {
     setError("")
     setMessage("")
 
-    fetch(`${API_BASE}/api/assignments/${deleteTargetAssignment.id}`, {
+    authFetch(`/api/assignments/${deleteTargetAssignment.id}`, {
       method: "DELETE",
     })
       .then(async (res) => {
@@ -1062,7 +1065,7 @@ export default function AssignmentsPage() {
     setError("")
     setMessage("")
 
-    fetch(`${API_BASE}/api/classes/${selectedClassId}/students`, {
+    authFetch(`/api/classes/${selectedClassId}/students`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1118,7 +1121,7 @@ export default function AssignmentsPage() {
       formData.append("attachments", file)
     })
 
-    fetch(`${API_BASE}/api/submissions`, {
+    authFetch(`/api/submissions`, {
       method: "POST",
       body: formData,
     })

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import API_BASE from "../apiBase";
+import authFetch from "../services/authFetch";
 
 
 const emptyStudentForm = {
@@ -79,7 +80,7 @@ export default function ClassRosterPage() {
     setStatusMessage("Loading class roster...");
 
     try {
-      const response = await fetch(`${API_BASE}/api/class-roster/${courseId}`);
+      const response = await authFetch(`/api/class-roster/${courseId}`);
 
       if (!response.ok) {
         throw new Error("Failed to load class roster");
@@ -126,8 +127,8 @@ export default function ClassRosterPage() {
     setEnrollmentError("");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/class-roster/${selectedCourseId}/students/${student.id}`,
+      const response = await authFetch(
+        `/api/class-roster/${selectedCourseId}/students/${student.id}`,
         {
           method: "DELETE",
         }
@@ -165,8 +166,8 @@ export default function ClassRosterPage() {
     setEnrollmentError("");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/class-roster/${selectedCourseId}/import-homeform`,
+      const response = await authFetch(
+        `/api/class-roster/${selectedCourseId}/import-homeform`,
         {
           method: "POST",
           headers: {
@@ -224,8 +225,8 @@ export default function ClassRosterPage() {
     setEnrollmentError("");
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/class-roster/${selectedCourseId}/students`,
+      const response = await authFetch(
+        `/api/class-roster/${selectedCourseId}/students`,
         {
           method: "POST",
           headers: {
@@ -255,7 +256,7 @@ export default function ClassRosterPage() {
   useEffect(() => {
     async function loadCourses() {
       try {
-        const response = await fetch(`${API_BASE}/api/courses`);
+        const response = await authFetch(`/api/courses`);
 
         if (!response.ok) {
           throw new Error("Failed to load courses");
@@ -568,7 +569,7 @@ export default function ClassRosterPage() {
                 ) : (
                   students.map((student) => (
                     <tr key={student.id}>
-                      <td>{student.name || "Unnamed student"}</td>
+                      <td>{student.name || [student.first_name, student.last_name].filter(Boolean).join(" ") || "Unnamed student"}</td>
                       <td>{student.student_id || "Not recorded"}</td>
                       <td>{student.email || "No email"}</td>
                       <td>{student.parent_email || "Not recorded"}</td>

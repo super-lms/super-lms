@@ -2,10 +2,12 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 
 const AuthContext = createContext()
 const STORAGE_KEY = "super_lms_user"
-const STORAGE_VERSION = "v2"
+const TOKEN_STORAGE_KEY = "super_lms_token"
+const STORAGE_VERSION = "v3"
 
-function clearStoredUser() {
+function clearStoredAuth() {
   localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 
 function isValidStoredUser(user) {
@@ -31,28 +33,37 @@ function getStoredUser() {
     const parsed = JSON.parse(storedUser)
 
     if (!isValidStoredUser(parsed)) {
-      clearStoredUser()
+      clearStoredAuth()
       return null
     }
 
     return parsed
   } catch {
-    clearStoredUser()
+    clearStoredAuth()
     return null
   }
 }
 
+function getStoredToken() {
+  const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY)
+  return storedToken && typeof storedToken === "string" ? storedToken : ""
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [token, setToken] = useState("")
   const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
     const restoredUser = getStoredUser()
+    const restoredToken = getStoredToken()
+
     setUser(restoredUser)
+    setToken(restoredUser ? restoredToken : "")
     setAuthReady(true)
   }, [])
 
-  function login(userData) {
+  function login(userData, tokenValue = "") {
     if (!userData || typeof userData !== "object") {
       return
     }
@@ -63,30 +74,42 @@ export function AuthProvider({ children }) {
     }
 
     if (!isValidStoredUser(safeUser)) {
-      clearStoredUser()
+      clearStoredAuth()
       setUser(null)
+      setToken("")
       return
     }
 
+    const safeToken = String(tokenValue || "")
+
     setUser(safeUser)
+    setToken(safeToken)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(safeUser))
+
+    if (safeToken) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, safeToken)
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY)
+    }
   }
 
   function logout() {
     setUser(null)
-    clearStoredUser()
+    setToken("")
+    clearStoredAuth()
     window.location.replace("/login")
   }
 
   const value = useMemo(() => {
     return {
       user,
+      token,
       authReady,
       isLoggedIn: Boolean(user),
       login,
       logout,
     }
-  }, [user, authReady])
+  }, [user, token, authReady])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

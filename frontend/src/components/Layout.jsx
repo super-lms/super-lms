@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
-import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
 import {
   LayoutDashboard,
   Users,
@@ -22,7 +22,11 @@ export default function Layout() {
 
   const [teacherCourses, setTeacherCourses] = useState([])
 
-  const isStudentRoute = location.pathname.startsWith("/student") &&
+  const normalizedRole = String(user?.role || "").trim().toLowerCase()
+  const dashboardPath = normalizedRole === "admin" ? "/admin" : "/dashboard"
+
+  const isStudentRoute =
+    location.pathname.startsWith("/student") &&
     !location.pathname.startsWith("/student-import")
 
   useEffect(() => {
@@ -31,7 +35,6 @@ export default function Layout() {
       return
     }
 
-    const normalizedRole = String(user?.role || "").trim().toLowerCase()
     const teacherId = user?.id
 
     if (!teacherId || (normalizedRole !== "teacher" && normalizedRole !== "admin")) {
@@ -43,7 +46,7 @@ export default function Layout() {
 
     async function loadTeacherCourses() {
       try {
-        const response = await fetch(`${API_BASE}/api/teachers/${teacherId}/dashboard`)
+        const response = await authFetch(`/api/teachers/${teacherId}/dashboard`)
 
         if (!response.ok) {
           throw new Error(`Request failed with status ${response.status}`)
@@ -67,7 +70,7 @@ export default function Layout() {
     return () => {
       isCancelled = true
     }
-  }, [user?.id, user?.role, isStudentRoute])
+  }, [user?.id, normalizedRole, isStudentRoute])
 
   const primaryGradebookPath = useMemo(() => {
     if (teacherCourses.length === 0) {
@@ -106,7 +109,9 @@ export default function Layout() {
   }
 
   function getWorkspaceTitle() {
-    if (location.pathname === "/dashboard") return "Dashboard"
+    if (location.pathname === "/dashboard" || location.pathname === "/admin") {
+      return "Dashboard"
+    }
     if (location.pathname === "/users") return "Users"
     if (location.pathname === "/courses") return "Courses"
     if (location.pathname === "/lessons") return "Lessons"
@@ -156,12 +161,10 @@ export default function Layout() {
   }
 
   function getRoleDisplayName() {
-    const rawRole = String(user?.role || "").trim().toLowerCase()
-
-    if (rawRole === "admin") return "Admin"
-    if (rawRole === "teacher") return "Teacher"
-    if (rawRole === "student") return "Student"
-    if (rawRole === "observer") return "Observer"
+    if (normalizedRole === "admin") return "Admin"
+    if (normalizedRole === "teacher") return "Teacher"
+    if (normalizedRole === "student") return "Student"
+    if (normalizedRole === "observer") return "Observer"
 
     return isStudentRoute ? "Student" : "Teacher"
   }
@@ -191,7 +194,11 @@ export default function Layout() {
 
         {!isStudentRoute && (
           <nav style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <NavItem to="/dashboard" style={getNavLinkStyle("/dashboard")} icon={LayoutDashboard}>
+            <NavItem
+              to={dashboardPath}
+              style={getNavLinkStyle(dashboardPath)}
+              icon={LayoutDashboard}
+            >
               Dashboard
             </NavItem>
             <NavItem to="/users" style={getNavLinkStyle("/users")} icon={Users}>
@@ -284,8 +291,8 @@ export default function Layout() {
       </div>
 
       <div style={{ flex: 1, background: "#f7f7f7" }}>
-        {!isStudentRoute && location.pathname !== "/dashboard" ? (
-          <Link to="/dashboard" style={floatingDashboardButtonStyle}>
+        {!isStudentRoute && location.pathname !== dashboardPath ? (
+          <Link to={dashboardPath} style={floatingDashboardButtonStyle}>
             ← Dashboard
           </Link>
         ) : null}

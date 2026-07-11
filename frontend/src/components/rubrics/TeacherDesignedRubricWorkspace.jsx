@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import API_BASE from "../../apiBase";
+import authFetch from "../../services/authFetch";
 
 export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
   const [title, setTitle] = useState("");
@@ -7,6 +7,9 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
   const [criteria, setCriteria] = useState([]);
   const [criterionName, setCriterionName] = useState("");
   const [criterionWeight, setCriterionWeight] = useState("");
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [rawImportText, setRawImportText] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -19,9 +22,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/teacher-designed-rubric`
-      );
+      const response = await authFetch(`/api/assignments/${assignmentId}/teacher-designed-rubric`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -39,6 +40,53 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
       setError(err.message || "Failed to load teacher rubric.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function importRubric() {
+    if (!assignmentId) {
+      setError("Assignment id is missing.");
+      return;
+    }
+
+    if (!importFile) {
+      setError("Choose a DOCX, PDF, or XLSX rubric file before importing.");
+      return;
+    }
+
+    try {
+      setImporting(true);
+      setError("");
+      setMessage("Importing rubric...");
+
+      const formData = new FormData();
+      formData.append("file", importFile);
+
+      const response = await authFetch(
+        `/api/assignments/${assignmentId}/teacher-designed-rubric/import`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to import rubric.");
+      }
+
+      const imported = data.imported || {};
+
+      setTitle(imported.title || "Imported Teacher Rubric");
+      setLevelCount(String(imported.level_count || 4));
+      setCriteria(Array.isArray(imported.criteria) ? imported.criteria : []);
+      setRawImportText(imported.raw_text || "");
+      setMessage("Rubric imported. Review and edit the preview, then save.");
+    } catch (err) {
+      setError(err.message || "Failed to import rubric.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -60,8 +108,8 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
       setError("");
       setMessage("Saving teacher rubric...");
 
-      const response = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/teacher-designed-rubric`,
+      const response = await authFetch(
+        `/api/assignments/${assignmentId}/teacher-designed-rubric`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -79,7 +127,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
         throw new Error(data.error || "Failed to save teacher rubric.");
       }
 
-      setMessage("Teacher Designed Rubric (HO) saved.");
+      setMessage("Teacher Designed Rubric saved.");
     } catch (err) {
       setError(err.message || "Failed to save teacher rubric.");
     } finally {
@@ -102,6 +150,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
         id: `criterion-${Date.now()}`,
         name: cleanName,
         weight: cleanWeight,
+        descriptors: {},
       },
     ]);
 
@@ -115,9 +164,35 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
     setCriteria((current) => current.filter((criterion) => criterion.id !== id));
   }
 
+  function updateCriterion(id, field, value) {
+    setCriteria((current) =>
+      current.map((criterion) =>
+        criterion.id === id ? { ...criterion, [field]: value } : criterion
+      )
+    );
+  }
+
+  function updateDescriptor(id, level, value) {
+    setCriteria((current) =>
+      current.map((criterion) => {
+        if (criterion.id !== id) return criterion;
+
+        return {
+          ...criterion,
+          descriptors: {
+            ...(criterion.descriptors || {}),
+            [`level_${level}`]: value,
+          },
+        };
+      })
+    );
+  }
+
   useEffect(() => {
     loadRubric();
   }, [assignmentId]);
+
+  const numericLevelCount = Number(levelCount || 4);
 
   const totalWeight = criteria.reduce((sum, criterion) => {
     const value = Number(criterion.weight || 0);
@@ -129,14 +204,38 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
       <div>
         <h3 style={{ margin: 0 }}>Teacher Designed Rubric Workspace</h3>
         <p style={{ marginBottom: 0, color: "#4b5563", lineHeight: 1.5 }}>
-          Build a teacher-created rubric with custom criteria and weights. No preset
-          criteria are used.
+          Build a teacher-created rubric manually or import an existing DOCX, PDF,
+          or XLSX rubric. Imported rubrics can be reviewed and edited before saving.
         </p>
       </div>
 
       {loading ? <div style={noticeStyle}>Loading saved teacher rubric...</div> : null}
       {message ? <div style={successStyle}>{message}</div> : null}
       {error ? <div style={errorStyle}>{error}</div> : null}
+
+      <div style={importBoxStyle}>
+        <div style={sectionHeaderStyle}>Import Existing Rubric</div>
+        <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
+          Upload a text-based DOCX, PDF, or XLSX rubric. The system will convert it
+          into the editable Teacher Designed Rubric structure.
+        </p>
+
+        <input
+          type="file"
+          accept=".docx,.pdf,.xlsx"
+          onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+          style={inputStyle}
+        />
+
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={importRubric}
+          disabled={importing || loading}
+        >
+          {importing ? "Importing Rubric..." : "Import Rubric"}
+        </button>
+      </div>
 
       <div>
         <label style={labelStyle}>Rubric Title</label>
@@ -167,19 +266,56 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
       </div>
 
       <div style={criteriaBoxStyle}>
-        <div style={sectionHeaderStyle}>Criteria</div>
+        <div style={sectionHeaderStyle}>Editable Criteria Preview</div>
 
         {criteria.length === 0 ? (
           <div style={{ color: "#4b5563" }}>No criteria added yet.</div>
         ) : (
-          <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ display: "grid", gap: "14px" }}>
             {criteria.map((criterion) => (
               <div key={criterion.id} style={criterionCardStyle}>
-                <div>
-                  <strong>{criterion.name}</strong>
-                  <div style={{ marginTop: "4px", color: "#4b5563" }}>
-                    Weight: {criterion.weight || "0"}%
+                <div style={criterionEditGridStyle}>
+                  <div>
+                    <label style={labelStyle}>Criterion</label>
+                    <input
+                      type="text"
+                      value={criterion.name || ""}
+                      onChange={(event) =>
+                        updateCriterion(criterion.id, "name", event.target.value)
+                      }
+                      style={inputStyle}
+                    />
                   </div>
+
+                  <div>
+                    <label style={labelStyle}>Weight %</label>
+                    <input
+                      type="number"
+                      value={criterion.weight || ""}
+                      onChange={(event) =>
+                        updateCriterion(criterion.id, "weight", event.target.value)
+                      }
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+
+                <div style={descriptorGridStyle}>
+                  {Array.from({ length: numericLevelCount }, (_, index) => index + 1).map(
+                    (level) => (
+                      <div key={level}>
+                        <label style={labelStyle}>Level {level}</label>
+                        <textarea
+                          value={(criterion.descriptors || {})[`level_${level}`] || ""}
+                          onChange={(event) =>
+                            updateDescriptor(criterion.id, level, event.target.value)
+                          }
+                          placeholder={`Descriptor for Level ${level}`}
+                          style={textareaStyle}
+                        />
+                      </div>
+                    )
+                  )}
                 </div>
 
                 <button
@@ -187,7 +323,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
                   className="secondary-button"
                   onClick={() => removeCriterion(criterion.id)}
                 >
-                  Remove
+                  Remove Criterion
                 </button>
               </div>
             ))}
@@ -223,6 +359,13 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
         </button>
       </div>
 
+      {rawImportText ? (
+        <details style={rawTextBoxStyle}>
+          <summary style={{ fontWeight: 900 }}>View Raw Imported Text</summary>
+          <pre style={rawPreStyle}>{rawImportText}</pre>
+        </details>
+      ) : null}
+
       <div style={summaryStyle}>
         <strong>Total Weight:</strong> {totalWeight}%
       </div>
@@ -246,6 +389,15 @@ const workspaceStyle = {
   padding: "18px",
   display: "grid",
   gap: "16px",
+};
+
+const importBoxStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "14px",
+  background: "#f8fafc",
+  padding: "14px",
+  display: "grid",
+  gap: "12px",
 };
 
 const noticeStyle = {
@@ -289,6 +441,17 @@ const inputStyle = {
   boxSizing: "border-box",
 };
 
+const textareaStyle = {
+  width: "100%",
+  minHeight: "72px",
+  padding: "10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  fontSize: "0.95rem",
+  boxSizing: "border-box",
+  resize: "vertical",
+};
+
 const levelRowStyle = {
   display: "flex",
   gap: "18px",
@@ -321,17 +484,40 @@ const criterionCardStyle = {
   borderRadius: "12px",
   background: "#ffffff",
   padding: "12px",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
+  display: "grid",
   gap: "12px",
-  flexWrap: "wrap",
+};
+
+const criterionEditGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 2fr) minmax(140px, 1fr)",
+  gap: "12px",
+};
+
+const descriptorGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: "12px",
 };
 
 const addGridStyle = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 2fr) minmax(140px, 1fr)",
   gap: "12px",
+};
+
+const rawTextBoxStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  background: "#f8fafc",
+  padding: "12px",
+};
+
+const rawPreStyle = {
+  whiteSpace: "pre-wrap",
+  fontSize: "0.85rem",
+  lineHeight: 1.45,
+  marginTop: "12px",
 };
 
 const summaryStyle = {

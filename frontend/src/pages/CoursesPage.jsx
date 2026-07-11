@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import * as XLSX from "xlsx"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
 
 
 function buildSampleCsv(courseName = "Accounting 11") {
@@ -49,6 +50,7 @@ export default function CoursesPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [settingUpCourseId, setSettingUpCourseId] = useState(null)
+  const [selectedCourseId, setSelectedCourseId] = useState(null)
 
   const [showCreateCourse, setShowCreateCourse] = useState(false)
   const [creatingCourse, setCreatingCourse] = useState(false)
@@ -170,6 +172,7 @@ export default function CoursesPage() {
 
     if (requestedCourseId) {
       window.localStorage.setItem("super-lms-last-course-id", String(requestedCourseId))
+      setSelectedCourseId(requestedCourseId)
 
       window.setTimeout(() => {
         const target = document.getElementById(`course-${requestedCourseId}`)
@@ -184,12 +187,26 @@ export default function CoursesPage() {
     window.scrollTo({ top: 0, behavior: "auto" })
   }, [loading, courses.length])
 
+  useEffect(() => {
+    function handleCourseBrowserHistory() {
+      const params = new URLSearchParams(window.location.search)
+      const requestedCourseId = params.get("courseId")
+      setSelectedCourseId(requestedCourseId || null)
+    }
+
+    window.addEventListener("popstate", handleCourseBrowserHistory)
+
+    return () => {
+      window.removeEventListener("popstate", handleCourseBrowserHistory)
+    }
+  }, [])
+
   async function loadCourses() {
     try {
       setLoading(true)
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/classes`)
+      const res = await authFetch(`${API_BASE}/api/classes`)
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to load courses")
@@ -241,6 +258,20 @@ export default function CoursesPage() {
     }
   }
 
+  function openCourseWorkspace(courseId) {
+    if (!courseId) return
+
+    window.localStorage.setItem("super-lms-last-course-id", String(courseId))
+    window.history.pushState(null, "", `/courses?courseId=${courseId}`)
+    setSelectedCourseId(courseId)
+  }
+
+  function returnToCourseCards() {
+    window.history.pushState(null, "", "/courses")
+    setSelectedCourseId(null)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
   async function loadCourseStructuresForStatus(courseList) {
     const safeCourses = Array.isArray(courseList) ? courseList : []
 
@@ -257,7 +288,7 @@ export default function CoursesPage() {
             return null
           }
 
-          const categoriesRes = await fetch(`${API_BASE}/api/courses/${courseId}/categories`)
+          const categoriesRes = await authFetch(`${API_BASE}/api/courses/${courseId}/categories`)
           const categoriesData = await categoriesRes.json()
 
           if (!categoriesRes.ok) {
@@ -279,7 +310,7 @@ export default function CoursesPage() {
 
           const categoriesWithSubcategories = await Promise.all(
             categories.map(async (category) => {
-              const subcategoriesRes = await fetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
+              const subcategoriesRes = await authFetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
               const subcategoriesData = await subcategoriesRes.json()
 
               if (!subcategoriesRes.ok) {
@@ -333,7 +364,7 @@ export default function CoursesPage() {
             return null
           }
 
-          const res = await fetch(`${API_BASE}/api/class-roster/${courseId}`)
+          const res = await authFetch(`${API_BASE}/api/class-roster/${courseId}`)
           const data = await res.json()
 
           if (!res.ok) {
@@ -371,7 +402,7 @@ export default function CoursesPage() {
     try {
       setAssignmentsLoading(true)
 
-      const res = await fetch(`${API_BASE}/api/assignments`)
+      const res = await authFetch(`${API_BASE}/api/assignments`)
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to load assignments")
@@ -397,7 +428,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/course-structure-templates`)
+      const res = await authFetch(`${API_BASE}/api/course-structure-templates`)
       const data = await res.json()
 
       if (!res.ok) {
@@ -428,7 +459,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/course-structure-templates/${template.id}`, {
+      const res = await authFetch(`${API_BASE}/api/course-structure-templates/${template.id}`, {
         method: "DELETE",
       })
 
@@ -462,7 +493,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${course.id}/apply-structure-template/${template.id}`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${course.id}/apply-structure-template/${template.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -597,7 +628,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/categories/${categoryId}/reorder`, {
+      const res = await authFetch(`${API_BASE}/api/categories/${categoryId}/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction }),
@@ -659,7 +690,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/categories/${categoryId}`, {
+      const res = await authFetch(`${API_BASE}/api/categories/${categoryId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -700,7 +731,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/categories/${category.id}`, {
+      const res = await authFetch(`${API_BASE}/api/categories/${category.id}`, {
         method: "DELETE",
       })
 
@@ -744,7 +775,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const sourceTiersRes = await fetch(`${API_BASE}/api/categories/${categoryId}/subcategories`)
+      const sourceTiersRes = await authFetch(`${API_BASE}/api/categories/${categoryId}/subcategories`)
       const sourceTiersData = await sourceTiersRes.json()
 
       if (!sourceTiersRes.ok) {
@@ -753,7 +784,7 @@ export default function CoursesPage() {
 
       const tiersToCopy = Array.isArray(sourceTiersData) ? sourceTiersData : []
 
-      const categoryRes = await fetch(`${API_BASE}/api/courses/${courseId}/categories`, {
+      const categoryRes = await authFetch(`${API_BASE}/api/courses/${courseId}/categories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -780,7 +811,7 @@ export default function CoursesPage() {
           continue
         }
 
-        const tierRes = await fetch(`${API_BASE}/api/categories/${duplicatedCategory.id}/subcategories`, {
+        const tierRes = await authFetch(`${API_BASE}/api/categories/${duplicatedCategory.id}/subcategories`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -822,7 +853,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/subcategories/${tierId}/reorder`, {
+      const res = await authFetch(`${API_BASE}/api/subcategories/${tierId}/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction }),
@@ -893,7 +924,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/subcategories/${tierId}`, {
+      const res = await authFetch(`${API_BASE}/api/subcategories/${tierId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -935,7 +966,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/subcategories/${tier.id}`, {
+      const res = await authFetch(`${API_BASE}/api/subcategories/${tier.id}`, {
         method: "DELETE",
       })
 
@@ -982,7 +1013,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/categories/${categoryId}/subcategories`, {
+      const res = await authFetch(`${API_BASE}/api/categories/${categoryId}/subcategories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1037,7 +1068,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/categories/${categoryId}/subcategories`, {
+      const res = await authFetch(`${API_BASE}/api/categories/${categoryId}/subcategories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1094,7 +1125,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/categories`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/categories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, weight_percent: weight }),
@@ -1131,7 +1162,7 @@ export default function CoursesPage() {
       setCompetencyLoadingCourseId(courseId)
       setError("")
 
-      const categoriesRes = await fetch(`${API_BASE}/api/courses/${courseId}/categories`)
+      const categoriesRes = await authFetch(`${API_BASE}/api/courses/${courseId}/categories`)
       const categoriesData = await categoriesRes.json()
 
       if (!categoriesRes.ok) {
@@ -1153,7 +1184,7 @@ export default function CoursesPage() {
 
       const categoriesWithSubcategories = await Promise.all(
         categories.map(async (category) => {
-          const subcategoriesRes = await fetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
+          const subcategoriesRes = await authFetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
           const subcategoriesData = await subcategoriesRes.json()
 
           if (!subcategoriesRes.ok) {
@@ -1305,7 +1336,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/duplicate`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/duplicate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -1369,7 +1400,7 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1415,7 +1446,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses`, {
+      const res = await authFetch(`${API_BASE}/api/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1499,7 +1530,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${course.id}/save-structure-template`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${course.id}/save-structure-template`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1592,7 +1623,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/enroll-from-master-directory`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/enroll-from-master-directory`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ current_grade: currentGrade }),
@@ -1647,7 +1678,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/class-roster/${courseId}`)
+      const res = await authFetch(`${API_BASE}/api/class-roster/${courseId}`)
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to load course roster")
@@ -1661,6 +1692,13 @@ export default function CoursesPage() {
       }))
 
       setActiveRosterCourseId(courseId)
+
+      window.setTimeout(() => {
+        const target = document.getElementById(`course-${courseId}-roster`)
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      }, 250)
     } catch (err) {
       setError(err.message || "Failed to load course roster")
     } finally {
@@ -1672,7 +1710,7 @@ export default function CoursesPage() {
     try {
       setLoadingItemsPathId(learningPathId)
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/items`)
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPathId}/items`)
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to load Learning Path items")
@@ -1707,7 +1745,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/learning-paths`)
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/learning-paths`)
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to load learning paths")
@@ -1746,7 +1784,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/learning-paths`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/learning-paths`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, description }),
@@ -1807,7 +1845,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/duplicate`, {
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPathId}/duplicate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -1843,7 +1881,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/reorder`, {
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPathId}/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction }),
@@ -1878,7 +1916,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPath.id}`, { method: "DELETE" })
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPath.id}`, { method: "DELETE" })
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to delete learning path")
@@ -1910,7 +1948,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPath.id}/items`, {
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPath.id}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1971,7 +2009,7 @@ export default function CoursesPage() {
 
       const content = window.prompt("Optional lesson content:", "") || ""
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/create-lesson`, {
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPathId}/create-lesson`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2027,7 +2065,7 @@ export default function CoursesPage() {
         return
       }
 
-      const categoriesRes = await fetch(`${API_BASE}/api/courses/${courseId}/categories`)
+      const categoriesRes = await authFetch(`${API_BASE}/api/courses/${courseId}/categories`)
       const categoriesData = await categoriesRes.json()
 
       if (!categoriesRes.ok) {
@@ -2038,7 +2076,7 @@ export default function CoursesPage() {
       const tierOptions = []
 
       for (const category of categories) {
-        const tiersRes = await fetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
+        const tiersRes = await authFetch(`${API_BASE}/api/categories/${category.id}/subcategories`)
         const tiersData = await tiersRes.json()
 
         if (!tiersRes.ok) {
@@ -2085,7 +2123,7 @@ export default function CoursesPage() {
 
       const description = window.prompt("Optional assignment description:", "") || ""
 
-      const res = await fetch(`${API_BASE}/api/learning-paths/${learningPathId}/create-assignment`, {
+      const res = await authFetch(`${API_BASE}/api/learning-paths/${learningPathId}/create-assignment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2169,7 +2207,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-path-items/${item.id}`, {
+      const res = await authFetch(`${API_BASE}/api/learning-path-items/${item.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2216,7 +2254,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-path-items/${itemId}/reorder`, {
+      const res = await authFetch(`${API_BASE}/api/learning-path-items/${itemId}/reorder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ direction }),
@@ -2251,7 +2289,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/learning-path-items/${item.id}`, { method: "DELETE" })
+      const res = await authFetch(`${API_BASE}/api/learning-path-items/${item.id}`, { method: "DELETE" })
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to delete Learning Path item")
@@ -2271,7 +2309,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/setup-kdu-assessment-structure`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/setup-kdu-assessment-structure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
@@ -2311,7 +2349,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await fetch(`${API_BASE}/api/courses/${courseId}/setup-kdu-assessment-structure`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/setup-kdu-assessment-structure`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ replaceExisting: true }),
@@ -2549,9 +2587,72 @@ export default function CoursesPage() {
               + Create First Course
             </button>
           </div>
+        ) : !selectedCourseId ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+            {courses.map((course) => {
+              const courseName = getCourseName(course)
+              const roster = rosterByCourseId[course.id]
+              const rosterStudents = roster?.students || []
+              const courseAssignments = getAssignmentsForCourse(course.id)
+              const displayedStudentCount = Number(course.student_count ?? rosterStudents.length ?? 0)
+
+              return (
+                <button
+                  key={course.id}
+                  type="button"
+                  onClick={() => openCourseWorkspace(course.id)}
+                  style={{
+                    ...courseCardStyle,
+                    textAlign: "left",
+                    cursor: "pointer",
+                    height: "260px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div>
+                    <h2 style={{ marginTop: 0, marginBottom: "10px", fontSize: "22px" }}>{courseName}</h2>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: "#4b5563",
+                        lineHeight: 1.45,
+                        display: "-webkit-box",
+                        WebkitLineClamp: 4,
+                        WebkitBoxOrient: "vertical",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {course.description || "Open this course workspace to manage assignments, students, learning paths, and grading."}
+                    </p>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "18px" }}>
+                    <div style={{ border: "1px solid #d7dce5", borderRadius: "10px", padding: "10px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: "13px", color: "#4b5563", fontWeight: 800 }}>Students</div>
+                      <div style={{ fontSize: "24px", fontWeight: 900 }}>{displayedStudentCount}</div>
+                    </div>
+                    <div style={{ border: "1px solid #d7dce5", borderRadius: "10px", padding: "10px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: "13px", color: "#4b5563", fontWeight: 800 }}>Assignments</div>
+                      <div style={{ fontSize: "24px", fontWeight: 900 }}>{courseAssignments.length}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "16px", fontWeight: 900 }}>Open course workspace →</div>
+                </button>
+              )
+            })}
+          </div>
         ) : (
           <div style={{ display: "grid", gap: "14px" }}>
-            {courses.map((course) => {
+            <div>
+              <button type="button" onClick={returnToCourseCards} style={buttonStyle}>
+                ← Back to All Courses
+              </button>
+            </div>
+            {courses.filter((course) => String(course.id) === String(selectedCourseId)).map((course) => {
               const roster = rosterByCourseId[course.id]
               const rosterStudents = roster?.students || []
               const isRosterOpen = activeRosterCourseId === course.id
@@ -2855,7 +2956,18 @@ export default function CoursesPage() {
                       disabled={learningPathLoadingCourseId === course.id}
                       style={buttonStyle}
                     >
-                      {competencyLoadingCourseId === course.id ? "Loading Learning / Grading Pathways..." : isCompetenciesOpen ? "Hide Learning / Grading Pathways" : "Learning / Grading Pathways"}
+                      {learningPathLoadingCourseId === course.id ? "Loading Learning Paths..." : isLearningPathsOpen ? "Hide Learning Paths" : "Learning Paths"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/lessons?courseId=${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Lessons
                     </button>
 
                     <button
@@ -2868,7 +2980,7 @@ export default function CoursesPage() {
                       disabled={competencyLoadingCourseId === course.id}
                       style={buttonStyle}
                     >
-                      {competencyLoadingCourseId === course.id ? "Loading Assessment Pathways..." : isCompetenciesOpen ? "Hide Assessment Pathways" : "Open Assessment Pathways"}
+                      {competencyLoadingCourseId === course.id ? "Loading Learning & Grading Pathways..." : isCompetenciesOpen ? "Hide Learning & Grading Pathways" : "Learning & Grading Pathways"}
                     </button>
 
                     <button
@@ -2893,6 +3005,17 @@ export default function CoursesPage() {
                       Gradebook
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/reports?courseId=${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Reports
+                    </button>
+
                     <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "10px" }}>
                       Setup & Creation
                     </div>
@@ -2906,6 +3029,17 @@ export default function CoursesPage() {
                       style={buttonStyle}
                     >
                       + Create Assignment
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/lessons?courseId=${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      + Create Lesson
                     </button>
 
                     <button
@@ -4074,7 +4208,7 @@ export default function CoursesPage() {
                   ) : null}
 
                   {isRosterOpen ? (
-                    <div style={rosterBoxStyle}>
+                    <div id={`course-${course.id}-roster`} style={rosterBoxStyle}>
                       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Roster</h3>
 
                       <div style={{ marginBottom: "12px", fontWeight: 800 }}>

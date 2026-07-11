@@ -9,6 +9,7 @@ import {
 import AssignmentHealthCheck from "../components/AssignmentHealthCheck.jsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import API_BASE from "../apiBase";
+import authFetch from "../services/authFetch";
 import TeacherDesignedRubricWorkspace from "../components/rubrics/TeacherDesignedRubricWorkspace.jsx";
 
 
@@ -160,7 +161,7 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(`${API_BASE}/api/assignments`);
+      const res = await authFetch(`/api/assignments`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -214,8 +215,8 @@ export default function EditAssignmentPage() {
     try {
       setBucketLoading(true);
 
-      const categoriesRes = await fetch(
-        `${API_BASE}/api/courses/${foundAssignment.class_id}/categories`
+      const categoriesRes = await authFetch(
+        `/api/courses/${foundAssignment.class_id}/categories`
       );
       const categoriesData = await categoriesRes.json();
 
@@ -242,8 +243,8 @@ export default function EditAssignmentPage() {
 
       setSelectedCategoryId(String(matchedCategory.id));
 
-      const subcategoriesRes = await fetch(
-        `${API_BASE}/api/categories/${matchedCategory.id}/subcategories`
+      const subcategoriesRes = await authFetch(
+        `/api/categories/${matchedCategory.id}/subcategories`
       );
       const subcategoriesData = await subcategoriesRes.json();
 
@@ -283,8 +284,8 @@ export default function EditAssignmentPage() {
       setBucketLoading(true);
       setError("");
 
-      const res = await fetch(
-        `${API_BASE}/api/categories/${categoryId}/subcategories`
+      const res = await authFetch(
+        `/api/categories/${categoryId}/subcategories`
       );
       const data = await res.json();
 
@@ -318,8 +319,8 @@ export default function EditAssignmentPage() {
     try {
       setRubricLoading(true);
 
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/kdu-rubric`
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/kdu-rubric`
       );
       const data = await res.json();
 
@@ -341,8 +342,8 @@ export default function EditAssignmentPage() {
 
   async function loadFullKduRubric() {
     try {
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/full-kdu-rubric`
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/full-kdu-rubric`
       );
       const data = await res.json();
 
@@ -370,7 +371,7 @@ export default function EditAssignmentPage() {
 
   async function loadAssignmentSections() {
     try {
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}/sections`);
+      const res = await authFetch(`/api/assignments/${assignmentId}/sections`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -529,7 +530,7 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}/sections`, {
+      const res = await authFetch(`/api/assignments/${assignmentId}/sections`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sections: cleanSections }),
@@ -591,7 +592,7 @@ export default function EditAssignmentPage() {
       const cleanDescription = String(description || "").trim();
       const cleanDueDate = dueDate || null;
 
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}`, {
+      const res = await authFetch(`/api/assignments/${assignmentId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -664,7 +665,7 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(`${API_BASE}/api/assignments/${assignmentId}`, {
+      const res = await authFetch(`/api/assignments/${assignmentId}`, {
         method: "DELETE",
       });
 
@@ -689,8 +690,8 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/build-kdu-rubric`,
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/build-kdu-rubric`,
         { method: "POST" }
       );
 
@@ -733,8 +734,8 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/kdu-rubric`,
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/kdu-rubric`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -783,8 +784,8 @@ export default function EditAssignmentPage() {
         .filter(Boolean)
         .join("\n");
 
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/generate-kdu-rubric`,
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/generate-kdu-rubric`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -919,8 +920,8 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/export-kdu-rubric-docx`,
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/export-kdu-rubric-docx`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -969,8 +970,8 @@ export default function EditAssignmentPage() {
       setError("");
       setMessage("");
 
-      const res = await fetch(
-        `${API_BASE}/api/assignments/${assignmentId}/full-kdu-rubric`,
+      const res = await authFetch(
+        `/api/assignments/${assignmentId}/full-kdu-rubric`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1107,7 +1108,7 @@ export default function EditAssignmentPage() {
 
   function backToAssignmentsPage() {
     const classId = assignment?.class_id || assignment?.course_id || assignment?.classId || "";
-    navigate(classId ? `/assignments?classId=${classId}` : "/assignments");
+    navigate(classId ? `/assignments?classId=${classId}&section=current` : "/assignments");
   }
 
   if (loading) {

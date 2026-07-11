@@ -102,6 +102,9 @@ export default function AdminLayout() {
 
           <div style={sectionDividerStyle} />
 
+          <NavItem to="/admin/users" style={getNavLinkStyle("/admin/users")} icon={Users}>
+            Users
+          </NavItem>
           <NavItem to="/admin/courses" style={getNavLinkStyle("/admin/courses")} icon={BookOpen}>
             Courses
           </NavItem>

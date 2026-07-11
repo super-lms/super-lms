@@ -5,9 +5,11 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const authRoutes = require("../api/auth-api/routes");
+const { authenticateJWT, requireRole } = require("../middleware/auth");
 const demoRoutes = require("./routes/demoRoutes");
 const masterStudentRoutes = require("./routes/masterStudentRoutes");
 const teacherDesignedRubricImportRoutes = require("./routes/teacherDesignedRubricImportRoutes");
+const adminUserRoutes = require("./routes/adminUserRoutes");
 const rubricRepositoryRoutes = require("./routes/rubricRepositoryRoutes");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
 
@@ -33,7 +35,7 @@ app.use("/api/demo", demoRoutes);
 app.use("/api/master-students", upload.single("file"), masterStudentRoutes);
 app.use("/api", teacherDesignedRubricImportRoutes);
 app.use("/api", rubricRepositoryRoutes);
-
+app.use("/api/users", adminUserRoutes);
 async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id TEXT`);
@@ -1263,6 +1265,38 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
   const student = studentResult.rows[0];
   const studentEmail = String(student.email || "").trim().toLowerCase();
 
+  const assignmentResult = await pool.query(
+    `
+    SELECT id, teacher_id, class_id, title
+    FROM assignments
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [assignmentId]
+  );
+
+  if (assignmentResult.rows.length === 0) {
+    throw new Error("Assignment not found");
+  }
+
+  const teacherId = assignmentResult.rows[0].teacher_id
+    ? Number(assignmentResult.rows[0].teacher_id)
+    : null;
+
+  const courseId = assignmentResult.rows[0].class_id
+    ? Number(assignmentResult.rows[0].class_id)
+    : null;
+
+  const assignmentTitle = String(assignmentResult.rows[0].title || "").trim() || "Untitled Assignment";
+
+  if (!teacherId) {
+    throw new Error("Assignment teacher_id is required before syncing raw marks");
+  }
+
+  if (!courseId) {
+    throw new Error("Assignment class_id is required before syncing raw marks");
+  }
+
   const sectionScoresResult = await pool.query(
     `
     SELECT
@@ -1332,6 +1366,13 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
       `
       INSERT INTO submissions (
         assignment_id,
+        student_id,
+        teacher_id,
+        course_id,
+        assignment_title,
+        original_file_name,
+        stored_file_name,
+        file_path,
         student_name,
         student_email,
         content,
@@ -1340,10 +1381,17 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
         feedback,
         rubric_selection
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       `,
       [
         assignmentId,
+        studentUserId,
+        teacherId,
+        courseId,
+        assignmentTitle,
+        "teacher-entered-raw-marks.txt",
+        "teacher-entered-raw-marks.txt",
+        "teacher-entered-raw-marks.txt",
         student.name || studentEmail,
         studentEmail,
         "Teacher-entered raw section marks.",
@@ -1404,7 +1452,7 @@ async function ensureLessonsTables() {
 }
 
 /* LESSONS API */
-app.get("/api/lessons", async (req, res) => {
+app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     await ensureLessonsTables();
 
@@ -1431,7 +1479,7 @@ app.get("/api/lessons", async (req, res) => {
   }
 });
 
-app.post("/api/lessons", async (req, res) => {
+app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureLessonsTables();
 
@@ -1495,7 +1543,7 @@ app.post("/api/lessons", async (req, res) => {
   }
 });
 
-app.delete("/api/lessons/:lessonId", async (req, res) => {
+app.delete("/api/lessons/:lessonId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureLessonsTables();
 
@@ -1529,7 +1577,7 @@ app.delete("/api/lessons/:lessonId", async (req, res) => {
 });
 
 /* GET COURSES */
-app.get("/api/courses", async (req, res) => {
+app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     const userColumnsResult = await pool.query(`
       SELECT column_name
@@ -1606,7 +1654,7 @@ app.get("/api/courses", async (req, res) => {
 });
 
 /* GET TEACHER FOR ONE COURSE - ADMIN COURSE WORKSPACE */
-app.get("/api/admin/courses/:courseId/teacher", async (req, res) => {
+app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
 
@@ -1657,7 +1705,7 @@ app.get("/api/admin/courses/:courseId/teacher", async (req, res) => {
 });
 
 /* GET STUDENTS FOR ONE COURSE - ADMIN COURSE WORKSPACE */
-app.get("/api/admin/courses/:courseId/students", async (req, res) => {
+app.get("/api/admin/courses/:courseId/students", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
 
@@ -1707,8 +1755,61 @@ app.get("/api/admin/courses/:courseId/students", async (req, res) => {
 });
 
 
+
+/* CREATE OBSERVER / PARENT USER - ADMIN USER MANAGEMENT */
+app.post("/api/observers", authenticateJWT, requireRole("admin"), async (req, res) => {
+  try {
+    await ensureStudentInfoColumns();
+
+    const name = String(req.body?.name || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const relationship = String(req.body?.relationship || "parent").trim();
+
+    if (!name) {
+      return res.status(400).json({ error: "Observer name is required" });
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: "Observer email is required" });
+    }
+
+    if (!["parent", "chinese_homeroom_teacher"].includes(relationship)) {
+      return res.status(400).json({ error: "Invalid observer relationship" });
+    }
+
+    const firstName = name.split(/\s+/)[0] || "Observer";
+    const lastName = name.split(/\s+/).slice(1).join(" ") || "User";
+
+    const insertedResult = await pool.query(
+      `
+      INSERT INTO users (name, first_name, last_name, email, role, password_hash)
+      VALUES ($1, $2, $3, $4, 'observer', 'OBSERVER_PENDING_PASSWORD')
+      ON CONFLICT (email) DO UPDATE
+      SET name = EXCLUDED.name,
+          first_name = EXCLUDED.first_name,
+          last_name = EXCLUDED.last_name,
+          role = 'observer',
+          password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)
+      RETURNING id, name, first_name, last_name, email, role
+      `,
+      [name, firstName, lastName, email]
+    );
+
+    return res.status(201).json({
+      success: true,
+      action: "observer_created_or_updated",
+      observer: insertedResult.rows[0],
+      relationship,
+    });
+  } catch (err) {
+    console.error("POST /api/observers failed:", err);
+    return res.status(500).json({ error: "Failed to create observer" });
+  }
+});
+
+
 /* GET OBSERVER STUDENT LINKS - ADMIN USER PERMISSIONS */
-app.get("/api/admin/observer-links/:observerId", async (req, res) => {
+app.get("/api/admin/observer-links/:observerId", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const observerId = Number(req.params.observerId);
 
@@ -1766,7 +1867,7 @@ app.get("/api/admin/observer-links/:observerId", async (req, res) => {
 });
 
 /* SAVE OBSERVER STUDENT LINKS - ADMIN USER PERMISSIONS */
-app.post("/api/admin/observer-links/:observerId", async (req, res) => {
+app.post("/api/admin/observer-links/:observerId", authenticateJWT, requireRole("admin"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -1869,7 +1970,7 @@ app.post("/api/admin/observer-links/:observerId", async (req, res) => {
 
 
 /* GET CLASSES FOR GRADEBOOK */
-app.get("/api/classes", async (req, res) => {
+app.get("/api/classes", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
@@ -1894,7 +1995,7 @@ app.get("/api/classes", async (req, res) => {
 });
 
 /* GET COURSES FOR ONE STUDENT */
-app.get("/api/students/:email/classes", async (req, res) => {
+app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     const studentEmail = String(req.params.email || "").trim().toLowerCase();
 
@@ -1933,7 +2034,7 @@ app.get("/api/students/:email/classes", async (req, res) => {
 });
 
 /* GET KDU CATEGORIES FOR COURSE */
-app.get("/api/courses/:courseId/categories", async (req, res) => {
+app.get("/api/courses/:courseId/categories", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
 
@@ -1960,7 +2061,7 @@ app.get("/api/courses/:courseId/categories", async (req, res) => {
 
 /* UPDATE CATEGORY */
 
-app.put("/api/categories/:categoryId", async (req, res) => {
+app.put("/api/categories/:categoryId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const categoryId = Number(req.params.categoryId);
     const { name, weight_percent } = req.body;
@@ -1993,7 +2094,7 @@ app.put("/api/categories/:categoryId", async (req, res) => {
 
 
 /* REORDER CATEGORY */
-app.post("/api/categories/:categoryId/reorder", async (req, res) => {
+app.post("/api/categories/:categoryId/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -2131,7 +2232,7 @@ app.post("/api/categories/:categoryId/reorder", async (req, res) => {
 
 
 /* GET SUBCATEGORIES */
-app.post("/api/courses/:courseId/categories", async (req, res) => {
+app.post("/api/courses/:courseId/categories", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -2275,7 +2376,7 @@ app.post("/api/courses/:courseId/categories", async (req, res) => {
 });
 
 
-app.delete("/api/categories/:categoryId", async (req, res) => {
+app.delete("/api/categories/:categoryId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const categoryId = Number(req.params.categoryId);
 
@@ -2325,7 +2426,7 @@ app.delete("/api/categories/:categoryId", async (req, res) => {
 });
 
 
-app.put("/api/subcategories/:subcategoryId", async (req, res) => {
+app.put("/api/subcategories/:subcategoryId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const subcategoryId = Number(req.params.subcategoryId);
     const name = String(req.body.name || "").trim();
@@ -2376,7 +2477,7 @@ app.put("/api/subcategories/:subcategoryId", async (req, res) => {
 });
 
 
-app.delete("/api/subcategories/:subcategoryId", async (req, res) => {
+app.delete("/api/subcategories/:subcategoryId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const subcategoryId = Number(req.params.subcategoryId);
 
@@ -2426,7 +2527,7 @@ app.delete("/api/subcategories/:subcategoryId", async (req, res) => {
 });
 
 
-app.post("/api/categories/:categoryId/subcategories", async (req, res) => {
+app.post("/api/categories/:categoryId/subcategories", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const categoryId = Number(req.params.categoryId);
     const name = String(req.body.name || "").trim();
@@ -2496,7 +2597,7 @@ app.post("/api/categories/:categoryId/subcategories", async (req, res) => {
 
 
 
-app.post("/api/subcategories/:subcategoryId/reorder", async (req, res) => {
+app.post("/api/subcategories/:subcategoryId/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -2633,7 +2734,7 @@ app.post("/api/subcategories/:subcategoryId/reorder", async (req, res) => {
 });
 
 
-app.get("/api/categories/:categoryId/subcategories", async (req, res) => {
+app.get("/api/categories/:categoryId/subcategories", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const categoryId = Number(req.params.categoryId);
 
@@ -2665,7 +2766,7 @@ app.get("/api/categories/:categoryId/subcategories", async (req, res) => {
 });
 
 /* GET ASSIGNMENTS */
-app.get("/api/assignments", async (req, res) => {
+app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE assignments
@@ -2822,40 +2923,16 @@ async function getObserverStudents(observerEmail) {
     };
   }
 
-  const grade11StudentsResult = await pool.query(
-    `
-    SELECT
-      u.id AS student_user_id,
-      COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), ms.display_name) AS student_name,
-      COALESCE(u.email, ms.student_email) AS student_email,
-      COALESCE(u.student_id, ms.student_id) AS student_id,
-      COALESCE(u.parent_email, ms.parent_email) AS parent_email,
-      c.id AS class_id,
-      c.title AS class_name
-    FROM master_students ms
-    LEFT JOIN users u
-      ON LOWER(u.email) = LOWER(ms.student_email)
-     AND LOWER(COALESCE(u.role, '')) = 'student'
-    LEFT JOIN class_enrollments ce
-      ON ce.student_user_id = u.id
-    LEFT JOIN courses c
-      ON c.id = ce.class_id
-    WHERE TRIM(ms.current_grade::TEXT) = '11'
-      AND COALESCE(ms.student_email, '') <> ''
-    ORDER BY COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), ms.display_name) ASC, c.title ASC NULLS LAST, ms.pen ASC
-    `
-  );
-
   return {
-    source: "grade_11_fallback",
-    rows: grade11StudentsResult.rows,
-    studentUserIds: [...new Set(grade11StudentsResult.rows.map((row) => row.student_user_id).filter(Boolean))],
+    source: "no_links",
+    rows: [],
+    studentUserIds: [],
   };
 }
 
 
 /* OBSERVER GRADE 11 ROSTER CANDIDATES - HOMEROOM SELF-LINKING V1 */
-app.get("/api/observers/:email/grade-roster", async (req, res) => {
+app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admin", "observer"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -2938,7 +3015,7 @@ app.get("/api/observers/:email/grade-roster", async (req, res) => {
 });
 
 /* OBSERVER SAVE GRADE 11 STUDENT LINKS - HOMEROOM SELF-LINKING V1 */
-app.post("/api/observers/:email/grade-roster-links", async (req, res) => {
+app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRole("admin", "observer"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -3080,7 +3157,7 @@ app.post("/api/observers/:email/grade-roster-links", async (req, res) => {
 });
 
 
-app.get("/api/observers/:email/dashboard", async (req, res) => {
+app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin", "observer"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -3092,9 +3169,21 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
 
     const observerResult = await pool.query(
       `
-      SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, role
-      FROM users
-      WHERE LOWER(email) = $1
+      SELECT
+        u.id,
+        CONCAT(u.first_name, ' ', u.last_name) AS name,
+        u.email,
+        u.role,
+        COALESCE(
+          MAX(CASE WHEN osl.relationship = 'chinese_homeroom_teacher' THEN 'chinese_homeroom_teacher' END),
+          MAX(osl.relationship),
+          'parent'
+        ) AS relationship
+      FROM users u
+      LEFT JOIN observer_student_links osl
+        ON osl.observer_user_id = u.id
+      WHERE LOWER(u.email) = $1
+      GROUP BY u.id, u.first_name, u.last_name, u.email, u.role
       LIMIT 1
       `,
       [observerEmail]
@@ -3232,7 +3321,7 @@ app.get("/api/observers/:email/dashboard", async (req, res) => {
 
 
 /* CREATE ASSIGNMENT */
-app.post("/api/assignments", async (req, res) => {
+app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE assignments
@@ -3275,7 +3364,7 @@ app.post("/api/assignments", async (req, res) => {
 
 
 /* DUPLICATE ASSIGNMENT */
-app.post("/api/assignments/:assignmentId/duplicate", async (req, res) => {
+app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -3414,7 +3503,7 @@ app.post("/api/assignments/:assignmentId/duplicate", async (req, res) => {
 
 
 /* REORDER ASSIGNMENT */
-app.post("/api/assignments/:assignmentId/reorder", async (req, res) => {
+app.post("/api/assignments/:assignmentId/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -3560,7 +3649,7 @@ app.post("/api/assignments/:assignmentId/reorder", async (req, res) => {
 
 
 /* UPDATE ASSIGNMENT */
-app.put("/api/assignments/:assignmentId", async (req, res) => {
+app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const title = String(req.body.title || "").trim();
@@ -3690,7 +3779,7 @@ app.put("/api/assignments/:assignmentId", async (req, res) => {
 });
 
 /* DELETE ASSIGNMENT */
-app.delete("/api/assignments/:assignmentId", async (req, res) => {
+app.delete("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
 
@@ -3723,7 +3812,7 @@ app.delete("/api/assignments/:assignmentId", async (req, res) => {
 
 
 /* GET STUDENT COURSE DASHBOARD V1 */
-app.get("/api/students/:studentEmail/courses/:courseId/dashboard", async (req, res) => {
+app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     const studentEmail = String(req.params.studentEmail || "").trim().toLowerCase();
     const courseId = Number(req.params.courseId);
@@ -3835,6 +3924,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", async (req, r
 /* GET SINGLE STUDENT SUBMISSION FOR ASSIGNMENT */
 app.get(
   "/api/assignments/:assignmentId/student-submission",
+  authenticateJWT,
+  requireRole("admin", "student"),
   async (req, res) => {
     try {
       const assignmentId = Number(req.params.assignmentId);
@@ -3904,7 +3995,7 @@ app.get(
 );
 
 /* SAVE STUDENT SUBMISSION */
-app.post("/api/assignments/:assignmentId/student-submit", async (req, res) => {
+app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const studentName = String(req.body.student_name || "").trim();
@@ -4032,7 +4123,7 @@ app.post("/api/assignments/:assignmentId/student-submit", async (req, res) => {
 
 
 /* LIST STUDENT ATTACHMENTS FOR ASSIGNMENT */
-app.get("/api/assignments/:assignmentId/student-attachments", async (req, res) => {
+app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     await ensureSubmissionAttachmentsTable();
 
@@ -4082,6 +4173,8 @@ app.get("/api/assignments/:assignmentId/student-attachments", async (req, res) =
 /* UPLOAD STUDENT ATTACHMENT FOR ASSIGNMENT */
 app.post(
   "/api/assignments/:assignmentId/student-attachments",
+  authenticateJWT,
+  requireRole("admin", "student"),
   upload.single("attachment"),
   async (req, res) => {
     try {
@@ -4248,7 +4341,7 @@ app.post(
 );
 
 /* DELETE STUDENT ATTACHMENT */
-app.delete("/api/student-attachments/:attachmentId", async (req, res) => {
+app.delete("/api/student-attachments/:attachmentId", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     await ensureSubmissionAttachmentsTable();
 
@@ -4311,7 +4404,7 @@ app.delete("/api/student-attachments/:attachmentId", async (req, res) => {
 
 
 /* GET ASSIGNMENT GRADEBOOK */
-app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
+app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
 
@@ -4374,7 +4467,7 @@ app.get("/api/assignments/:assignmentId/gradebook", async (req, res) => {
 });
 
 /* SAVE KDU SCORES */
-app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
+app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const studentEmail = String(req.body.student_email || "").trim().toLowerCase();
@@ -4606,7 +4699,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", async (req, res) => {
 });
 
 /* GET KDU RUBRIC FOR ASSIGNMENT */
-app.get("/api/assignments/:assignmentId/teacher-designed-rubric", async (req, res) => {
+app.get("/api/assignments/:assignmentId/teacher-designed-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const assignmentId = Number(req.params.assignmentId);
 
   if (!Number.isFinite(assignmentId)) {
@@ -4632,7 +4725,7 @@ app.get("/api/assignments/:assignmentId/teacher-designed-rubric", async (req, re
   }
 });
 
-app.put("/api/assignments/:assignmentId/teacher-designed-rubric", async (req, res) => {
+app.put("/api/assignments/:assignmentId/teacher-designed-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const assignmentId = Number(req.params.assignmentId);
   const title = String(req.body.title || "").trim();
   const levelCount = Number(req.body.level_count || req.body.levelCount || 4);
@@ -4682,7 +4775,7 @@ app.put("/api/assignments/:assignmentId/teacher-designed-rubric", async (req, re
   }
 });
 
-app.get("/api/assignments/:assignmentId/kdu-rubric", async (req, res) => {
+app.get("/api/assignments/:assignmentId/kdu-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
 
@@ -4736,7 +4829,7 @@ app.get("/api/assignments/:assignmentId/kdu-rubric", async (req, res) => {
 });
 
 /* SAVE KDU RUBRIC CRITERIA */
-app.put("/api/assignments/:assignmentId/kdu-rubric", async (req, res) => {
+app.put("/api/assignments/:assignmentId/kdu-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const criteria = Array.isArray(req.body.criteria) ? req.body.criteria : [];
@@ -4816,7 +4909,7 @@ app.put("/api/assignments/:assignmentId/kdu-rubric", async (req, res) => {
 
 
 /* SAVE FULL GENERATED 6-LEVEL KDU RUBRIC JSON */
-app.put("/api/assignments/:assignmentId/full-kdu-rubric", async (req, res) => {
+app.put("/api/assignments/:assignmentId/full-kdu-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureRubricFrameworkTables();
 
@@ -4908,7 +5001,7 @@ app.put("/api/assignments/:assignmentId/full-kdu-rubric", async (req, res) => {
 });
 
 /* LOAD FULL GENERATED 6-LEVEL KDU RUBRIC JSON */
-app.get("/api/assignments/:assignmentId/full-kdu-rubric", async (req, res) => {
+app.get("/api/assignments/:assignmentId/full-kdu-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureRubricFrameworkTables();
 
@@ -4957,7 +5050,7 @@ app.get("/api/assignments/:assignmentId/full-kdu-rubric", async (req, res) => {
 
 
 /* BUILD KDU RUBRIC FOR ASSIGNMENT */
-app.post("/api/assignments/:assignmentId/build-kdu-rubric", async (req, res) => {
+app.post("/api/assignments/:assignmentId/build-kdu-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureRubricFrameworkTables();
 
@@ -5102,7 +5195,7 @@ app.post("/api/assignments/:assignmentId/build-kdu-rubric", async (req, res) => 
 
 
 /* GENERATE FULL 6-LEVEL KDU RUBRIC - BUILDER LAYER ONLY */
-app.post("/api/assignments/:assignmentId/generate-kdu-rubric", async (req, res) => {
+app.post("/api/assignments/:assignmentId/generate-kdu-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const {
@@ -5210,7 +5303,7 @@ app.post("/api/assignments/:assignmentId/generate-kdu-rubric", async (req, res) 
 
 
 /* EXPORT FULL 6-LEVEL KDU RUBRIC TO WORD DOC */
-app.post("/api/assignments/:assignmentId/export-kdu-rubric-docx", async (req, res) => {
+app.post("/api/assignments/:assignmentId/export-kdu-rubric-docx", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const title = String(req.body.title || "Generated KDU Rubric").trim();
@@ -5285,7 +5378,7 @@ app.post("/api/assignments/:assignmentId/export-kdu-rubric-docx", async (req, re
 
 
 /* SET UP BLANK COURSE STRUCTURE */
-app.post("/api/courses/:courseId/setup-kdu-assessment-structure", async (req, res) => {
+app.post("/api/courses/:courseId/setup-kdu-assessment-structure", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
     const replaceExisting = Boolean(req.body?.replaceExisting);
@@ -5369,7 +5462,7 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", async (req, re
 
 
 /* COURSE STRUCTURE TEMPLATE API */
-app.get("/api/course-structure-templates", async (req, res) => {
+app.get("/api/course-structure-templates", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureCourseStructureTemplateTables();
 
@@ -5453,7 +5546,7 @@ app.get("/api/course-structure-templates", async (req, res) => {
 });
 
 
-app.delete("/api/course-structure-templates/:templateId", async (req, res) => {
+app.delete("/api/course-structure-templates/:templateId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureCourseStructureTemplateTables();
 
@@ -5487,7 +5580,7 @@ app.delete("/api/course-structure-templates/:templateId", async (req, res) => {
 });
 
 
-app.post("/api/courses/:courseId/apply-structure-template/:templateId", async (req, res) => {
+app.post("/api/courses/:courseId/apply-structure-template/:templateId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -5689,7 +5782,7 @@ app.post("/api/courses/:courseId/apply-structure-template/:templateId", async (r
 });
 
 
-app.post("/api/courses/:courseId/save-structure-template", async (req, res) => {
+app.post("/api/courses/:courseId/save-structure-template", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -5864,7 +5957,7 @@ app.post("/api/courses/:courseId/save-structure-template", async (req, res) => {
 
 
 /* LEARNING PATHS API */
-app.get("/api/courses/:courseId/learning-paths", async (req, res) => {
+app.get("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
 
@@ -5916,7 +6009,7 @@ return res.status(500).json({ error: err.message });
   }
 });
 
-app.post("/api/courses/:courseId/learning-paths", async (req, res) => {
+app.post("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
     const title = String(req.body.title || "").trim();
@@ -5991,7 +6084,7 @@ app.post("/api/courses/:courseId/learning-paths", async (req, res) => {
 });
 
 
-app.post("/api/learning-paths/:learningPathId/reorder", async (req, res) => {
+app.post("/api/learning-paths/:learningPathId/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -6131,7 +6224,7 @@ app.post("/api/learning-paths/:learningPathId/reorder", async (req, res) => {
 });
 
 
-app.post("/api/learning-paths/:learningPathId/duplicate", async (req, res) => {
+app.post("/api/learning-paths/:learningPathId/duplicate", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -6281,7 +6374,7 @@ app.post("/api/learning-paths/:learningPathId/duplicate", async (req, res) => {
   }
 });
 
-app.delete("/api/learning-paths/:learningPathId", async (req, res) => {
+app.delete("/api/learning-paths/:learningPathId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const learningPathId = Number(req.params.learningPathId);
 
@@ -6314,7 +6407,7 @@ app.delete("/api/learning-paths/:learningPathId", async (req, res) => {
 
 
 /* LEARNING PATH ITEMS API */
-app.get("/api/learning-paths/:learningPathId/items", async (req, res) => {
+app.get("/api/learning-paths/:learningPathId/items", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     await ensureLearningPathItemTables();
 
@@ -6357,7 +6450,7 @@ ORDER BY lpi.sort_order ASC, lpi.id ASC
   }
 });
 
-app.post("/api/learning-paths/:learningPathId/items", async (req, res) => {
+app.post("/api/learning-paths/:learningPathId/items", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureLearningPathItemTables();
 
@@ -6454,7 +6547,7 @@ app.post("/api/learning-paths/:learningPathId/items", async (req, res) => {
 
 
 
-app.post("/api/learning-paths/:learningPathId/create-lesson", async (req, res) => {
+app.post("/api/learning-paths/:learningPathId/create-lesson", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -6584,7 +6677,7 @@ app.post("/api/learning-paths/:learningPathId/create-lesson", async (req, res) =
   }
 });
 
-app.post("/api/learning-paths/:learningPathId/create-assignment", async (req, res) => {
+app.post("/api/learning-paths/:learningPathId/create-assignment", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -6727,7 +6820,7 @@ app.post("/api/learning-paths/:learningPathId/create-assignment", async (req, re
 });
 
 
-app.post("/api/learning-path-items/:itemId/reorder", async (req, res) => {
+app.post("/api/learning-path-items/:itemId/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -6866,7 +6959,7 @@ app.post("/api/learning-path-items/:itemId/reorder", async (req, res) => {
   }
 });
 
-app.put("/api/learning-path-items/:itemId", async (req, res) => {
+app.put("/api/learning-path-items/:itemId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureLearningPathItemTables();
 
@@ -6929,7 +7022,7 @@ app.put("/api/learning-path-items/:itemId", async (req, res) => {
   }
 });
 
-app.delete("/api/learning-path-items/:itemId", async (req, res) => {
+app.delete("/api/learning-path-items/:itemId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureLearningPathItemTables();
 
@@ -7023,7 +7116,7 @@ async function applyEnglishStudiesCompetencyTemplate(client, courseId) {
 
 
 /* CREATE COURSE */
-app.post("/api/courses", async (req, res) => {
+app.post("/api/courses", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -7159,7 +7252,7 @@ app.post("/api/courses", async (req, res) => {
 
 
 /* DUPLICATE COURSE */
-app.post("/api/courses/:courseId/duplicate", async (req, res) => {
+app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -7394,7 +7487,7 @@ app.post("/api/courses/:courseId/duplicate", async (req, res) => {
 /* DELETE COURSE */
 
 /* UPDATE COURSE */
-app.put("/api/courses/:courseId", async (req, res) => {
+app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
     const title = String(req.body.title || "").trim();
@@ -7432,7 +7525,7 @@ app.put("/api/courses/:courseId", async (req, res) => {
   }
 });
 
-app.delete("/api/courses/:courseId", async (req, res) => {
+app.delete("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
 
@@ -7465,7 +7558,7 @@ app.delete("/api/courses/:courseId", async (req, res) => {
 
 
 /* GET USERS */
-app.get("/api/users", async (req, res) => {
+app.get("/api/users", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const result = await pool.query(
       `
@@ -7498,7 +7591,7 @@ app.get("/api/users", async (req, res) => {
 });
 
 /* CREATE OR PROMOTE TEACHER */
-app.post("/api/teachers", async (req, res) => {
+app.post("/api/teachers", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const name = String(req.body.name || "").trim();
     const email = String(req.body.email || "").trim().toLowerCase();
@@ -7584,12 +7677,19 @@ app.post("/api/teachers", async (req, res) => {
 });
 
 /* CREATE STUDENT */
-app.post("/api/students", async (req, res) => {
+app.post("/api/students", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const name = String(req.body.name || "").trim();
     const email = String(req.body.email || "").trim().toLowerCase();
     const studentId = String(req.body.student_id || "").trim();
     const parentEmail = String(req.body.parent_email || "").trim().toLowerCase();
+    const currentGrade = req.body.current_grade === undefined || req.body.current_grade === ""
+      ? null
+      : Number(req.body.current_grade);
+
+    if (currentGrade !== null && (!Number.isInteger(currentGrade) || currentGrade < 1 || currentGrade > 12)) {
+      return res.status(400).json({ error: "Current grade must be a number between 1 and 12" });
+    }
 
     if (!name) {
       return res.status(400).json({ error: "Student name is required" });
@@ -7604,6 +7704,87 @@ app.post("/api/students", async (req, res) => {
     const firstName = nameParts[0] || "Student";
     const lastName = nameParts.slice(1).join(" ") || "User";
     const fullName = `${firstName} ${lastName}`.trim();
+
+    async function syncManualStudentToMasterDirectory() {
+      const existingMasterResult = await pool.query(
+        `
+        SELECT id
+        FROM master_students
+        WHERE LOWER(COALESCE(student_email, '')) = $1
+        LIMIT 1
+        `,
+        [email]
+      );
+
+      if (existingMasterResult.rows.length > 0) {
+        await pool.query(
+          `
+          UPDATE master_students
+          SET student_id = $1,
+              legal_first_name = $2,
+              legal_last_name = $3,
+              display_name = $4,
+              current_grade = $5,
+              student_email = $6,
+              parent_email = $7,
+              status = 'Active',
+              notes = COALESCE(NULLIF(notes, ''), 'Created or updated from manual student administration.'),
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $8
+          `,
+          [
+            studentId || null,
+            firstName,
+            lastName,
+            fullName,
+            currentGrade,
+            email,
+            parentEmail || null,
+            existingMasterResult.rows[0].id,
+          ]
+        );
+
+        return;
+      }
+
+      await pool.query(
+        `
+        INSERT INTO master_students (
+          pen,
+          student_id,
+          legal_first_name,
+          legal_last_name,
+          display_name,
+          current_grade,
+          student_email,
+          parent_email,
+          status,
+          notes
+        )
+        VALUES (
+          NULL,
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          'Active',
+          'Created from manual student administration before PEN assignment.'
+        )
+        `,
+        [
+          studentId || null,
+          firstName,
+          lastName,
+          fullName,
+          currentGrade,
+          email,
+          parentEmail || null,
+        ]
+      );
+    }
 
     const existingUserResult = await pool.query(
       `
@@ -7624,8 +7805,7 @@ app.post("/api/students", async (req, res) => {
             last_name = $3,
             role = 'student',
             student_id = $4,
-            parent_email = $5,
-            updated_at = CURRENT_TIMESTAMP
+            parent_email = $5
         WHERE id = $6
         RETURNING
           id,
@@ -7640,6 +7820,8 @@ app.post("/api/students", async (req, res) => {
         `,
         [fullName, firstName, lastName, studentId || null, parentEmail || null, existingUserResult.rows[0].id]
       );
+
+      await syncManualStudentToMasterDirectory();
 
       return res.json({
         success: true,
@@ -7666,6 +7848,8 @@ app.post("/api/students", async (req, res) => {
       [fullName, firstName, lastName, email, studentId || null, parentEmail || null]
     );
 
+    await syncManualStudentToMasterDirectory();
+
     return res.json({
       success: true,
       action: "created_student",
@@ -7678,7 +7862,7 @@ app.post("/api/students", async (req, res) => {
 });
 
 /* GET TEACHER DASHBOARD */
-app.get("/api/teachers/:teacherId/dashboard", async (req, res) => {
+app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const teacherId = Number(req.params.teacherId);
 
@@ -7840,7 +8024,7 @@ app.get("/api/teachers/:teacherId/dashboard", async (req, res) => {
 });
 
 /* IMPORT CLASS FROM CSV TEXT */
-app.post("/api/import/class-from-csv-text", async (req, res) => {
+app.post("/api/import/class-from-csv-text", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const csvText = String(req.body.csvText || "").trim();
 
@@ -7860,7 +8044,7 @@ app.post("/api/import/class-from-csv-text", async (req, res) => {
 
 
 /* LIST MASTER DIRECTORY STUDENTS FOR COURSE PICKER */
-app.get("/api/courses/:courseId/master-directory-students", async (req, res) => {
+app.get("/api/courses/:courseId/master-directory-students", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
     const currentGrade = req.query.current_grade === undefined || req.query.current_grade === ""
@@ -7943,7 +8127,7 @@ app.get("/api/courses/:courseId/master-directory-students", async (req, res) => 
 });
 
 /* ENROLL STUDENTS FROM MASTER DIRECTORY */
-app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res) => {
+app.post("/api/courses/:courseId/enroll-from-master-directory", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -8021,11 +8205,30 @@ app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res)
 
       const userResult = await client.query(
         `
-        INSERT INTO users (first_name, last_name, email, role, parent_email, student_id, password_hash)
-        VALUES ($1, $2, $3, 'student', $4, $5, 'MASTER_DIRECTORY_PENDING_PASSWORD')
+        INSERT INTO users (
+          name,
+          first_name,
+          last_name,
+          email,
+          role,
+          parent_email,
+          student_id,
+          password_hash
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          'student',
+          $5,
+          $6,
+          'MASTER_DIRECTORY_PENDING_PASSWORD'
+        )
         ON CONFLICT (email)
         DO UPDATE
-        SET first_name = EXCLUDED.first_name,
+        SET name = EXCLUDED.name,
+            first_name = EXCLUDED.first_name,
             last_name = EXCLUDED.last_name,
             role = 'student',
             parent_email = EXCLUDED.parent_email,
@@ -8033,6 +8236,7 @@ app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res)
         RETURNING id, (xmax = 0) AS inserted
         `,
         [
+          studentName,
           (studentName.split(/\s+/)[0] || "Student"),
           (studentName.split(/\s+/).slice(1).join(" ") || "User"),
           studentEmail,
@@ -8092,7 +8296,7 @@ app.post("/api/courses/:courseId/enroll-from-master-directory", async (req, res)
   }
 });
 /* IMPORT HOMEFORM INTO CLASS ROSTER */
-app.post("/api/class-roster/:courseId/import-homeform", async (req, res) => {
+app.post("/api/class-roster/:courseId/import-homeform", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 
   try {
@@ -8239,7 +8443,7 @@ app.post("/api/class-roster/:courseId/import-homeform", async (req, res) => {
   }
 });
 /* GET CLASS ROSTER */
-app.get("/api/class-roster/:courseId", async (req, res) => {
+app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -8267,6 +8471,7 @@ app.get("/api/class-roster/:courseId", async (req, res) => {
       `
       SELECT
         u.id,
+        u.name,
         u.first_name,
         u.last_name,
         u.email,
@@ -8293,7 +8498,7 @@ app.get("/api/class-roster/:courseId", async (req, res) => {
 
 
 /* MANUAL STUDENT ENROLLMENT */
-app.post("/api/class-roster/:courseId/students", async (req, res) => {
+app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -8384,7 +8589,7 @@ app.post("/api/class-roster/:courseId/students", async (req, res) => {
 
 
 /* REMOVE STUDENT FROM CLASS ROSTER */
-app.delete("/api/class-roster/:courseId/students/:studentId", async (req, res) => {
+app.delete("/api/class-roster/:courseId/students/:studentId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
     const studentId = Number(req.params.studentId);
@@ -8427,7 +8632,7 @@ app.delete("/api/class-roster/:courseId/students/:studentId", async (req, res) =
 });
 
 /* SEED RUBRIC DEMO */
-app.post("/api/classes/:classId/seed-rubric-demo", async (req, res) => {
+app.post("/api/classes/:classId/seed-rubric-demo", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const classId = Number(req.params.classId);
 
@@ -8449,7 +8654,7 @@ app.post("/api/classes/:classId/seed-rubric-demo", async (req, res) => {
 
 
 /* REPORTS API - CURRENT KDU STRUCTURE */
-app.get("/api/reports/:courseId", async (req, res) => {
+app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
     const {
@@ -8677,7 +8882,7 @@ app.get("/api/reports/:courseId", async (req, res) => {
 
 
 /* GET KDU ASSESSMENT GROUP GRADEBOOK */
-app.get("/api/classes/:classId/kdu-gradebook", async (req, res) => {
+app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const classId = Number(req.params.classId);
 
@@ -8894,7 +9099,7 @@ app.get("/api/classes/:classId/kdu-gradebook", async (req, res) => {
 
 
 /* GET GRADEBOOK - 6 POINT RUBRIC TO PERCENT PIPELINE */
-app.get("/api/classes/:classId/gradebook", async (req, res) => {
+app.get("/api/classes/:classId/gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureRubricFrameworkTables();
 
@@ -8966,7 +9171,7 @@ function roundSchoolMark(value) {
 
 
 /* GET REPORT CARD COMMENTS FOR CLASS */
-app.get("/api/classes/:classId/report-comments", async (req, res) => {
+app.get("/api/classes/:classId/report-comments", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
     await ensureStudentReportCommentsTable();
@@ -9011,7 +9216,7 @@ app.get("/api/classes/:classId/report-comments", async (req, res) => {
 });
 
 /* SAVE REPORT CARD COMMENTS FOR STUDENT */
-app.put("/api/classes/:classId/report-comments/:studentUserId", async (req, res) => {
+app.put("/api/classes/:classId/report-comments/:studentUserId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentReportCommentsTable();
 
@@ -9074,7 +9279,7 @@ app.put("/api/classes/:classId/report-comments/:studentUserId", async (req, res)
 });
 
 /* EXPORT WEBTESS / MINISTRY MARKS CSV */
-app.get("/api/classes/:classId/webtess-marks-csv", async (req, res) => {
+app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -9243,7 +9448,7 @@ app.get("/api/classes/:classId/webtess-marks-csv", async (req, res) => {
 
 
 /* EXAM SECTION MARK ENTRY - RAW MARKS TO KDU CONVERSION */
-app.get("/api/assignments/:assignmentId/sections", async (req, res) => {
+app.get("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureAssignmentSectionTables();
 
@@ -9281,7 +9486,7 @@ app.get("/api/assignments/:assignmentId/sections", async (req, res) => {
   }
 });
 
-app.put("/api/assignments/:assignmentId/sections", async (req, res) => {
+app.put("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureAssignmentSectionTables();
 
@@ -9381,7 +9586,7 @@ app.put("/api/assignments/:assignmentId/sections", async (req, res) => {
   }
 });
 
-app.get("/api/assignments/:assignmentId/section-scores", async (req, res) => {
+app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureAssignmentSectionTables();
 
@@ -9432,7 +9637,7 @@ app.get("/api/assignments/:assignmentId/section-scores", async (req, res) => {
   }
 });
 
-app.post("/api/assignments/:assignmentId/section-scores", async (req, res) => {
+app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureAssignmentSectionTables();
 

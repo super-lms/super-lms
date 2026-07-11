@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import API_BASE from "../../apiBase"
+import authFetch from "../../services/authFetch"
 
 export default function AdminCourseLearningPathsPage() {
   const { courseId } = useParams()
@@ -19,24 +20,39 @@ export default function AdminCourseLearningPathsPage() {
         setLoading(true)
         setError("")
 
-        const response = await fetch(`${API_BASE}/api/courses/${courseId}/learning-paths`)
+        const response = await authFetch(
+          `${API_BASE}/api/courses/${courseId}/learning-paths`
+        )
         const data = await response.json()
 
         if (!response.ok || data?.success === false) {
           throw new Error(data?.error || "Failed to load learning paths")
         }
 
-        const paths = Array.isArray(data?.learning_paths) ? data.learning_paths : []
+        const paths = Array.isArray(data?.learning_paths)
+          ? data.learning_paths
+          : []
+
         const itemEntries = await Promise.all(
           paths.map(async (path) => {
-            const itemResponse = await fetch(`${API_BASE}/api/learning-paths/${path.id}/items`)
+            const itemResponse = await authFetch(
+              `${API_BASE}/api/learning-paths/${path.id}/items`
+            )
             const itemData = await itemResponse.json()
 
             if (!itemResponse.ok || itemData?.success === false) {
-              throw new Error(itemData?.error || `Failed to load items for ${path.title || "learning path"}`)
+              throw new Error(
+                itemData?.error ||
+                  `Failed to load items for ${
+                    path.title || "learning path"
+                  }`
+              )
             }
 
-            return [path.id, Array.isArray(itemData?.items) ? itemData.items : []]
+            return [
+              path.id,
+              Array.isArray(itemData?.items) ? itemData.items : [],
+            ]
           })
         )
 
@@ -69,15 +85,43 @@ export default function AdminCourseLearningPathsPage() {
   const courseTitle = course?.title || `Course ${courseId}`
 
   const health = useMemo(() => {
-    const publishedCount = learningPaths.filter((path) => Boolean(path.is_published)).length
+    const publishedCount = learningPaths.filter((path) =>
+      Boolean(path.is_published)
+    ).length
+
     const draftCount = learningPaths.length - publishedCount
-    const allItems = learningPaths.flatMap((path) => pathItemsById[path.id] || [])
-    const assignmentItems = allItems.filter((item) => item.assignment_id || item.assignment_title || item.item_type === "assignment")
-    const lessonItems = allItems.filter((item) => item.lesson_id || item.lesson_title || item.item_type === "lesson")
-    const emptyPaths = learningPaths.filter((path) => (pathItemsById[path.id] || []).length === 0)
+
+    const allItems = learningPaths.flatMap(
+      (path) => pathItemsById[path.id] || []
+    )
+
+    const assignmentItems = allItems.filter(
+      (item) =>
+        item.assignment_id ||
+        item.assignment_title ||
+        item.item_type === "assignment"
+    )
+
+    const lessonItems = allItems.filter(
+      (item) =>
+        item.lesson_id ||
+        item.lesson_title ||
+        item.item_type === "lesson"
+    )
+
+    const emptyPaths = learningPaths.filter(
+      (path) => (pathItemsById[path.id] || []).length === 0
+    )
+
     const brokenItems = allItems.filter((item) => {
-      if (item.item_type === "assignment") return !item.assignment_id && !item.assignment_title
-      if (item.item_type === "lesson") return !item.lesson_id && !item.lesson_title
+      if (item.item_type === "assignment") {
+        return !item.assignment_id && !item.assignment_title
+      }
+
+      if (item.item_type === "lesson") {
+        return !item.lesson_id && !item.lesson_title
+      }
+
       return false
     })
 
@@ -85,13 +129,18 @@ export default function AdminCourseLearningPathsPage() {
     let nextStep = "Create the first learning path for this course."
 
     if (learningPaths.length > 0 && allItems.length === 0) {
-      nextStep = "Add lessons or assignments to the existing learning paths."
+      nextStep =
+        "Add lessons or assignments to the existing learning paths."
     } else if (emptyPaths.length > 0) {
-      nextStep = `Add items to ${emptyPaths[0].title || "an empty learning path"}.`
+      nextStep = `Add items to ${
+        emptyPaths[0].title || "an empty learning path"
+      }.`
     } else if (publishedCount === 0 && learningPaths.length > 0) {
-      nextStep = "Publish at least one learning path when it is ready for students."
+      nextStep =
+        "Publish at least one learning path when it is ready for students."
     } else if (brokenItems.length > 0) {
-      nextStep = "Review learning path items with missing lesson or assignment links."
+      nextStep =
+        "Review learning path items with missing lesson or assignment links."
     } else if (publishedCount > 0 && allItems.length > 0) {
       readiness = "Ready For Students"
       nextStep = "Learning paths are connected and ready for review."
@@ -112,12 +161,22 @@ export default function AdminCourseLearningPathsPage() {
 
   return (
     <div>
-      <Link to={`/admin/courses/${encodeURIComponent(String(courseId))}`} style={backLinkStyle}>
+      <Link
+        to={`/admin/courses/${encodeURIComponent(String(courseId))}`}
+        style={backLinkStyle}
+      >
         ← Back to Course Workspace
       </Link>
 
       <div style={heroStyle}>
-        <div style={{ fontSize: "14px", fontWeight: 700, color: "#6b7280", marginBottom: "8px" }}>
+        <div
+          style={{
+            fontSize: "14px",
+            fontWeight: 700,
+            color: "#6b7280",
+            marginBottom: "8px",
+          }}
+        >
           Administrator Course Workspace
         </div>
 
@@ -125,12 +184,21 @@ export default function AdminCourseLearningPathsPage() {
           Learning Paths
         </h1>
 
-        <p style={{ margin: "10px 0 0 0", color: "#4b5563", fontSize: "16px", lineHeight: 1.5 }}>
+        <p
+          style={{
+            margin: "10px 0 0 0",
+            color: "#4b5563",
+            fontSize: "16px",
+            lineHeight: 1.5,
+          }}
+        >
           {courseTitle}
         </p>
       </div>
 
-      {loading ? <div style={noticeStyle}>Loading learning paths...</div> : null}
+      {loading ? (
+        <div style={noticeStyle}>Loading learning paths...</div>
+      ) : null}
 
       {error ? <div style={errorStyle}>{error}</div> : null}
 
@@ -143,14 +211,29 @@ export default function AdminCourseLearningPathsPage() {
           </div>
 
           <div style={healthGridStyle}>
-            <HealthCard label="Learning Paths" value={learningPaths.length} />
+            <HealthCard
+              label="Learning Paths"
+              value={learningPaths.length}
+            />
             <HealthCard label="Published" value={health.publishedCount} />
             <HealthCard label="Draft" value={health.draftCount} />
             <HealthCard label="Total Items" value={health.totalItems} />
-            <HealthCard label="Assignments Linked" value={health.assignmentCount} />
-            <HealthCard label="Lessons Linked" value={health.lessonCount} />
-            <HealthCard label="Empty Paths" value={health.emptyPathCount} />
-            <HealthCard label="Broken Links" value={health.brokenItemCount} />
+            <HealthCard
+              label="Assignments Linked"
+              value={health.assignmentCount}
+            />
+            <HealthCard
+              label="Lessons Linked"
+              value={health.lessonCount}
+            />
+            <HealthCard
+              label="Empty Paths"
+              value={health.emptyPathCount}
+            />
+            <HealthCard
+              label="Broken Links"
+              value={health.brokenItemCount}
+            />
           </div>
 
           <div style={readinessStyle}>
@@ -160,7 +243,9 @@ export default function AdminCourseLearningPathsPage() {
       ) : null}
 
       {!loading && !error && learningPaths.length === 0 ? (
-        <div style={noticeStyle}>No learning paths found for this course.</div>
+        <div style={noticeStyle}>
+          No learning paths found for this course.
+        </div>
       ) : null}
 
       <div style={pathListStyle}>
@@ -169,14 +254,33 @@ export default function AdminCourseLearningPathsPage() {
 
           return (
             <div key={path.id} style={pathCardStyle}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                }}
+              >
                 <div>
-                  <h2 style={{ margin: 0, fontSize: "21px", color: "#111827" }}>
+                  <h2
+                    style={{
+                      margin: 0,
+                      fontSize: "21px",
+                      color: "#111827",
+                    }}
+                  >
                     {path.title}
                   </h2>
 
                   {path.description ? (
-                    <p style={{ margin: "10px 0 0 0", color: "#4b5563", lineHeight: 1.5 }}>
+                    <p
+                      style={{
+                        margin: "10px 0 0 0",
+                        color: "#4b5563",
+                        lineHeight: 1.5,
+                      }}
+                    >
                       {path.description}
                     </p>
                   ) : null}
@@ -188,7 +292,8 @@ export default function AdminCourseLearningPathsPage() {
               </div>
 
               <div style={metaStyle}>
-                Sort Order: {path.sort_order ?? "—"} · Path ID: {path.id} · Items: {items.length}
+                Sort Order: {path.sort_order ?? "—"} · Path ID: {path.id} ·
+                Items: {items.length}
               </div>
             </div>
           )

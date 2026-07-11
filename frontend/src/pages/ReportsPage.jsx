@@ -1,18 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
+import authFetch from "../services/authFetch";
 
 function ReportsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const commentSaveTimersRef = useRef({});
+  const initialCourseLoadedRef = useRef(false);
+
+  const normalizedRole = String(user?.role || "").trim().toLowerCase();
+  const dashboardPath = normalizedRole === "admin" ? "/admin" : "/dashboard";
+
+  const requestedCourseId =
+    new URLSearchParams(window.location.search).get("courseId") ||
+    window.localStorage.getItem("super-lms-last-course-id") ||
+    "";
 
   const [courses, setCourses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [levels, setLevels] = useState([]);
   const [enrolledStudents, setEnrolledStudents] = useState([]);
 
-  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState(requestedCourseId);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedCategoryName, setSelectedCategoryName] = useState("");
   const [selectedLevelName, setSelectedLevelName] = useState("");
@@ -54,11 +64,11 @@ function ReportsPage() {
       return;
     }
 
-    navigate("/dashboard");
+    navigate(dashboardPath);
   }
 
   useEffect(() => {
-    fetch("/api/courses")
+    authFetch("/api/courses")
       .then((res) => {
         if (!res.ok) {
           throw new Error("Could not load courses");
@@ -159,7 +169,7 @@ function ReportsPage() {
       return;
     }
 
-    fetch(`/api/assessment-categories/${courseId}`)
+    authFetch(`/api/courses/${courseId}/categories`)
       .then((res) => {
         if (!res.ok) {
           throw new Error("Could not load categories");
@@ -167,7 +177,20 @@ function ReportsPage() {
         return res.json();
       })
       .then((data) => {
-        setCategories(Array.isArray(data) ? data : []);
+        const normalizedCategories = (Array.isArray(data) ? data : [])
+          .map((category) => ({
+            ...category,
+            id: category.id,
+            name: category.name || category.category_name || "",
+          }))
+          .filter((category) => category.id && category.name)
+          .sort(
+            (a, b) =>
+              Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) ||
+              Number(a.id) - Number(b.id)
+          );
+
+        setCategories(normalizedCategories);
         setSelectedCategoryId("");
         setSelectedCategoryName("");
         setLevels([]);
@@ -183,7 +206,7 @@ function ReportsPage() {
       return;
     }
 
-    fetch(`/api/assessment-levels/${categoryId}`)
+    authFetch(`/api/categories/${categoryId}/subcategories`)
       .then((res) => {
         if (!res.ok) {
           throw new Error("Could not load levels");
@@ -191,15 +214,47 @@ function ReportsPage() {
         return res.json();
       })
       .then((data) => {
-        setLevels(Array.isArray(data) ? data : []);
+        const normalizedLevels = (Array.isArray(data) ? data : [])
+          .map((subcategory) => ({
+            ...subcategory,
+            id: subcategory.id,
+            level_name:
+              subcategory.level_name ||
+              subcategory.name ||
+              subcategory.subcategory_name ||
+              "",
+          }))
+          .filter((level) => level.id && level.level_name)
+          .sort(
+            (a, b) =>
+              Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) ||
+              Number(a.id) - Number(b.id)
+          );
+
+        setLevels(normalizedLevels);
         setSelectedLevelName("");
       })
       .catch(() => setMessage("Could not load levels"));
   }
 
   function handleCourseChange(event) {
-    const courseId = event.target.value;
+    const courseId = String(event.target.value || "");
+
     setSelectedCourse(courseId);
+
+    if (courseId) {
+      window.localStorage.setItem("super-lms-last-course-id", courseId);
+
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set("courseId", courseId);
+      window.history.replaceState(null, "", nextUrl);
+    } else {
+      window.localStorage.removeItem("super-lms-last-course-id");
+
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete("courseId");
+      window.history.replaceState(null, "", nextUrl);
+    }
     setSelectedStudentKey("");
     setReportData(null);
     setMessage("");
@@ -207,7 +262,7 @@ function ReportsPage() {
     loadCategories(courseId);
 
     if (courseId) {
-      fetch(`/api/class-roster/${courseId}`)
+      authFetch(`/api/class-roster/${courseId}`)
         .then((res) => {
           if (!res.ok) {
             throw new Error("Could not load students for this course");
@@ -232,16 +287,42 @@ function ReportsPage() {
         });
     }
 
-    fetch(`/api/classes/${courseId}/report-comments`)
+    authFetch(`/api/classes/${courseId}/report-comments`)
       .then(res => res.json())
       .then(data => setReportComments(data.comments || []))
       .catch(() => setReportComments([]));
 
-    fetch(`/api/classes/${courseId}/kdu-gradebook`)
+    authFetch(`/api/classes/${courseId}/kdu-gradebook`)
       .then(res => res.json())
       .then(data => setKduGradebookStudents(data.students || []))
       .catch(() => setKduGradebookStudents([]));
   }
+
+  useEffect(() => {
+    if (
+      initialCourseLoadedRef.current ||
+      !requestedCourseId ||
+      courses.length === 0
+    ) {
+      return;
+    }
+
+    const matchingCourse = courses.find(
+      (course) => String(course.id) === String(requestedCourseId)
+    );
+
+    if (!matchingCourse) {
+      return;
+    }
+
+    initialCourseLoadedRef.current = true;
+
+    handleCourseChange({
+      target: {
+        value: String(requestedCourseId),
+      },
+    });
+  }, [courses, requestedCourseId]);
 
   function handleCategoryChange(event) {
     const categoryId = event.target.value;
@@ -276,7 +357,7 @@ function ReportsPage() {
       reportScope,
     });
 
-    fetch(`/api/reports/${selectedCourse}?${params.toString()}`)
+    authFetch(`/api/reports/${selectedCourse}?${params.toString()}`)
       .then((res) => {
         if (!res.ok) {
           throw new Error("Report error");
@@ -314,7 +395,7 @@ function ReportsPage() {
     setSavedCommentStudentId(studentUserId);
     setMessage("Saving comment...");
 
-    fetch(`/api/classes/${selectedCourse}/report-comments/${studentUserId}`, {
+    authFetch(`/api/classes/${selectedCourse}/report-comments/${studentUserId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ com1, com2 })
@@ -607,14 +688,47 @@ function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
-  function downloadWebtessCSV() {
+  async function downloadWebtessCSV() {
     if (!selectedCourse) {
       setMessage("Please select a course before downloading WebTESS CSV");
       return;
     }
 
-    window.location.href = `/api/classes/${selectedCourse}/webtess-marks-csv`;
-    setMessage("Downloading WebTESS CSV for ministry upload");
+    try {
+      setMessage("Preparing WebTESS CSV for ministry upload...");
+
+      const response = await authFetch(
+        `/api/classes/${selectedCourse}/webtess-marks-csv`
+      );
+
+      if (!response.ok) {
+        let errorMessage = "Could not download WebTESS CSV.";
+
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData?.error || errorMessage;
+        } catch {
+          // Keep the default message when the response is not JSON.
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const csvBlob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(csvBlob);
+      const link = document.createElement("a");
+
+      link.href = downloadUrl;
+      link.download = `webtess-marks-course-${selectedCourse}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      window.URL.revokeObjectURL(downloadUrl);
+      setMessage("WebTESS CSV downloaded.");
+    } catch (error) {
+      setMessage(error.message || "Could not download WebTESS CSV.");
+    }
   }
 
   function exportPDF() {

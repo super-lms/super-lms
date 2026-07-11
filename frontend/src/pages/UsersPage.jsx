@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import ObserverPermissionsPanel from "./user-management/ObserverPermissionsPanel.jsx";
+import EditUserDrawer from "./user-management/EditUserDrawer.jsx";
+import authFetch from "../services/authFetch";
 
 const emptyTeacherForm = {
   name: "",
@@ -11,6 +12,13 @@ const emptyStudentForm = {
   email: "",
   student_id: "",
   parent_email: "",
+  current_grade: "",
+};
+
+const emptyObserverForm = {
+  name: "",
+  email: "",
+  relationship: "parent",
 };
 
 const emptyObserverDraft = {
@@ -70,13 +78,18 @@ function UsersPage() {
   const [studentError, setStudentError] = useState("");
   const [savingStudent, setSavingStudent] = useState(false);
 
+  const [observerForm, setObserverForm] = useState(emptyObserverForm);
+  const [observerMessage, setObserverMessage] = useState("");
+  const [observerError, setObserverError] = useState("");
+  const [savingObserver, setSavingObserver] = useState(false);
+
   const [observerDraft, setObserverDraft] = useState(emptyObserverDraft);
 
   async function loadUsers() {
     setStatus("Loading users...");
 
     try {
-      const response = await fetch("/api/users");
+      const response = await authFetch("/api/users");
 
       if (!response.ok) {
         throw new Error("Server error");
@@ -114,6 +127,15 @@ function UsersPage() {
     setStudentError("");
   }
 
+  function updateObserverForm(field, value) {
+    setObserverForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setObserverMessage("");
+    setObserverError("");
+  }
+
   async function handleAddTeacher(event) {
     event.preventDefault();
 
@@ -137,7 +159,7 @@ function UsersPage() {
     setTeacherError("");
 
     try {
-      const response = await fetch("/api/teachers", {
+      const response = await authFetch("/api/teachers", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -176,6 +198,7 @@ function UsersPage() {
       email: String(studentForm.email || "").trim().toLowerCase(),
       student_id: String(studentForm.student_id || "").trim(),
       parent_email: String(studentForm.parent_email || "").trim().toLowerCase(),
+      current_grade: studentForm.current_grade ? Number(studentForm.current_grade) : null,
     };
 
     if (!cleanStudent.name) {
@@ -188,12 +211,17 @@ function UsersPage() {
       return;
     }
 
+    if (!cleanStudent.current_grade) {
+      setStudentError("Current grade is required for observer grade lists.");
+      return;
+    }
+
     setSavingStudent(true);
     setStudentMessage("");
     setStudentError("");
 
     try {
-      const response = await fetch("/api/students", {
+      const response = await authFetch("/api/students", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -221,6 +249,60 @@ function UsersPage() {
       setStudentError(error.message || "Could not add student.");
     } finally {
       setSavingStudent(false);
+    }
+  }
+
+  async function handleAddObserver(event) {
+    event.preventDefault();
+
+    const cleanObserver = {
+      name: String(observerForm.name || "").trim(),
+      email: String(observerForm.email || "").trim().toLowerCase(),
+      relationship: String(observerForm.relationship || "parent").trim(),
+    };
+
+    if (!cleanObserver.name) {
+      setObserverError("Observer name is required.");
+      return;
+    }
+
+    if (!cleanObserver.email) {
+      setObserverError("Observer email is required.");
+      return;
+    }
+
+    setSavingObserver(true);
+    setObserverMessage("");
+    setObserverError("");
+
+    try {
+      const response = await authFetch("/api/observers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(cleanObserver),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not add observer");
+      }
+
+      setObserverForm(emptyObserverForm);
+      setObserverMessage("Observer added successfully. Link student access in the edit panel.");
+      setActiveTab("observer");
+      await loadUsers();
+
+      if (data?.observer?.id) {
+        openEditDrawer(data.observer);
+      }
+    } catch (error) {
+      console.error(error);
+      setObserverError(error.message || "Could not add observer.");
+    } finally {
+      setSavingObserver(false);
     }
   }
 
@@ -283,7 +365,7 @@ function UsersPage() {
     });
 
     try {
-      const response = await fetch(`/api/admin/observer-links/${user.id}`);
+      const response = await authFetch(`/api/admin/observer-links/${user.id}`);
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -322,6 +404,16 @@ function UsersPage() {
   function closeEditDrawer() {
     setEditingUser(null);
     setObserverDraft(emptyObserverDraft);
+  }
+
+  async function handleUserUpdated() {
+    await loadUsers();
+    closeEditDrawer();
+  }
+
+  async function handleUserDeleted() {
+    await loadUsers();
+    closeEditDrawer();
   }
 
   function updateObserverDraft(field, value) {
@@ -379,7 +471,7 @@ function UsersPage() {
     }));
 
     try {
-      const response = await fetch(`/api/admin/observer-links/${editingUser.id}`, {
+      const response = await authFetch(`/api/admin/observer-links/${editingUser.id}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -557,6 +649,24 @@ function UsersPage() {
             </div>
 
             <div className="form-field">
+              <label htmlFor="student-current-grade" className="form-label">
+                Current Grade
+              </label>
+              <select
+                id="student-current-grade"
+                className="form-input"
+                value={studentForm.current_grade}
+                onChange={(event) => updateStudentForm("current_grade", event.target.value)}
+                disabled={savingStudent}
+              >
+                <option value="">Select grade</option>
+                <option value="10">Grade 10</option>
+                <option value="11">Grade 11</option>
+                <option value="12">Grade 12</option>
+              </select>
+            </div>
+
+            <div className="form-field">
               <label htmlFor="student-parent-email" className="form-label">
                 Parent Email
               </label>
@@ -580,6 +690,76 @@ function UsersPage() {
 
           {studentMessage ? <p className="form-message">{studentMessage}</p> : null}
           {studentError ? <p className="form-message">{studentError}</p> : null}
+        </form>
+      </section>
+
+      <section className="panel">
+        <div className="section-header">
+          <div>
+            <h3>Add Observer Manually</h3>
+            <p className="section-subtitle">
+              Create a parent or Chinese Homeroom Teacher observer account, then link student access in the edit panel.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleAddObserver} className="form-stack">
+          <div className="form-grid">
+            <div className="form-field">
+              <label htmlFor="observer-name" className="form-label">
+                Observer Name
+              </label>
+              <input
+                id="observer-name"
+                type="text"
+                className="form-input"
+                value={observerForm.name}
+                onChange={(event) => updateObserverForm("name", event.target.value)}
+                placeholder="Example: Mrs. Chen"
+                disabled={savingObserver}
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="observer-email" className="form-label">
+                Observer Email
+              </label>
+              <input
+                id="observer-email"
+                type="email"
+                className="form-input"
+                value={observerForm.email}
+                onChange={(event) => updateObserverForm("email", event.target.value)}
+                placeholder="parent@family.com"
+                disabled={savingObserver}
+              />
+            </div>
+
+            <div className="form-field">
+              <label htmlFor="observer-relationship" className="form-label">
+                Observer Type
+              </label>
+              <select
+                id="observer-relationship"
+                className="form-input"
+                value={observerForm.relationship}
+                onChange={(event) => updateObserverForm("relationship", event.target.value)}
+                disabled={savingObserver}
+              >
+                <option value="parent">Parent</option>
+                <option value="chinese_homeroom_teacher">Chinese Homeroom Teacher</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <button type="submit" className="primary-btn" disabled={savingObserver}>
+              {savingObserver ? "Adding Observer..." : "Add Observer"}
+            </button>
+          </div>
+
+          {observerMessage ? <p className="form-message">{observerMessage}</p> : null}
+          {observerError ? <p className="form-message">{observerError}</p> : null}
         </form>
       </section>
 
@@ -664,84 +844,22 @@ function UsersPage() {
         </div>
       </section>
 
-      {editingUser ? (
-        <div style={modalBackdropStyle}>
-          <div style={modalPanelStyle}>
-            <div style={modalHeaderStyle}>
-              <div>
-                <h3 style={{ margin: 0 }}>Edit User</h3>
-                <p className="section-subtitle" style={{ marginTop: "6px" }}>
-                  User management foundation. Student access permissions are staged here before backend persistence.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                style={smallActionButtonStyle}
-                onClick={closeEditDrawer}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="form-stack">
-              <div className="form-grid">
-                <div className="form-field">
-                  <label className="form-label">Name</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={getDisplayName(editingUser)}
-                    readOnly
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label className="form-label">Email</label>
-                  <input
-                    type="email"
-                    className="form-input"
-                    value={editingUser.email || ""}
-                    readOnly
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label className="form-label">Role</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={editingUser.role || "Not recorded"}
-                    readOnly
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label className="form-label">Status</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={getUserStatus(editingUser)}
-                    readOnly
-                  />
-                </div>
-              </div>
-
-              {isObserverUser(editingUser) ? (
-                <ObserverPermissionsPanel
-                  students={students}
-                  observerDraft={observerDraft}
-                  onUpdateDraft={updateObserverDraft}
-                  onToggleStudent={toggleLinkedStudent}
-                  onRemoveStudent={removeLinkedStudent}
-                  onCancel={cancelObserverChanges}
-                  onSave={saveObserverChanges}
-                />
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <EditUserDrawer
+        editingUser={editingUser}
+        onUserUpdated={handleUserUpdated}
+        onUserDeleted={handleUserDeleted}
+        students={students}
+        observerDraft={observerDraft}
+        getDisplayName={getDisplayName}
+        getUserStatus={getUserStatus}
+        isObserverUser={isObserverUser}
+        updateObserverDraft={updateObserverDraft}
+        toggleLinkedStudent={toggleLinkedStudent}
+        removeLinkedStudent={removeLinkedStudent}
+        cancelObserverChanges={cancelObserverChanges}
+        saveObserverChanges={saveObserverChanges}
+        closeEditDrawer={closeEditDrawer}
+      />
     </div>
   );
 }
