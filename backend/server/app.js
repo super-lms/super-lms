@@ -4033,7 +4033,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
     const assignmentResult = await pool.query(
       `
-      SELECT id, class_id, title, description, due_date, subcategory_id
+      SELECT id, teacher_id, class_id, title, description, due_date, subcategory_id
       FROM assignments
       WHERE id = $1
       LIMIT 1
@@ -4081,10 +4081,46 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       });
     }
 
+    const studentResult = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE LOWER(email) = $1
+        AND role = 'student'
+      LIMIT 1
+      `,
+      [studentEmail]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({ error: "Student user account not found" });
+    }
+
+    const studentUserId = Number(studentResult.rows[0].id);
+    const teacherId = Number(assignmentResult.rows[0].teacher_id || 0);
+    const courseId = Number(assignmentResult.rows[0].class_id || 0);
+    const assignmentTitle =
+      String(assignmentResult.rows[0].title || "").trim() || "Untitled Assignment";
+
+    if (!teacherId) {
+      return res.status(400).json({ error: "Assignment teacher_id is required" });
+    }
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Assignment class_id is required" });
+    }
+
     const insertedResult = await pool.query(
       `
       INSERT INTO submissions (
         assignment_id,
+        student_id,
+        teacher_id,
+        course_id,
+        assignment_title,
+        original_file_name,
+        stored_file_name,
+        file_path,
         student_name,
         student_email,
         content,
@@ -4093,19 +4129,38 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
         grade,
         rubric_selection
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       RETURNING
         id,
         assignment_id,
         student_name,
         student_email,
+        original_file_name,
+        stored_file_name,
+        file_path,
         content,
         score,
         feedback,
         grade,
         rubric_selection
       `,
-      [assignmentId, studentName, studentEmail, content, null, "", null, null]
+      [
+        assignmentId,
+        studentUserId,
+        teacherId,
+        courseId,
+        assignmentTitle,
+        "student-text-submission.txt",
+        "student-text-submission.txt",
+        "student-text-submission.txt",
+        studentName,
+        studentEmail,
+        content,
+        null,
+        "",
+        null,
+        null,
+      ]
     );
 
     return res.json({
