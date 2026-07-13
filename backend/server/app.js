@@ -4178,7 +4178,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
 
 /* LIST STUDENT ATTACHMENTS FOR ASSIGNMENT */
-app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
+app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, requireRole("admin", "teacher", "student"), async (req, res) => {
   try {
     await ensureSubmissionAttachmentsTable();
 
