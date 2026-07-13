@@ -3206,9 +3206,9 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
           CONCAT(u.first_name, ' ', u.last_name) AS student_name,
           u.email AS student_email,
           s.content,
-          NULL AS score,
-          NULL AS grade,
-          NULL AS feedback,
+          s.score,
+          s.grade,
+          s.feedback,
           COALESCE(
             json_agg(
               json_build_object(
