@@ -7229,9 +7229,9 @@ app.post("/api/courses", authenticateJWT, requireRole("admin", "teacher"), async
 
     const result = await client.query(
       `
-      INSERT INTO courses (title, description, teacher_id, course_type)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, title, description, teacher_id, course_type, school_id, term_id, created_at
+      INSERT INTO courses (course_name, title, description, teacher_id, course_type)
+      VALUES ($1, $1, $2, $3, $4)
+      RETURNING id, course_name, title, description, teacher_id, course_type, school_id, term_id, created_at
       `,
       [title, description, teacherId, courseType]
     );
