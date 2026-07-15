@@ -7543,12 +7543,13 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
 
 /* UPDATE COURSE */
 app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const courseId = Number(req.params.courseId);
     const title = String(req.body.title || "").trim();
     const description = String(req.body.description || "").trim();
     const teacherEmail = String(req.body.teacher_email || "").trim().toLowerCase();
-    const courseType = String(req.body.course_type || "custom_competency").trim();
 
     if (!courseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
@@ -7558,25 +7559,84 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
       return res.status(400).json({ error: "Course title is required" });
     }
 
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    let teacherId = null;
+
+    if (teacherEmail) {
+      const teacherResult = await client.query(
+        `
+        SELECT id
+        FROM users
+        WHERE LOWER(email) = $1
+          AND LOWER(role) = 'teacher'
+        LIMIT 1
+        `,
+        [teacherEmail]
+      );
+
+      if (teacherResult.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "Teacher email must belong to an existing teacher account",
+        });
+      }
+
+      teacherId = Number(teacherResult.rows[0].id);
+    }
+
+    const result = await client.query(
       `
       UPDATE courses
       SET title = $1,
-          description = $2
-      WHERE id = $3
+          description = $2,
+          teacher_id = $3
+      WHERE id = $4
       RETURNING id, title, description, teacher_id
       `,
-      [title, description, courseId]
+      [title, description, teacherId, courseId]
     );
 
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Course not found" });
     }
 
+    await client.query(
+      `
+      DELETE FROM course_teachers
+      WHERE course_id = $1
+        AND role = 'primary'
+      `,
+      [courseId]
+    );
+
+    if (teacherId) {
+      await client.query(
+        `
+        INSERT INTO course_teachers (course_id, teacher_id, role)
+        VALUES ($1, $2, 'primary')
+        ON CONFLICT (course_id, teacher_id) DO UPDATE
+        SET role = EXCLUDED.role
+        `,
+        [courseId, teacherId]
+      );
+    }
+
+    await client.query("COMMIT");
+
     return res.json(result.rows[0]);
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("PUT /api/courses/:courseId rollback failed:", rollbackErr);
+    }
+
     console.error("PUT /api/courses/:courseId failed:", err);
     return res.status(500).json({ error: "Failed to update course" });
+  } finally {
+    client.release();
   }
 });
 
