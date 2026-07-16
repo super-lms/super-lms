@@ -435,7 +435,7 @@ export default function AdminCoursesPage() {
                   key={course.id}
                   type="button"
                   onClick={() =>
-                    navigate(`/admin/courses/${encodeURIComponent(course.title)}`, {
+                    navigate(`/admin/courses/${encodeURIComponent(course.id)}`, {
                       state: { course },
                     })
                   }
