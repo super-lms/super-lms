@@ -223,9 +223,9 @@ export default function AssignmentSpeedGradingPage() {
   const [selectedRow, setSelectedRow] = useState(null);
   const [searchText, setSearchText] = useState("");
 
-  const [doScore, setDoScore] = useState("4");
-  const [knowScore, setKnowScore] = useState("4");
-  const [understandScore, setUnderstandScore] = useState("4");
+  const [doScore, setDoScore] = useState("");
+  const [knowScore, setKnowScore] = useState("");
+  const [understandScore, setUnderstandScore] = useState("");
   const [overallScore, setOverallScore] = useState("");
   const [savingKduScores, setSavingKduScores] = useState(false);
   const [kduSaveMessage, setKduSaveMessage] = useState("");
@@ -584,14 +584,14 @@ export default function AssignmentSpeedGradingPage() {
     const rubricSelection = row?.rubric_selection || {};
 
     const nextDoScore =
-      rubricSelection.DO ?? rubricSelection.doScore ?? rubricSelection.do_score ?? "4";
+      rubricSelection.DO ?? rubricSelection.doScore ?? rubricSelection.do_score ?? "";
     const nextKnowScore =
-      rubricSelection.KNOW ?? rubricSelection.knowScore ?? rubricSelection.know_score ?? "4";
+      rubricSelection.KNOW ?? rubricSelection.knowScore ?? rubricSelection.know_score ?? "";
     const nextUnderstandScore =
       rubricSelection.UNDERSTAND ??
       rubricSelection.understandScore ??
       rubricSelection.understand_score ??
-      "4";
+      "";
 
     setDoScore(String(nextDoScore));
     setKnowScore(String(nextKnowScore));
@@ -806,6 +806,19 @@ export default function AssignmentSpeedGradingPage() {
     const nextUnderstandScore = scoreOverrides.understandScore ?? understandScore;
     const nextOverallScore = scoreOverrides.overallScore ?? overallScore;
 
+    const hasCompleteKduScores = [
+      nextDoScore,
+      nextKnowScore,
+      nextUnderstandScore,
+    ].every((value) => String(value ?? "").trim() !== "");
+
+    if (!hasCompleteKduScores) {
+      setKduSaveMessage(
+        "Enter DO, KNOW, and UNDERSTAND scores before saving."
+      );
+      return;
+    }
+
     try {
       setSavingKduScores(true);
       setKduSaveMessage("Saving...");
@@ -894,16 +907,28 @@ export default function AssignmentSpeedGradingPage() {
     "How well the student explains the why/how behind their choices and learning."
   );
 
+  const hasCompleteKduScores = [doScore, knowScore, understandScore].every(
+    (value) => String(value ?? "").trim() !== ""
+  );
+
   const kduFinalScore = useMemo(() => {
+    if (!hasCompleteKduScores) {
+      return null;
+    }
+
     const doValue = toSafeScore(doScore);
     const knowValue = toSafeScore(knowScore);
     const understandValue = toSafeScore(understandScore);
 
     return doValue * 0.5 + knowValue * 0.25 + understandValue * 0.25;
-  }, [doScore, knowScore, understandScore]);
+  }, [doScore, knowScore, understandScore, hasCompleteKduScores]);
 
-  const kduPercent = getKduPercent(kduFinalScore);
-  const proficiencyLabel = getProficiencyLabel(kduFinalScore);
+  const kduPercent =
+    kduFinalScore === null ? null : getKduPercent(kduFinalScore);
+  const proficiencyLabel =
+    kduFinalScore === null
+      ? "Not Yet Graded"
+      : getProficiencyLabel(kduFinalScore);
 
   const speedGradingCoachRecommendation = useMemo(() => {
     if (!rows || rows.length === 0) {
@@ -1931,12 +1956,16 @@ export default function AssignmentSpeedGradingPage() {
                     >
                       <div>
                         <strong>Weighted KDU Score:</strong>{" "}
-                        {kduFinalScore.toFixed(2)} / 6
+                        {kduFinalScore === null
+                          ? "—"
+                          : `${kduFinalScore.toFixed(2)} / 6`}
                       </div>
 
                       <div>
                         <strong>Percentage Equivalent:</strong>{" "}
-                        {kduPercent.toFixed(1)}%
+                        {kduPercent === null
+                          ? "—"
+                          : `${kduPercent.toFixed(1)}%`}
                       </div>
 
                       <div>
