@@ -634,11 +634,7 @@ export default function EditAssignmentPage() {
       setDescription(cleanDescription);
       setDueDate(cleanDueDate ? String(cleanDueDate).slice(0, 10) : "");
       setGeneratedRubricTitle(`${cleanTitle || "Assignment"} KDU Rubric`);
-      setMessage(
-        `Assignment updated successfully. Current calculated weight: ${formatPercent(
-          data.calculated_weight
-        )}`
-      );
+      setMessage("Assignment updated successfully.");
 
       if (options.openGradePage) {
         navigate(`/assignments/${assignmentId}/grade`);

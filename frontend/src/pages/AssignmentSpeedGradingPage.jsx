@@ -834,7 +834,9 @@ export default function AssignmentSpeedGradingPage() {
           doScore: toSafeScore(nextDoScore),
           knowScore: toSafeScore(nextKnowScore),
           understandScore: toSafeScore(nextUnderstandScore),
-          overallScore: nextOverallScore === "" ? null : Number(nextOverallScore),
+          overallScore: Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore")
+  ? (nextOverallScore === "" ? null : Number(nextOverallScore))
+  : null,
         }),
       });
 
