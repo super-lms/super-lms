@@ -2947,17 +2947,6 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${course.id}`)
-                      }}
-                      style={buttonStyle}
-                    >
-                      Lessons
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
                         loadCompetencies(course.id)
                       }}
@@ -2965,6 +2954,17 @@ export default function CoursesPage() {
                       style={buttonStyle}
                     >
                       {competencyLoadingCourseId === course.id ? "Loading Learning & Grading Pathways..." : isCompetenciesOpen ? "Hide Learning & Grading Pathways" : "Learning & Grading Pathways"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/lessons?courseId=${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Lessons
                     </button>
 
                     <button
