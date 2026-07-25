@@ -2929,9 +2929,6 @@ export default function CoursesPage() {
                               <strong>Step 4:</strong> Import students, enter marks, and use the Gradebook to monitor progress.
                             </div>
 
-                            <div style={{ marginTop: "4px", fontWeight: 700 }}>
-                              Fast start: click Set Up Course Structure to generate a default competency framework automatically.
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -3037,10 +3034,6 @@ export default function CoursesPage() {
                       style={buttonStyle}
                     >
                       + Add Evidence Tier
-                    </button>
-
-                    <button type="button" onClick={() => setupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
-                      {settingUpCourseId === course.id ? "Setting up..." : "Set Up Course Structure"}
                     </button>
 
                     <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "10px" }}>
