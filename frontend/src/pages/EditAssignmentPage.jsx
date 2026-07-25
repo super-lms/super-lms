@@ -116,6 +116,36 @@ export default function EditAssignmentPage() {
     );
   }, [subcategories, selectedSubcategoryId]);
 
+  const selectedSingleScoreBucket = useMemo(() => {
+    const bucketWeights = [
+      { bucket: "KNOW", weight: Number(singleScoreKnowPercent || 0) },
+      { bucket: "DO", weight: Number(singleScoreDoPercent || 0) },
+      { bucket: "UNDERSTAND", weight: Number(singleScoreUnderstandPercent || 0) },
+    ];
+
+    return bucketWeights.reduce(
+      (selected, candidate) =>
+        candidate.weight > selected.weight ? candidate : selected,
+      bucketWeights[0]
+    ).bucket;
+  }, [
+    singleScoreKnowPercent,
+    singleScoreDoPercent,
+    singleScoreUnderstandPercent,
+  ]);
+
+  const visibleRubricCriteria = useMemo(() => {
+    if (scoringMethod !== "single_score_kdu") {
+      return rubricCriteria;
+    }
+
+    return rubricCriteria.filter(
+      (criterion) =>
+        String(criterion.competency_bucket || "").trim().toUpperCase() ===
+        selectedSingleScoreBucket
+    );
+  }, [rubricCriteria, scoringMethod, selectedSingleScoreBucket]);
+
   useEffect(() => {
     loadAssignment();
   }, [assignmentId]);
@@ -1281,29 +1311,29 @@ export default function EditAssignmentPage() {
               {scoringMethod === "single_score_kdu" ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   <EditAssignmentNoticeBox>
-                    Enter one overall score later. SUPER LMS will distribute it into KNOW, DO, and UNDERSTAND using these percentages.
+                    Choose the single KDU area this assignment measures. Enter one overall score
+                    later and SUPER LMS will save it to that KDU area.
                   </EditAssignmentNoticeBox>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
-                    <div>
-                      <EditAssignmentFieldLabel>KNOW %</EditAssignmentFieldLabel>
-                      <input type="number" value={singleScoreKnowPercent} onChange={(e) => setSingleScoreKnowPercent(e.target.value)} style={inputStyle} />
-                    </div>
-
-                    <div>
-                      <EditAssignmentFieldLabel>DO %</EditAssignmentFieldLabel>
-                      <input type="number" value={singleScoreDoPercent} onChange={(e) => setSingleScoreDoPercent(e.target.value)} style={inputStyle} />
-                    </div>
-
-                    <div>
-                      <EditAssignmentFieldLabel>UNDERSTAND %</EditAssignmentFieldLabel>
-                      <input type="number" value={singleScoreUnderstandPercent} onChange={(e) => setSingleScoreUnderstandPercent(e.target.value)} style={inputStyle} />
-                    </div>
+                  <div>
+                    <EditAssignmentFieldLabel>Selected KDU</EditAssignmentFieldLabel>
+                    <select
+                      value={selectedSingleScoreBucket}
+                      onChange={(event) => {
+                        const nextBucket = event.target.value;
+                        setSingleScoreKnowPercent(nextBucket === "KNOW" ? "100" : "0");
+                        setSingleScoreDoPercent(nextBucket === "DO" ? "100" : "0");
+                        setSingleScoreUnderstandPercent(
+                          nextBucket === "UNDERSTAND" ? "100" : "0"
+                        );
+                      }}
+                      style={inputStyle}
+                    >
+                      <option value="KNOW">KNOW</option>
+                      <option value="DO">DO</option>
+                      <option value="UNDERSTAND">UNDERSTAND</option>
+                    </select>
                   </div>
-
-                  <EditAssignmentNoticeBox>
-                    Current total: {Number(singleScoreKnowPercent || 0) + Number(singleScoreDoPercent || 0) + Number(singleScoreUnderstandPercent || 0)}%
-                  </EditAssignmentNoticeBox>
                 </div>
               ) : null}
             </div>
@@ -1348,7 +1378,7 @@ export default function EditAssignmentPage() {
                       <strong>Rubric:</strong> {rubric.title || "KDU Competency Rubric"}
                     </div>
 
-                    {rubricCriteria.map((criterion) => (
+                    {visibleRubricCriteria.map((criterion) => (
                       <div
                         key={criterion.id}
                         style={{
@@ -1401,6 +1431,7 @@ export default function EditAssignmentPage() {
                 </div>
               </div>
 
+              {scoringMethod === "rubric" ? (
               <div
                 style={{
                   border: "1px solid #d7dce5",
@@ -1600,6 +1631,7 @@ export default function EditAssignmentPage() {
                   </div>
                 ) : null}
               </div>
+              ) : null}
             </div>
           </WorkflowStep>
 

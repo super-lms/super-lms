@@ -943,8 +943,7 @@ export default function CoursesPage() {
       setMessage(`Evidence tier updated: ${data.name || name}`)
       cancelEditEvidenceTier()
 
-      setActiveCompetencyCourseId(null)
-      await loadCompetencies(courseId)
+      await loadCompetencies(courseId, { forceOpen: true })
     } catch (err) {
       setError(err.message || "Failed to update evidence tier")
     } finally {
@@ -978,8 +977,7 @@ export default function CoursesPage() {
 
       setMessage(`Evidence tier deleted: ${data.deleted?.name || tierName}`)
 
-      setActiveCompetencyCourseId(null)
-      await loadCompetencies(courseId)
+      await loadCompetencies(courseId, { forceOpen: true })
     } catch (err) {
       setError(err.message || "Failed to delete evidence tier")
     } finally {
@@ -1141,8 +1139,7 @@ export default function CoursesPage() {
       setNewLearningCategoryWeightByCourseId((current) => ({ ...current, [courseId]: "" }))
       setMessage(`Assessment pathway created: ${data.name || name}`)
 
-      setActiveCompetencyCourseId(null)
-      await loadCompetencies(courseId)
+      await loadCompetencies(courseId, { forceOpen: true })
     } catch (err) {
       setError(err.message || "Failed to create grading pathway")
     } finally {
@@ -2945,19 +2942,6 @@ export default function CoursesPage() {
                     <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "4px" }}>
                       Main Teacher Workflow
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadLearningPaths(course.id)
-                      }}
-                      disabled={learningPathLoadingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      {learningPathLoadingCourseId === course.id ? "Loading Learning Paths..." : isLearningPathsOpen ? "Hide Learning Paths" : "Learning Paths"}
-                    </button>
 
                     <button
                       type="button"
