@@ -3048,6 +3048,20 @@ export default function CoursesPage() {
                       {rosterLoadingCourseId === course.id ? "Loading Roster..." : isRosterOpen ? "Hide Roster" : "View Roster"}
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem(
+                          "super-lms-class-roster-course-id",
+                          String(course.id)
+                        )
+                        navigate(`/class-roster?courseId=${course.id}`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Manage Roster
+                    </button>
+
                     <button type="button" onClick={() => {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
