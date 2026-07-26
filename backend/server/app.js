@@ -2881,7 +2881,15 @@ async function getObserverStudents(observerEmail) {
       u.student_id,
       u.parent_email,
       c.id AS class_id,
-      c.title AS class_name
+      c.title AS class_name,
+      course_teacher.id AS teacher_user_id,
+      COALESCE(
+        NULLIF(TRIM(CONCAT(course_teacher.first_name, ' ', course_teacher.last_name)), ''),
+        course_teacher.name,
+        course_teacher.email,
+        ''
+      ) AS teacher_name,
+      course_teacher.email AS teacher_email
     FROM observer_student_links osl
     JOIN users observer_user
       ON observer_user.id = osl.observer_user_id
@@ -2891,6 +2899,8 @@ async function getObserverStudents(observerEmail) {
       ON ce.student_user_id = u.id
     LEFT JOIN courses c
       ON c.id = ce.class_id
+    LEFT JOIN users course_teacher
+      ON course_teacher.id = c.teacher_id
     WHERE LOWER(observer_user.email) = $1
       AND LOWER(COALESCE(u.role, '')) = 'student'
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC
@@ -2915,12 +2925,22 @@ async function getObserverStudents(observerEmail) {
       u.student_id,
       u.parent_email,
       c.id AS class_id,
-      c.title AS class_name
+      c.title AS class_name,
+      course_teacher.id AS teacher_user_id,
+      COALESCE(
+        NULLIF(TRIM(CONCAT(course_teacher.first_name, ' ', course_teacher.last_name)), ''),
+        course_teacher.name,
+        course_teacher.email,
+        ''
+      ) AS teacher_name,
+      course_teacher.email AS teacher_email
     FROM users u
     LEFT JOIN class_enrollments ce
       ON ce.student_user_id = u.id
     LEFT JOIN courses c
       ON c.id = ce.class_id
+    LEFT JOIN users course_teacher
+      ON course_teacher.id = c.teacher_id
     WHERE LOWER(COALESCE(u.parent_email, '')) = $1
       AND LOWER(COALESCE(u.role, '')) = 'student'
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC

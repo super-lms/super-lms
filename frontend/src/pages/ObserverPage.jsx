@@ -301,6 +301,9 @@ export default function ObserverPage() {
       map.set(classId, {
         class_id: classId,
         class_name: student.class_name || `Course ${classId}`,
+        teacher_user_id: student.teacher_user_id || null,
+        teacher_name: student.teacher_name || "",
+        teacher_email: student.teacher_email || "",
       })
     })
 
@@ -312,6 +315,10 @@ export default function ObserverPage() {
   const selectedCourse = useMemo(() => {
     return coursesForSelectedStudent.find((course) => String(course.class_id) === String(selectedCourseId)) || null
   }, [coursesForSelectedStudent, selectedCourseId])
+
+  const isChineseHomeroomTeacher =
+    String(observerData.observer?.relationship || "").trim().toLowerCase() ===
+    "chinese_homeroom_teacher"
 
   const courseSubmissions = useMemo(() => {
     return observerData.submissions.filter((submission) => {
@@ -494,6 +501,68 @@ export default function ObserverPage() {
       setSnapshotMessage("Email for Outlook copied. Open Outlook, create a new email, and paste.")
     } catch {
       setSnapshotMessage("Copy was not available in this browser. Please use Copy Student Snapshot instead.")
+    }
+  }
+
+  function buildCourseTeacherMessage() {
+    const feedbackLines = courseSubmissions
+      .filter((submission) => String(submission.feedback || "").trim().length > 0)
+      .slice(0, 3)
+      .map((submission) => `- ${submission.assignment_title || "Assignment"}: ${submission.feedback}`)
+
+    return [
+      `Hello ${selectedCourse?.teacher_name || "Course Teacher"},`,
+      "",
+      `I am following up regarding ${selectedStudent?.student_name || "this student"} in ${selectedCourse?.class_name || "your course"}.`,
+      "",
+      `Visible assignments: ${courseSubmissions.length}`,
+      `Average score: ${averageScore === null ? "N/A" : `${averageScore}%`}`,
+      `Missing / needs attention: ${missingSubmissions.length}`,
+      "",
+      "Recent teacher feedback:",
+      feedbackLines.length > 0 ? feedbackLines.join("\n") : "No recent feedback is visible.",
+      "",
+      "Please let me know if there are concerns or recommended next steps.",
+      "",
+      "Thank you.",
+    ].join("\n")
+  }
+
+  function emailCourseTeacher() {
+    const teacherEmail = String(selectedCourse?.teacher_email || "").trim()
+
+    if (!teacherEmail) {
+      setSnapshotMessage("No course teacher email is assigned to this course.")
+      return
+    }
+
+    const subject = `Student Progress Follow-up - ${selectedStudent?.student_name || "Student"} - ${selectedCourse?.class_name || "Course"}`
+    const body = buildCourseTeacherMessage()
+    window.location.href = `mailto:${encodeURIComponent(teacherEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  }
+
+  async function copyTeacherEmail() {
+    const teacherEmail = String(selectedCourse?.teacher_email || "").trim()
+
+    if (!teacherEmail) {
+      setSnapshotMessage("No course teacher email is assigned to this course.")
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(teacherEmail)
+      setSnapshotMessage("Course teacher email copied.")
+    } catch {
+      setSnapshotMessage("Copy was not available in this browser.")
+    }
+  }
+
+  async function copyWeChatMessage() {
+    try {
+      await navigator.clipboard.writeText(buildCourseTeacherMessage())
+      setSnapshotMessage("WeChat message copied. Open WeChat, select the course teacher, and paste.")
+    } catch {
+      setSnapshotMessage("Copy was not available in this browser.")
     }
   }
 
@@ -1010,6 +1079,48 @@ export default function ObserverPage() {
             <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
               Create a quick student progress snapshot for parent communication.
             </p>
+
+            {isChineseHomeroomTeacher ? (
+              <div
+                style={{
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "14px",
+                  padding: "16px",
+                  marginBottom: "16px",
+                  background: "#f8fafc",
+                }}
+              >
+                <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem" }}>
+                  Contact BC Course Teacher
+                </h3>
+
+                {selectedCourse.teacher_email ? (
+                  <>
+                    <div style={{ marginBottom: "12px", color: "#374151", lineHeight: 1.5 }}>
+                      <strong>{selectedCourse.teacher_name || "Course Teacher"}</strong>
+                      <br />
+                      {selectedCourse.teacher_email}
+                    </div>
+
+                    <div style={buttonRowStyle}>
+                      <button type="button" onClick={emailCourseTeacher} style={actionButtonStyle}>
+                        Email Course Teacher
+                      </button>
+                      <button type="button" onClick={copyTeacherEmail} style={actionButtonStyle}>
+                        Copy Teacher Email
+                      </button>
+                      <button type="button" onClick={copyWeChatMessage} style={actionButtonStyle}>
+                        Copy WeChat Message
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ margin: 0, color: "#4b5563" }}>
+                    No BC course teacher contact is assigned to this course.
+                  </p>
+                )}
+              </div>
+            ) : null}
 
             <div style={buttonRowStyle}>
               <button type="button" onClick={copyStudentSnapshot} style={actionButtonStyle}>
