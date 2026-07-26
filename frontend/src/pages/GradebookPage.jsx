@@ -48,6 +48,11 @@ function makeSafeElementId(value) {
     .replace(/^-|-$/g, "");
 }
 
+function getStudentLastName(studentName) {
+  const nameParts = String(studentName || "").trim().split(/\s+/).filter(Boolean);
+  return nameParts.length > 0 ? nameParts[nameParts.length - 1] : "";
+}
+
 function isFocusedStudent(student, requestedStudentEmail, requestedStudentName) {
   const studentEmail = String(student?.student_email || "").toLowerCase();
   const studentName = String(student?.student_name || "").toLowerCase();
@@ -128,6 +133,8 @@ export default function GradebookPage() {
   const [expandedCompetencyStudents, setExpandedCompetencyStudents] = useState({});
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("");
   const [activeGradebookSection, setActiveGradebookSection] = useState("spreadsheet");
+  const [spreadsheetStudentSort, setSpreadsheetStudentSort] = useState("first-name");
+  const [spreadsheetAssignmentSort, setSpreadsheetAssignmentSort] = useState("due-date");
   const [communicationType, setCommunicationType] = useState("progress-update");
   const [communicationRecipient, setCommunicationRecipient] = useState("parent");
   const [communicationNotes, setCommunicationNotes] = useState("");
@@ -449,6 +456,65 @@ export default function GradebookPage() {
   }
 
   const students = gradebook?.students || [];
+  const spreadsheetStudents = useMemo(() => {
+    return [...students].sort((studentA, studentB) => {
+      const nameA =
+        spreadsheetStudentSort === "last-name"
+          ? getStudentLastName(studentA.student_name)
+          : String(studentA.student_name || "");
+      const nameB =
+        spreadsheetStudentSort === "last-name"
+          ? getStudentLastName(studentB.student_name)
+          : String(studentB.student_name || "");
+
+      return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+    });
+  }, [students, spreadsheetStudentSort]);
+
+  const spreadsheetAssignments = useMemo(() => {
+    return [...assignments].sort((assignmentA, assignmentB) => {
+      if (spreadsheetAssignmentSort === "title") {
+        return String(assignmentA.title || "").localeCompare(
+          String(assignmentB.title || ""),
+          undefined,
+          { sensitivity: "base" }
+        );
+      }
+
+      if (spreadsheetAssignmentSort === "assessment-pathway") {
+        const pathwayComparison = String(
+          assignmentA.category_name || ""
+        ).localeCompare(String(assignmentB.category_name || ""), undefined, {
+          sensitivity: "base",
+        });
+
+        return pathwayComparison !== 0
+          ? pathwayComparison
+          : String(assignmentA.title || "").localeCompare(
+              String(assignmentB.title || ""),
+              undefined,
+              { sensitivity: "base" }
+            );
+      }
+
+      if (spreadsheetAssignmentSort === "assignment-weight") {
+        return (
+          Number(assignmentB.course_weight_percent || 0) -
+          Number(assignmentA.course_weight_percent || 0)
+        );
+      }
+
+      const dueDateA = assignmentA.due_date
+        ? new Date(assignmentA.due_date).getTime()
+        : Number.POSITIVE_INFINITY;
+      const dueDateB = assignmentB.due_date
+        ? new Date(assignmentB.due_date).getTime()
+        : Number.POSITIVE_INFINITY;
+
+      return dueDateA - dueDateB;
+    });
+  }, [assignments, spreadsheetAssignmentSort]);
+
   const selectedStudent =
     students.find((student) => student.student_email === selectedStudentEmail) ||
     students[0] ||
@@ -787,6 +853,56 @@ export default function GradebookPage() {
               Scroll horizontally to review assignments. Select an assignment heading to open it in Speed Grading.
             </p>
 
+            <div style={spreadsheetToolbarStyle}>
+              <details style={spreadsheetMenuStyle}>
+                <summary style={spreadsheetMenuSummaryStyle}>View</summary>
+                <div style={spreadsheetMenuPanelStyle}>
+                  <div style={spreadsheetMenuHeadingStyle}>Arrange assignments by</div>
+                  <button
+                    type="button"
+                    onClick={() => setSpreadsheetAssignmentSort("due-date")}
+                    style={spreadsheetMenuButtonStyle}
+                  >
+                    {spreadsheetAssignmentSort === "due-date" ? "✓ " : ""}Due Date
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpreadsheetAssignmentSort("title")}
+                    style={spreadsheetMenuButtonStyle}
+                  >
+                    {spreadsheetAssignmentSort === "title" ? "✓ " : ""}Assignment Title
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpreadsheetAssignmentSort("assignment-weight")}
+                    style={spreadsheetMenuButtonStyle}
+                  >
+                    {spreadsheetAssignmentSort === "assignment-weight" ? "✓ " : ""}Assignment Weight
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpreadsheetAssignmentSort("assessment-pathway")}
+                    style={spreadsheetMenuButtonStyle}
+                  >
+                    {spreadsheetAssignmentSort === "assessment-pathway" ? "✓ " : ""}Assessment Pathway
+                  </button>
+                </div>
+              </details>
+
+              <div style={spreadsheetSortStatusStyle}>
+                Assignments arranged by:{" "}
+                <strong>
+                  {spreadsheetAssignmentSort === "due-date"
+                    ? "Due Date"
+                    : spreadsheetAssignmentSort === "title"
+                      ? "Assignment Title"
+                      : spreadsheetAssignmentSort === "assignment-weight"
+                        ? "Assignment Weight"
+                        : "Assessment Pathway"}
+                </strong>
+              </div>
+            </div>
+
             {assignments.length === 0 ? (
               <p>No assignments found for this course yet.</p>
             ) : (
@@ -794,8 +910,36 @@ export default function GradebookPage() {
                 <table style={spreadsheetGradebookTableStyle}>
                   <thead>
                     <tr>
-                      <th style={spreadsheetStudentHeaderStyle}>Student</th>
-                      {assignments.map((assignment) => (
+                      <th style={spreadsheetStudentHeaderStyle}>
+                        <div style={spreadsheetStudentHeaderContentStyle}>
+                          <span>Student</span>
+                          <details style={spreadsheetStudentMenuStyle}>
+                            <summary
+                              style={spreadsheetStudentMenuSummaryStyle}
+                              title="Sort student names"
+                            >
+                              ⋮
+                            </summary>
+                            <div style={spreadsheetStudentMenuPanelStyle}>
+                              <button
+                                type="button"
+                                onClick={() => setSpreadsheetStudentSort("first-name")}
+                                style={spreadsheetMenuButtonStyle}
+                              >
+                                {spreadsheetStudentSort === "first-name" ? "✓ " : ""}First Name
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSpreadsheetStudentSort("last-name")}
+                                style={spreadsheetMenuButtonStyle}
+                              >
+                                {spreadsheetStudentSort === "last-name" ? "✓ " : ""}Last Name
+                              </button>
+                            </div>
+                          </details>
+                        </div>
+                      </th>
+                      {spreadsheetAssignments.map((assignment) => (
                         <th key={assignment.id} style={spreadsheetAssignmentHeaderStyle}>
                           <button
                             type="button"
@@ -824,7 +968,7 @@ export default function GradebookPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((student) => (
+                    {spreadsheetStudents.map((student) => (
                       <tr key={student.student_user_id}>
                         <td style={spreadsheetStudentCellStyle}>
                           <strong>{student.student_name}</strong>
@@ -832,7 +976,7 @@ export default function GradebookPage() {
                             {student.student_email}
                           </div>
                         </td>
-                        {assignments.map((assignment) => {
+                        {spreadsheetAssignments.map((assignment) => {
                           const match = (student.assignment_scores || []).find(
                             (item) => item.assignment_id === assignment.id
                           );
@@ -1461,6 +1605,69 @@ const spreadsheetGradebookWrapStyle = {
   background: "#ffffff",
 };
 
+const spreadsheetToolbarStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
+  marginBottom: "14px",
+};
+
+const spreadsheetMenuStyle = {
+  position: "relative",
+};
+
+const spreadsheetMenuSummaryStyle = {
+  listStyle: "none",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+  padding: "9px 14px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const spreadsheetMenuPanelStyle = {
+  position: "absolute",
+  top: "calc(100% + 6px)",
+  left: 0,
+  zIndex: 8,
+  minWidth: "220px",
+  display: "grid",
+  gap: "4px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "12px",
+  background: "#ffffff",
+  padding: "10px",
+  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.16)",
+};
+
+const spreadsheetMenuHeadingStyle = {
+  padding: "6px 8px",
+  color: "#4b5563",
+  fontSize: "0.82rem",
+  fontWeight: 900,
+  textTransform: "uppercase",
+};
+
+const spreadsheetMenuButtonStyle = {
+  border: 0,
+  borderRadius: "8px",
+  background: "transparent",
+  padding: "9px 10px",
+  color: "#111827",
+  font: "inherit",
+  fontWeight: 700,
+  textAlign: "left",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const spreadsheetSortStatusStyle = {
+  color: "#4b5563",
+  fontSize: "0.9rem",
+};
+
 const spreadsheetGradebookTableStyle = {
   width: "max-content",
   minWidth: "100%",
@@ -1475,6 +1682,39 @@ const spreadsheetStudentHeaderStyle = {
   minWidth: "220px",
   background: "#f8fafc",
   borderRight: "2px solid #cbd5e1",
+};
+
+const spreadsheetStudentHeaderContentStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "10px",
+};
+
+const spreadsheetStudentMenuStyle = {
+  position: "relative",
+};
+
+const spreadsheetStudentMenuSummaryStyle = {
+  listStyle: "none",
+  display: "grid",
+  placeItems: "center",
+  width: "30px",
+  height: "30px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "8px",
+  background: "#ffffff",
+  fontSize: "1.2rem",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const spreadsheetStudentMenuPanelStyle = {
+  ...spreadsheetMenuPanelStyle,
+  top: "calc(100% + 4px)",
+  right: 0,
+  left: "auto",
+  minWidth: "160px",
 };
 
 const spreadsheetAssignmentHeaderStyle = {
