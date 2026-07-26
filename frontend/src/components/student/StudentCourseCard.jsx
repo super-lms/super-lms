@@ -39,7 +39,7 @@ export default function StudentCourseCard({ course, isSelected, onOpen }) {
       </div>
 
       <button type="button" onClick={() => onOpen(String(course.id))} style={buttonStyle}>
-        Open Course →
+        View Course →
       </button>
     </div>
   )

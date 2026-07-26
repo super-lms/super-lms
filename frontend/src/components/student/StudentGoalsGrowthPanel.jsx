@@ -66,7 +66,6 @@ function getRecommendedAction(gradedAverage) {
 
 export default function StudentGoalsGrowthPanel({
   gradedAverage = null,
-  standing = "—",
 }) {
   return (
     <section className="panel">
@@ -75,14 +74,7 @@ export default function StudentGoalsGrowthPanel({
         subtitle="Use your current standing and teacher feedback to decide your next learning move."
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
-        <DetailCard title="Current Standing">
-          <div style={{ fontSize: "2rem", fontWeight: 800 }}>{standing}</div>
-          <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-            This is where your returned evidence currently places you.
-          </div>
-        </DetailCard>
-
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "14px" }}>
         <DetailCard title="Suggested Goal">
           <div style={{ fontSize: "2rem", fontWeight: 800 }}>
             {getSuggestedGoal(gradedAverage)}

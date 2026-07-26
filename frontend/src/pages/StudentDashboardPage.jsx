@@ -98,27 +98,29 @@ function AssignmentCard({ assignment, compact = false, footer = null, submission
         <div style={statusPillStyle}>{status}</div>
       </div>
 
-      <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-        {assignment?.description || "No assignment description available."}
-      </p>
+      {!compact ? (
+        <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
+          {assignment?.description || "No assignment description available."}
+        </p>
+      ) : null}
 
       <div style={assignmentMetaStyle}>
         <div>
           <strong>Due:</strong> {dueLabel}
         </div>
-        {assignment?.points_possible !== undefined && assignment?.points_possible !== null ? (
+        {!compact && assignment?.points_possible !== undefined && assignment?.points_possible !== null ? (
           <div>
             <strong>Points:</strong> {assignment.points_possible}
           </div>
         ) : null}
-        {submissionStatus ? (
+        {!compact && submissionStatus ? (
           <div>
             <strong>Submission:</strong> {submissionStatus}
           </div>
         ) : null}
       </div>
 
-      {footer ? <div style={{ marginTop: "14px" }}>{footer}</div> : null}
+      {footer ? <div style={{ marginTop: compact ? "10px" : "14px" }}>{footer}</div> : null}
     </div>
   )
 }
@@ -423,6 +425,7 @@ export default function StudentDashboardPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const submissionEditorRef = useRef(null)
+  const courseWorkspaceRef = useRef(null)
 
   const {
     courses,
@@ -527,9 +530,6 @@ export default function StudentDashboardPage() {
     return total / gradedScores.length
   }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
 
-  const visibleAssignmentCount = selectedCourseId ? filteredAssignments.length : assignments.length
-  const notSubmittedCount = Math.max(visibleAssignmentCount - submittedCount, 0)
-
   const missingAssignments = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
 
@@ -539,10 +539,6 @@ export default function StudentDashboardPage() {
       return submissionState?.submission_status !== "submitted"
     })
   }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
-
-  const progressCompletionPercent = visibleAssignmentCount > 0
-    ? Math.round((submittedCount / visibleAssignmentCount) * 100)
-    : 0
 
   const selectedSubmissionAssignment = useMemo(() => {
     if (!selectedSubmissionAssignmentId) return null
@@ -953,6 +949,14 @@ export default function StudentDashboardPage() {
   async function handleOpenCourse(courseId) {
     closeSubmissionEditor()
     await selectCourse(courseId)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        courseWorkspaceRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
+      })
+    })
   }
 
   function handleLogout() {
@@ -1139,14 +1143,14 @@ export default function StudentDashboardPage() {
 
         <section className="panel">
           <SectionHeader
-            title="Choose Your Course"
-            subtitle="Select a course first so your results, assignments, and progress show the right class."
+            title="My Courses"
+            subtitle="Choose a course to open its learning workspace."
           />
 
           {courses.length === 0 ? (
             <NoticeBox>No courses are currently available.</NoticeBox>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
               {courses.map((course) => (
                 <CourseOverviewCard
                   key={`top-course-${course.id}`}
@@ -1161,6 +1165,17 @@ export default function StudentDashboardPage() {
 
         {selectedCourseId ? (
           <>
+            <section
+              className="panel"
+              ref={courseWorkspaceRef}
+              style={{ scrollMarginTop: "18px" }}
+            >
+              <SectionHeader
+                title="Course Workspace"
+                subtitle={`Now viewing ${selectedCourse?.title || selectedCourse?.class_name || "the selected course"}.`}
+              />
+            </section>
+
             <StudentCourseProgressPanel
               courseProgressLoading={courseProgressLoading}
               proficiencyLabel={getProficiencyLabel(gradedAverage)}
@@ -1170,90 +1185,13 @@ export default function StudentDashboardPage() {
               latestResultFeedback={latestResultState?.submission?.feedback || ""}
             />
 
-        <section className="panel">
-          <SectionHeader
-            title="My Progress Snapshot"
-            subtitle={selectedCourse ? `A quick view of your progress in ${selectedCourse.title || selectedCourse.class_name}.` : "Select a course to focus this snapshot on one class."}
-          />
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: "14px" }}>
-            <DetailCard title="Current Standing">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{formatAverage(gradedAverage)}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                Based on graded evidence currently visible.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Proficiency">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{getProficiencyLabel(gradedAverage)}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                A student-friendly summary of your current standing.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Latest Result">
-              <div style={{ fontSize: "1.35rem", fontWeight: 800 }}>
-                {latestResultAssignment?.title || "No graded result yet"}
-              </div>
-              <div style={{ marginTop: "6px", fontSize: "1.6rem", fontWeight: 800 }}>
-                {formatAverage(latestResultState?.submission?.score)}
-              </div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                {latestResultState?.submission?.feedback || "Teacher feedback will appear here when available."}
-              </div>
-            </DetailCard>
-
-            <DetailCard title="KDU Breakdown">
-              <div style={{ fontSize: "1.1rem", fontWeight: 800, lineHeight: 1.7 }}>
-                KNOW: {latestResultState?.submission?.rubric_selection?.KNOW ?? "—"}<br />
-                DO: {latestResultState?.submission?.rubric_selection?.DO ?? "—"}<br />
-                UNDERSTAND: {latestResultState?.submission?.rubric_selection?.UNDERSTAND ?? "—"}
-              </div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                Converted from raw marks into competency evidence.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Submitted">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{submittedCount} / {visibleAssignmentCount}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                {progressCompletionPercent}% of visible assignments submitted.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Not Submitted">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{notSubmittedCount}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                Assignments still needing attention.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Graded">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{gradedCount}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                Assignments with returned scores.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Due Soon">
-              <div style={{ fontSize: "2rem", fontWeight: 800 }}>{dueSoonCount}</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                Upcoming deadlines to watch.
-              </div>
-            </DetailCard>
-          </div>
-        </section>
-
         <StudentSummaryCards
-          courses={courses}
           selectedCourse={selectedCourse}
           selectedCourseId={selectedCourseId}
           dueSoonCount={dueSoonCount}
           submittedCount={submittedCount}
           gradedCount={gradedCount}
-          standing={formatAverage(gradedAverage)}
           lessonsCount={selectedCourseId ? filteredLessons.length : lessons.length}
-          assignmentsCount={selectedCourseId ? filteredAssignments.length : assignments.length}
         />
 
         <StudentMissingWorkPanel missingAssignments={missingAssignments} />
@@ -1261,177 +1199,16 @@ export default function StudentDashboardPage() {
         <StudentUpcomingDueDatesPanel
           selectedCourseId={selectedCourseId}
           upcomingAssignments={upcomingAssignments}
+          onOpenAssignment={openSubmissionEditor}
         />
-
-        <section className="panel">
-          <SectionHeader
-            title="Course Progress"
-            subtitle="A simple view of how much assigned work has been completed."
-          />
-
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.7fr) minmax(0, 1.3fr)", gap: "14px" }}>
-            <DetailCard title="Progress">
-              <div style={{ fontSize: "2.4rem", fontWeight: 800 }}>{progressCompletionPercent}%</div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                {submittedCount} of {visibleAssignmentCount} visible assignments submitted.
-              </div>
-            </DetailCard>
-
-            <DetailCard title="Completion Tracker">
-              <div
-                aria-label={`Course progress ${progressCompletionPercent}%`}
-                style={{
-                  border: "1px solid #d7dce5",
-                  borderRadius: "999px",
-                  padding: "4px",
-                  background: "#ffffff",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${Math.max(0, Math.min(progressCompletionPercent, 100))}%`,
-                    minWidth: progressCompletionPercent > 0 ? "24px" : "0",
-                    height: "22px",
-                    borderRadius: "999px",
-                    background: "#111827",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginTop: "10px", color: "#4b5563", lineHeight: 1.5 }}>
-                {progressCompletionPercent === 100
-                  ? "All visible assignments are submitted. Keep reviewing feedback and preparing for what comes next."
-                  : progressCompletionPercent > 0
-                    ? "You are making progress. Keep working through the remaining assignments."
-                    : "Start by opening your next assignment and submitting your work when ready."}
-              </div>
-            </DetailCard>
-          </div>
-        </section>
 
         <StudentGoalsGrowthPanel
           gradedAverage={gradedAverage}
-          standing={formatAverage(gradedAverage)}
         />
 
         <StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} />
 
         <StudentNextStepsPanel />
-
-        <section className="panel">
-          <SectionHeader title="My Courses" subtitle="Choose a course to focus the dashboard on that class." />
-
-          {courses.length === 0 ? (
-            <NoticeBox>No courses are currently available.</NoticeBox>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
-              {courses.map((course) => (
-                <CourseOverviewCard
-                  key={course.id}
-                  course={course}
-                  isSelected={String(course.id) === String(selectedCourseId)}
-                  onSelect={handleOpenCourse}
-                />
-              ))}
-            </div>
-          )}
-
-          <div style={{ marginTop: "18px", maxWidth: "460px" }}>
-            <label style={labelStyle}>Course</label>
-            <select value={selectedCourseId} onChange={(e) => handleOpenCourse(e.target.value)} style={inputStyle}>
-              <option value="">Select Course</option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.title || course.class_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedCourse ? (
-            <p style={{ marginTop: "16px", marginBottom: 0, color: "#4b5563" }}>
-              Viewing learning materials for <strong>{selectedCourse.title || selectedCourse.class_name}</strong>.
-            </p>
-          ) : (
-            <p style={{ marginTop: "16px", marginBottom: 0, color: "#4b5563" }}>
-              Select a course to load lessons and assignments.
-            </p>
-          )}
-        </section>
-
-        <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)", gap: "16px", alignItems: "start" }}>
-          <div className="panel">
-            <SectionHeader
-              title="Upcoming Assignments"
-              subtitle={selectedCourse ? `Assignments scheduled in ${selectedCourse.title || selectedCourse.class_name}.` : "Assignments scheduled across your visible courses."}
-            />
-
-            {!selectedCourseId ? (
-              <NoticeBox>Select a course above to view assignments.</NoticeBox>
-            ) : upcomingAssignments.length === 0 ? (
-              <NoticeBox>No assignments found for this course.</NoticeBox>
-            ) : (
-              <div style={{ display: "grid", gap: "14px" }}>
-                {upcomingAssignments.slice(0, 5).map((assignment) => {
-                  const cachedSubmissionState = submissionStateByAssignmentId[String(assignment.id)] || null
-
-                  return (
-                    <AssignmentCard
-                      key={assignment.id}
-                      assignment={assignment}
-                      submissionStatus={formatSubmissionStatus(cachedSubmissionState?.submission_status || "not_submitted")}
-                      footer={
-                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                          <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
-                            {String(selectedSubmissionAssignmentId) === String(assignment.id) ? "Continue Work" : "Open Assignment"}
-                          </ActionButton>
-                        </div>
-                      }
-                    />
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="panel">
-            <SectionHeader title="Learning Snapshot" subtitle="A quick read of your current dashboard view." />
-
-            <div style={{ display: "grid", gap: "12px" }}>
-              <DetailCard title="Selected Course">
-                <div>{selectedCourse?.title || selectedCourse?.class_name || "No course selected"}</div>
-              </DetailCard>
-
-              <DetailCard title="Lessons Available">
-                <div>{selectedCourseId ? filteredLessons.length : 0}</div>
-              </DetailCard>
-
-              <DetailCard title="Assignments Available">
-                <div>{selectedCourseId ? filteredAssignments.length : 0}</div>
-              </DetailCard>
-
-              <DetailCard title="Assignments Submitted">
-                <div>{submittedCount}</div>
-              </DetailCard>
-
-              <DetailCard title="Assignments Graded">
-                <div>{gradedCount}</div>
-              </DetailCard>
-
-              <DetailCard title="Current Standing">
-                <div>{formatAverage(gradedAverage)}</div>
-              </DetailCard>
-
-              <DetailCard title="Proficiency">
-                <div>{getProficiencyLabel(gradedAverage)}</div>
-              </DetailCard>
-
-              <DetailCard title="Assignments Due Soon">
-                <div>{dueSoonCount}</div>
-              </DetailCard>
-            </div>
-          </div>
-        </section>
 
         {selectedSubmissionAssignment ? (
           <section className="panel" ref={submissionEditorRef}>
@@ -1471,19 +1248,101 @@ export default function StudentDashboardPage() {
           ) : resultAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
           ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
-              {resultAssignments.map((assignment) => {
-                const submissionState = submissionStateByAssignmentId[String(assignment.id)] || null
+            <div style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
+              <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", textAlign: "left" }}>
+                    <th style={assignmentSheetLabelStyle}>My Results</th>
+                    {resultAssignments.map((assignment) => (
+                      <th key={assignment.id} style={assignmentSheetHeadingStyle}>
+                        {assignment.title || "Untitled Assignment"}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Due Date</th>
+                    {resultAssignments.map((assignment) => (
+                      <td key={assignment.id} style={assignmentSheetCellStyle}>
+                        {formatDueDate(assignment.due_date)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Submission</th>
+                    {resultAssignments.map((assignment) => {
+                      const submissionState =
+                        submissionStateByAssignmentId[String(assignment.id)] || null
 
-                return (
-                  <ResultCard
-                    key={assignment.id}
-                    assignment={assignment}
-                    submissionState={submissionState}
-                    onOpen={() => openSubmissionEditor(assignment)}
-                  />
-                )
-              })}
+                      return (
+                        <td key={assignment.id} style={assignmentSheetCellStyle}>
+                          {formatSubmissionStatus(
+                            submissionState?.submission_status || "not_submitted"
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Score</th>
+                    {resultAssignments.map((assignment) => {
+                      const submission =
+                        submissionStateByAssignmentId[String(assignment.id)]?.submission || null
+
+                      return (
+                        <td key={assignment.id} style={assignmentSheetCellStyle}>
+                          {submission?.score === null || submission?.score === undefined
+                            ? "Not graded"
+                            : submission.score}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>KDU Evidence</th>
+                    {resultAssignments.map((assignment) => {
+                      const submission =
+                        submissionStateByAssignmentId[String(assignment.id)]?.submission || null
+
+                      return (
+                        <td key={assignment.id} style={assignmentSheetCellStyle}>
+                          <div style={{ lineHeight: 1.6 }}>
+                            KNOW: {submission?.rubric_selection?.KNOW ?? "—"}<br />
+                            DO: {submission?.rubric_selection?.DO ?? "—"}<br />
+                            UNDERSTAND: {submission?.rubric_selection?.UNDERSTAND ?? "—"}
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Teacher Feedback</th>
+                    {resultAssignments.map((assignment) => {
+                      const submission =
+                        submissionStateByAssignmentId[String(assignment.id)]?.submission || null
+
+                      return (
+                        <td key={assignment.id} style={assignmentSheetCellStyle}>
+                          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                            {submission?.feedback || "No feedback yet."}
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Access</th>
+                    {resultAssignments.map((assignment) => (
+                      <td key={assignment.id} style={assignmentSheetCellStyle}>
+                        <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
+                          View Submission
+                        </ActionButton>
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -1512,34 +1371,60 @@ export default function StudentDashboardPage() {
           ) : filteredAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
           ) : (
-            <div style={{ display: "grid", gap: "14px" }}>
-              {filteredAssignments.map((assignment) => {
-                const cachedSubmissionState = submissionStateByAssignmentId[String(assignment.id)] || null
+            <div style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
+              <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f8fafc", textAlign: "left" }}>
+                    <th style={assignmentSheetLabelStyle}>Course Assignments</th>
+                    {filteredAssignments.map((assignment) => (
+                      <th key={assignment.id} style={assignmentSheetHeadingStyle}>
+                        {assignment.title || "Untitled Assignment"}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Due Date</th>
+                    {filteredAssignments.map((assignment) => (
+                      <td key={assignment.id} style={assignmentSheetCellStyle}>
+                        {formatDueDate(assignment.due_date)}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Status</th>
+                    {filteredAssignments.map((assignment) => {
+                      const cachedSubmissionState =
+                        submissionStateByAssignmentId[String(assignment.id)] || null
+                      const cardAttachmentSuccessText =
+                        attachmentSuccessByAssignmentId[String(assignment.id)]
 
-                const cardAttachmentSuccessText = attachmentSuccessByAssignmentId[String(assignment.id)]
-
-                return (
-                  <AssignmentCard
-                    key={assignment.id}
-                    assignment={assignment}
-                    compact
-                    submissionStatus={cardAttachmentSuccessText ? "Draft Saved" : formatSubmissionStatus(cachedSubmissionState?.submission_status || "not_submitted")}
-                    footer={
-                      <div style={{ display: "grid", gap: "10px" }}>
-                        {cardAttachmentSuccessText ? (
-                          <NoticeBox>{cardAttachmentSuccessText}</NoticeBox>
-                        ) : null}
-
-                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      return (
+                        <td key={assignment.id} style={assignmentSheetCellStyle}>
+                          {cardAttachmentSuccessText
+                            ? "Draft Saved"
+                            : formatSubmissionStatus(
+                                cachedSubmissionState?.submission_status || "not_submitted"
+                              )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                  <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                    <th style={assignmentSheetLabelStyle}>Access</th>
+                    {filteredAssignments.map((assignment) => (
+                      <td key={assignment.id} style={assignmentSheetCellStyle}>
                           <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
-                            {String(selectedSubmissionAssignmentId) === String(assignment.id) ? "Continue Work" : "Open Assignment"}
+                            {String(selectedSubmissionAssignmentId) === String(assignment.id)
+                              ? "Continue Work"
+                              : "Open Assignment"}
                           </ActionButton>
-                        </div>
-                      </div>
-                    }
-                  />
-                )
-              })}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -1616,6 +1501,37 @@ const detailCardStyle = {
   borderRadius: "12px",
   padding: "14px",
   background: "#ffffff",
+}
+
+const assignmentSheetLabelStyle = {
+  position: "sticky",
+  left: 0,
+  zIndex: 1,
+  minWidth: "150px",
+  padding: "12px 14px",
+  background: "#f8fafc",
+  color: "#4b5563",
+  fontSize: "0.85rem",
+  fontWeight: 900,
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  textAlign: "left",
+}
+
+const assignmentSheetHeadingStyle = {
+  minWidth: "240px",
+  maxWidth: "280px",
+  padding: "12px 14px",
+  color: "#111827",
+  fontWeight: 900,
+  textAlign: "left",
+  verticalAlign: "top",
+}
+
+const assignmentSheetCellStyle = {
+  minWidth: "240px",
+  padding: "12px 14px",
+  verticalAlign: "middle",
 }
 
 function courseButtonStyle(isSelected) {

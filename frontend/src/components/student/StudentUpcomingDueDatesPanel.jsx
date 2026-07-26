@@ -41,6 +41,7 @@ function formatDueDate(value) {
 export default function StudentUpcomingDueDatesPanel({
   selectedCourseId = "",
   upcomingAssignments = [],
+  onOpenAssignment,
 }) {
   return (
     <section className="panel">
@@ -60,9 +61,13 @@ export default function StudentUpcomingDueDatesPanel({
               <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>
                 Due: {formatDueDate(assignment.due_date)}
               </div>
-              <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
-                {assignment.description || "Open the assignment to review the details."}
-              </div>
+              <button
+                type="button"
+                onClick={() => onOpenAssignment?.(assignment)}
+                style={openButtonStyle}
+              >
+                Open Assignment
+              </button>
             </DetailCard>
           ))}
         </div>
@@ -76,4 +81,16 @@ const detailCardStyle = {
   borderRadius: "12px",
   padding: "14px",
   background: "#ffffff",
+}
+
+const openButtonStyle = {
+  marginTop: "12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  padding: "10px 14px",
+  background: "#ffffff",
+  color: "#111827",
+  font: "inherit",
+  fontWeight: 800,
+  cursor: "pointer",
 }

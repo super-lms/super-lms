@@ -9,20 +9,15 @@ function SummaryCard({ label, value, helper }) {
 }
 
 export default function StudentSummaryCards({
-  courses = [],
   selectedCourse = null,
   selectedCourseId = "",
   dueSoonCount = 0,
   submittedCount = 0,
   gradedCount = 0,
-  standing = "—",
   lessonsCount = 0,
-  assignmentsCount = 0,
 }) {
   return (
-    <section style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "16px" }}>
-      <SummaryCard label="Courses" value={courses.length} helper="Courses currently visible in the student portal." />
-
+    <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "16px" }}>
       <SummaryCard
         label="Due Soon"
         value={dueSoonCount}
@@ -41,18 +36,10 @@ export default function StudentSummaryCards({
         helper={selectedCourseId ? "Assignments with returned scores in the selected course." : "Assignments with returned scores across the portal."}
       />
 
-      <SummaryCard label="Standing" value={standing} helper="Current standing from graded evidence currently shown." />
-
       <SummaryCard
         label="Lessons"
         value={lessonsCount}
         helper={selectedCourseId ? "Lessons for the selected course." : "Total lessons loaded into the student view."}
-      />
-
-      <SummaryCard
-        label="Assignments"
-        value={assignmentsCount}
-        helper={selectedCourseId ? "Assignments for the selected course." : "Total assignments loaded into the student view."}
       />
     </section>
   )
