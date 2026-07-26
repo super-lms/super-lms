@@ -13,7 +13,6 @@ import CoursesPage from "./pages/CoursesPage.jsx";
 import CourseAssignmentsPage from "./pages/CourseAssignmentsPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import EditAssignmentPage from "./pages/EditAssignmentPage.jsx";
-import EnrolledStudentsPage from "./pages/EnrolledStudentsPage.jsx";
 import GradebookPage from "./pages/GradebookPage.jsx";
 import HomeformAssignmentPage from "./pages/HomeformAssignmentPage.jsx";
 import LessonsPage from "./pages/LessonsPage.jsx";
@@ -126,7 +125,7 @@ function App() {
         <Route path="/homeform-assignment" element={<HomeformAssignmentPage />} />
         <Route path="/class-enrollment" element={<ClassEnrollmentPage />} />
         <Route path="/class-roster" element={<ClassRosterPage />} />
-        <Route path="/enrolled-students" element={<EnrolledStudentsPage />} />
+        <Route path="/enrolled-students" element={<Navigate to="/class-roster" replace />} />
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/student-snapshot/:courseId/:studentEmail" element={<StudentSnapshotPage />} />
       </Route>

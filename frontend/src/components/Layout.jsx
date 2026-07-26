@@ -128,7 +128,7 @@ export default function Layout() {
     if (location.pathname === "/class-enrollment") return "Class Enrollment"
     if (location.pathname === "/homeform-assignment") return "Homeform Assignment"
     if (location.pathname === "/class-roster") return "Class Roster"
-    if (location.pathname === "/enrolled-students") return "Enrolled Students"
+    if (location.pathname === "/enrolled-students") return "Class Roster"
     if (location.pathname === "/attendance") return "Attendance"
 
     if (location.pathname === "/student") return "My Learning"
@@ -239,9 +239,6 @@ export default function Layout() {
             </NavItem>
             <NavItem to="/class-roster" style={getNavLinkStyle("/class-roster")} icon={UserCheck}>
               Class Roster
-            </NavItem>
-            <NavItem to="/enrolled-students" style={getNavLinkStyle("/enrolled-students")} icon={Users}>
-              Enrolled Students
             </NavItem>
             <NavItem to="/attendance" style={getNavLinkStyle("/attendance")} icon={CalendarCheck}>
               Attendance

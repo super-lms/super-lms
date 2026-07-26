@@ -659,19 +659,13 @@ export default function DashboardPage() {
     }
   }, [grades, averageGrade])
 
-  const primaryEnrolledStudentPath = useMemo(() => {
-    if (students.length === 0) {
-      return "/enrolled-students"
-    }
+  const primaryClassRosterPath = useMemo(() => {
+    const primaryCourseId = courses[0]?.id
 
-    const primaryStudentId = getStudentId(students[0])
-
-    if (!primaryStudentId) {
-      return "/enrolled-students"
-    }
-
-    return `/enrolled-students/${primaryStudentId}`
-  }, [students])
+    return primaryCourseId
+      ? `/class-roster?courseId=${primaryCourseId}`
+      : "/class-roster"
+  }, [courses])
 
   const primaryGradebookPath = useMemo(() => {
     if (courses.length === 0) {
@@ -822,7 +816,7 @@ export default function DashboardPage() {
             <DashboardActionCard title="Create New Course" description="Add a new teaching course." meta="Start" onClick={() => goTo("/courses?startCreate=1")} active={loadingRoute === "/courses?startCreate=1"} />
             <DashboardActionCard title="Assignments" description="Current assignment workflow." meta="Open" onClick={() => goTo(courses.length > 0 && courses[0]?.id ? `/courses/${courses[0].id}/assignments` : "/assignments")} active={Boolean(loadingRoute)} />
             <DashboardActionCard title="Gradebook" description="Current class grading." meta="Open" onClick={() => goTo(primaryGradebookPath)} active={loadingRoute === primaryGradebookPath} />
-            <DashboardActionCard title="Enrolled Students" description="Student records and support." meta="Open" onClick={() => goTo(primaryEnrolledStudentPath)} active={loadingRoute === primaryEnrolledStudentPath} />
+            <DashboardActionCard title="Class Roster" description="View and manage students by course." meta="Open" onClick={() => goTo(primaryClassRosterPath)} active={loadingRoute === primaryClassRosterPath} />
           </div>
         </section>
 
@@ -900,11 +894,11 @@ export default function DashboardPage() {
 
           <section className="panel" style={shellCardStyle}>
             <SectionHeading
-              title="Enrolled Students Snapshot"
+              title="Class Roster Snapshot"
               subtitle="Quick visibility into enrolled student records for the current teacher account"
-              actionLabel="Open Enrolled Students"
-              onAction={() => goTo(primaryEnrolledStudentPath)}
-              actionActive={loadingRoute === primaryEnrolledStudentPath}
+              actionLabel="Open Class Roster"
+              onAction={() => goTo(primaryClassRosterPath)}
+              actionActive={loadingRoute === primaryClassRosterPath}
             />
 
             {recentStudents.length === 0 ? (
@@ -999,11 +993,11 @@ export default function DashboardPage() {
 
         <section className="panel" style={shellCardStyle}>
           <SectionHeading
-            title="All Enrolled Students"
+            title="Class Roster"
             subtitle="Students enrolled in this teacher's classes"
-            actionLabel="Go to Enrolled Students"
-            onAction={() => goTo(primaryEnrolledStudentPath)}
-            actionActive={loadingRoute === primaryEnrolledStudentPath}
+            actionLabel="Go to Class Roster"
+            onAction={() => goTo(primaryClassRosterPath)}
+            actionActive={loadingRoute === primaryClassRosterPath}
           />
 
           {students.length === 0 ? (
