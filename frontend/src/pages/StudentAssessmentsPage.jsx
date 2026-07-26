@@ -106,6 +106,7 @@ export default function StudentAssessmentsPage() {
   const navigate = useNavigate();
   const autosaveTimer = useRef(null);
   const hasLoadedAttempt = useRef(false);
+  const hasAutoSubmitted = useRef(false);
   const [assessments, setAssessments] = useState([]);
   const [selected, setSelected] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -116,6 +117,7 @@ export default function StudentAssessmentsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [autosaveState, setAutosaveState] = useState("");
+  const [secondsRemaining, setSecondsRemaining] = useState(null);
 
   async function request(path, options) {
     const response = await authFetch(path, options);
@@ -164,6 +166,27 @@ export default function StudentAssessmentsPage() {
     }, 800);
   }, [answers, attempt?.id]);
 
+  useEffect(() => {
+    if (!attempt?.expires_at || attempt.status !== "in_progress") {
+      setSecondsRemaining(null);
+      return undefined;
+    }
+    const update = () => {
+      const next = Math.max(
+        0,
+        Math.ceil((new Date(attempt.expires_at).getTime() - Date.now()) / 1000)
+      );
+      setSecondsRemaining(next);
+      if (next === 0 && !hasAutoSubmitted.current) {
+        hasAutoSubmitted.current = true;
+        submitAssessment({ confirm: false, timedOut: true });
+      }
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [attempt?.id, attempt?.expires_at, attempt?.status]);
+
   async function openAssessment(assessment) {
     setWorking(true);
     setError("");
@@ -186,6 +209,7 @@ export default function StudentAssessmentsPage() {
         setQuestions([]);
         setAnswers({});
       }
+      hasAutoSubmitted.current = false;
     } catch (err) {
       setError(err.message);
     } finally {
@@ -213,6 +237,7 @@ export default function StudentAssessmentsPage() {
       setQuestions(attemptData.questions || []);
       setAnswers(attemptData.attempt.answers_json || {});
       hasLoadedAttempt.current = true;
+      hasAutoSubmitted.current = false;
       setMessage("Assessment started. Your answers will save automatically.");
     } catch (err) {
       setError(err.message);
@@ -221,8 +246,11 @@ export default function StudentAssessmentsPage() {
     }
   }
 
-  async function submitAssessment() {
-    if (!window.confirm("Submit your assessment? You cannot change answers afterward.")) {
+  async function submitAssessment({ confirm = true, timedOut = false } = {}) {
+    if (
+      confirm &&
+      !window.confirm("Submit your assessment? You cannot change answers afterward.")
+    ) {
       return;
     }
     setWorking(true);
@@ -239,7 +267,9 @@ export default function StudentAssessmentsPage() {
       );
       setAttempt(submitted);
       setMessage(
-        submitted.status === "graded"
+        timedOut
+          ? "Time expired. Your last autosaved answers were submitted."
+          : submitted.status === "graded"
           ? "Assessment submitted and graded successfully."
           : "Assessment submitted successfully. Written responses are waiting for teacher grading."
       );
@@ -260,6 +290,7 @@ export default function StudentAssessmentsPage() {
     setMessage("");
     setError("");
     setAutosaveState("");
+    setSecondsRemaining(null);
     hasLoadedAttempt.current = false;
   }
 
@@ -295,12 +326,19 @@ export default function StudentAssessmentsPage() {
             assessments.map((assessment) => {
               const state = assessment.student_attempt_status || "not_started";
               const now = Date.now();
+              const effectiveAvailable =
+                assessment.effective_available_from || assessment.available_from;
+              const effectiveDue =
+                assessment.effective_due_at || assessment.due_at;
               const notOpen =
-                assessment.available_from &&
-                new Date(assessment.available_from).getTime() > now;
+                effectiveAvailable &&
+                new Date(effectiveAvailable).getTime() > now;
               const closed =
                 assessment.status === "closed" ||
-                (assessment.due_at && new Date(assessment.due_at).getTime() < now);
+                (effectiveDue && new Date(effectiveDue).getTime() < now);
+              const attemptsRemain =
+                Number(assessment.attempts_used || 0) <
+                Number(assessment.allowed_attempts || 1);
               return (
                 <div key={assessment.id} style={cardStyle}>
                   <div style={rowBetweenStyle}>
@@ -309,10 +347,11 @@ export default function StudentAssessmentsPage() {
                   </div>
                   <p style={mutedStyle}>{assessment.course_title}</p>
                   <div style={metaGridStyle}>
-                    <div><strong>Available (China Standard Time, UTC+8)</strong><br />{formatDate(assessment.available_from)}</div>
-                    <div><strong>Due (China Standard Time, UTC+8)</strong><br />{formatDate(assessment.due_at)}</div>
+                    <div><strong>Available (China Standard Time, UTC+8)</strong><br />{formatDate(effectiveAvailable)}</div>
+                    <div><strong>Due (China Standard Time, UTC+8)</strong><br />{formatDate(effectiveDue)}</div>
                     <div><strong>Questions</strong><br />{assessment.question_count}</div>
                     <div><strong>Points</strong><br />{assessment.points_possible}</div>
+                    <div><strong>Attempts</strong><br />{assessment.attempts_used || 0} of {assessment.allowed_attempts || 1}</div>
                   </div>
                   <Button
                     disabled={working || notOpen || (closed && !assessment.student_attempt_id)}
@@ -326,7 +365,9 @@ export default function StudentAssessmentsPage() {
                           ? "View Assessment"
                           : state === "in_progress"
                             ? "Continue Assessment"
-                            : "View Submission"}
+                            : attemptsRemain
+                              ? "View Result / Try Again"
+                              : "View Submission"}
                   </Button>
                 </div>
               );
@@ -351,6 +392,16 @@ export default function StudentAssessmentsPage() {
               <div><strong>Questions</strong><br />{questions.length}</div>
               <div><strong>Points</strong><br />{selected.points_possible}</div>
               <div><strong>Status</strong><br />{attempt?.status || "Not started"}</div>
+              <div>
+                <strong>Attempts</strong><br />
+                {selected.attempts_used || 0} of {selected.allowed_attempts || 1}
+              </div>
+              <div>
+                <strong>Time limit</strong><br />
+                {selected.effective_time_limit_minutes
+                  ? `${selected.effective_time_limit_minutes} minutes`
+                  : "Untimed"}
+              </div>
             </div>
 
             {!attempt ? (
@@ -371,7 +422,13 @@ export default function StudentAssessmentsPage() {
               <div style={stickySaveStyle}>
                 <strong>
                   {attempt.status === "in_progress"
-                    ? autosaveState || "Answers save automatically"
+                    ? secondsRemaining === null
+                      ? autosaveState || "Answers save automatically"
+                      : `${Math.floor(secondsRemaining / 60)}:${String(
+                          secondsRemaining % 60
+                        ).padStart(2, "0")} remaining · ${
+                          autosaveState || "Answers save automatically"
+                        }`
                     : attempt.status === "graded"
                       ? `Final score: ${Number(attempt.score_percent).toFixed(1)}%`
                       : "Submitted — waiting for teacher grading"}
@@ -421,6 +478,12 @@ export default function StudentAssessmentsPage() {
                   </p>
                   {attempt.teacher_feedback ? (
                     <p><strong>Teacher feedback:</strong> {attempt.teacher_feedback}</p>
+                  ) : null}
+                  {Number(selected.attempts_used || 0) <
+                  Number(selected.allowed_attempts || 1) ? (
+                    <Button disabled={working} onClick={startAssessment}>
+                      Start Another Attempt
+                    </Button>
                   ) : null}
                 </div>
               )}

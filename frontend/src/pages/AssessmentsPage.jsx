@@ -9,6 +9,8 @@ const EMPTY_ASSESSMENT = {
   subcategory_id: "",
   available_from: "",
   due_at: "",
+  time_limit_minutes: "",
+  max_attempts: "1",
   shuffle_questions: false,
   shuffle_answers: false,
 };
@@ -128,6 +130,17 @@ export default function AssessmentsPage() {
   const [attemptQuestions, setAttemptQuestions] = useState([]);
   const [manualScores, setManualScores] = useState({});
   const [teacherFeedback, setTeacherFeedback] = useState("");
+  const [accommodations, setAccommodations] = useState([]);
+  const [selectedAccommodationId, setSelectedAccommodationId] = useState("");
+  const [accommodationForm, setAccommodationForm] = useState({
+    extra_time_minutes: "0",
+    extra_attempts: "0",
+    available_from_override: "",
+    due_at_override: "",
+    notes: "",
+  });
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [reopenMinutes, setReopenMinutes] = useState("15");
   const [status, setStatus] = useState("Loading assessments...");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -220,6 +233,10 @@ export default function AssessmentsPage() {
           : "",
         available_from: localDateTimeValue(data.assessment.available_from),
         due_at: localDateTimeValue(data.assessment.due_at),
+        time_limit_minutes: data.assessment.time_limit_minutes
+          ? String(data.assessment.time_limit_minutes)
+          : "",
+        max_attempts: String(data.assessment.max_attempts || 1),
         shuffle_questions: Boolean(data.assessment.shuffle_questions),
         shuffle_answers: Boolean(data.assessment.shuffle_answers),
       });
@@ -227,6 +244,7 @@ export default function AssessmentsPage() {
         loadCourseStructure(data.assessment.course_id),
         loadQuestionBanks(data.assessment.course_id),
       ]);
+      await Promise.all([loadAccommodations(id), loadAuditEvents(id)]);
       setView(nextView);
       setQuestionForm(EMPTY_QUESTION);
       setEditingQuestionId("");
@@ -243,6 +261,66 @@ export default function AssessmentsPage() {
     if (!id) return;
     const data = await request(`/api/assessments/${id}/attempts`);
     setAttempts(Array.isArray(data) ? data : []);
+  }
+
+  async function loadAccommodations(id = selectedId) {
+    if (!id) return;
+    const data = await request(`/api/assessments/${id}/accommodations`);
+    setAccommodations(Array.isArray(data) ? data : []);
+  }
+
+  async function loadAuditEvents(id = selectedId) {
+    if (!id) return;
+    const data = await request(`/api/assessments/${id}/audit-events`);
+    setAuditEvents(Array.isArray(data) ? data : []);
+  }
+
+  function chooseAccommodation(studentId) {
+    setSelectedAccommodationId(String(studentId));
+    const row = accommodations.find(
+      (item) => String(item.student_user_id) === String(studentId)
+    );
+    setAccommodationForm({
+      extra_time_minutes: String(row?.extra_time_minutes || 0),
+      extra_attempts: String(row?.extra_attempts || 0),
+      available_from_override: localDateTimeValue(row?.available_from_override),
+      due_at_override: localDateTimeValue(row?.due_at_override),
+      notes: row?.notes || "",
+    });
+  }
+
+  async function saveAccommodation() {
+    if (!selectedAccommodationId) {
+      setError("Select a student before saving an accommodation.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await request(
+        `/api/assessments/${selectedId}/accommodations/${selectedAccommodationId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...accommodationForm,
+            available_from_override: toApiDate(
+              accommodationForm.available_from_override
+            ),
+            due_at_override: toApiDate(accommodationForm.due_at_override),
+          }),
+        }
+      );
+      await Promise.all([
+        loadAccommodations(selectedId),
+        loadAuditEvents(selectedId),
+      ]);
+      setStatus("Student accommodation saved.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -494,6 +572,31 @@ export default function AssessmentsPage() {
     }
   }
 
+  async function reopenAttempt() {
+    if (!selectedAttempt) return;
+    if (
+      !window.confirm(
+        `Reopen attempt ${selectedAttempt.attempt_number || 1} for ${reopenMinutes} minutes?`
+      )
+    ) return;
+    setSaving(true);
+    setError("");
+    try {
+      await request(`/api/assessment-attempts/${selectedAttempt.id}/reopen`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extension_minutes: Number(reopenMinutes) }),
+      });
+      await Promise.all([loadAttempts(), loadAuditEvents()]);
+      await openAttempt({ id: selectedAttempt.id });
+      setStatus("Student attempt reopened.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function startNew() {
     setSelectedId("");
     setAssessment(null);
@@ -653,6 +756,34 @@ export default function AssessmentsPage() {
                           </select>
                         </label>
                       </div>
+                      <div style={twoColumnStyle}>
+                        <label style={labelStyle}>
+                          Time limit in minutes (leave blank for untimed)
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={form.time_limit_minutes}
+                            onChange={(event) =>
+                              setForm({ ...form, time_limit_minutes: event.target.value })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={labelStyle}>
+                          Attempts allowed
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={form.max_attempts}
+                            onChange={(event) =>
+                              setForm({ ...form, max_attempts: event.target.value })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                      </div>
                       <label style={labelStyle}>
                         Instructions
                         <textarea
@@ -716,6 +847,113 @@ export default function AssessmentsPage() {
                           <Button danger quiet onClick={closeAssessment} disabled={saving}>Close Assessment</Button>
                         ) : null}
                       </div>
+                    </div>
+
+                    <div style={cardStyle}>
+                      <h3 style={{ marginTop: 0 }}>Student Accommodations</h3>
+                      <p style={mutedStyle}>
+                        Add extra time, extra attempts, or individual availability dates.
+                      </p>
+                      <label style={labelStyle}>
+                        Student
+                        <select
+                          value={selectedAccommodationId}
+                          onChange={(event) => chooseAccommodation(event.target.value)}
+                          style={inputStyle}
+                        >
+                          <option value="">Select student</option>
+                          {accommodations.map((item) => (
+                            <option
+                              key={item.student_user_id}
+                              value={item.student_user_id}
+                            >
+                              {item.student_name || item.student_email}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div style={twoColumnStyle}>
+                        <label style={labelStyle}>
+                          Extra time (minutes)
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={accommodationForm.extra_time_minutes}
+                            onChange={(event) =>
+                              setAccommodationForm({
+                                ...accommodationForm,
+                                extra_time_minutes: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={labelStyle}>
+                          Extra attempts
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={accommodationForm.extra_attempts}
+                            onChange={(event) =>
+                              setAccommodationForm({
+                                ...accommodationForm,
+                                extra_attempts: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={labelStyle}>
+                          Available from override — China Standard Time (UTC+8)
+                          <input
+                            type="datetime-local"
+                            value={accommodationForm.available_from_override}
+                            onChange={(event) =>
+                              setAccommodationForm({
+                                ...accommodationForm,
+                                available_from_override: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                        <label style={labelStyle}>
+                          Due / closes override — China Standard Time (UTC+8)
+                          <input
+                            type="datetime-local"
+                            value={accommodationForm.due_at_override}
+                            onChange={(event) =>
+                              setAccommodationForm({
+                                ...accommodationForm,
+                                due_at_override: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                      </div>
+                      <label style={labelStyle}>
+                        Accommodation notes
+                        <textarea
+                          rows="3"
+                          value={accommodationForm.notes}
+                          onChange={(event) =>
+                            setAccommodationForm({
+                              ...accommodationForm,
+                              notes: event.target.value,
+                            })
+                          }
+                          style={inputStyle}
+                        />
+                      </label>
+                      <Button
+                        onClick={saveAccommodation}
+                        disabled={saving || !selectedAccommodationId}
+                      >
+                        Save Accommodation
+                      </Button>
                     </div>
 
                     <div style={cardStyle}>
@@ -1079,7 +1317,9 @@ export default function AssessmentsPage() {
                             onClick={() => openAttempt(attempt)}
                           >
                             <strong>{attempt.student_name || attempt.student_email}</strong>
-                            <span>{attempt.status}</span>
+                            <span>
+                              Attempt {attempt.attempt_number || 1} — {attempt.status}
+                            </span>
                             <span>
                               {attempt.score_percent === null
                                 ? "Needs grading"
@@ -1138,8 +1378,42 @@ export default function AssessmentsPage() {
                               style={inputStyle}
                             />
                           </label>
-                          <Button onClick={saveGrade} disabled={saving}>Save Grade to Gradebook</Button>
+                          <div style={actionRowStyle}>
+                            <Button onClick={saveGrade} disabled={saving}>
+                              Save Grade to Gradebook
+                            </Button>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={reopenMinutes}
+                              onChange={(event) => setReopenMinutes(event.target.value)}
+                              aria-label="Reopen minutes"
+                              style={{ ...inputStyle, maxWidth: "150px" }}
+                            />
+                            <Button quiet onClick={reopenAttempt} disabled={saving}>
+                              Reopen Attempt
+                            </Button>
+                          </div>
                         </>
+                      )}
+                    </div>
+                    <div style={{ ...cardStyle, gridColumn: "1 / -1" }}>
+                      <h3 style={{ marginTop: 0 }}>Assessment History</h3>
+                      {auditEvents.length === 0 ? (
+                        <p style={mutedStyle}>No recorded assessment events yet.</p>
+                      ) : (
+                        <div style={{ display: "grid", gap: "8px" }}>
+                          {auditEvents.map((event) => (
+                            <div key={event.id} style={compactQuestionStyle}>
+                              <strong>{event.event_type.replaceAll("_", " ")}</strong>
+                              <span>
+                                {event.student_name || "Assessment"} —{" "}
+                                {formatDate(event.created_at)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
