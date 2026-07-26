@@ -8,6 +8,7 @@ import {
   BookOpen,
   FileText,
   ClipboardList,
+  ClipboardCheck,
   BarChart3,
   UserCheck,
   UserPlus,
@@ -116,6 +117,7 @@ export default function Layout() {
     if (location.pathname === "/courses") return "Courses"
     if (location.pathname === "/lessons") return "Lessons"
     if (location.pathname === "/assignments") return "Assignments"
+    if (location.pathname === "/assessments") return "Assessments"
     if (location.pathname.startsWith("/assignments/") && location.pathname.endsWith("/edit")) {
       return "Edit Assignment"
     }
@@ -212,6 +214,9 @@ export default function Layout() {
             </NavItem>
             <NavItem to="/assignments" style={getNavLinkStyle("/assignments")} icon={ClipboardList}>
               Assignments
+            </NavItem>
+            <NavItem to="/assessments" style={getNavLinkStyle("/assessments")} icon={ClipboardCheck}>
+              Assessments
             </NavItem>
             <NavItem to={primaryGradebookPath} style={getNavLinkStyle("/gradebook")} icon={BarChart3}>
               Gradebook

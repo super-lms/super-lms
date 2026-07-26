@@ -11,6 +11,10 @@ const masterStudentRoutes = require("./routes/masterStudentRoutes");
 const teacherDesignedRubricImportRoutes = require("./routes/teacherDesignedRubricImportRoutes");
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const rubricRepositoryRoutes = require("./routes/rubricRepositoryRoutes");
+const {
+  router: assessmentRoutes,
+  ensureAssessmentTables,
+} = require("./routes/assessmentRoutes");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
 
 const app = express();
@@ -37,6 +41,7 @@ app.use("/api/demo", demoRoutes);
 app.use("/api/master-students", upload.single("file"), masterStudentRoutes);
 app.use("/api", teacherDesignedRubricImportRoutes);
 app.use("/api", rubricRepositoryRoutes);
+app.use("/api", assessmentRoutes);
 app.use("/api/users", adminUserRoutes);
 async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);
@@ -2775,7 +2780,8 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
       ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
-      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25
+      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
+      ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment'
     `);
 
     await pool.query(`
@@ -2831,6 +2837,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
         ON cc.id = cs.course_category_id
       LEFT JOIN submissions s
         ON s.assignment_id = a.id
+      WHERE COALESCE(a.source_type, 'assignment') <> 'assessment'
       GROUP BY
         a.id,
         cs.name,
@@ -3866,6 +3873,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       LEFT JOIN course_categories cc
         ON cc.id = cs.course_category_id
       WHERE a.class_id = $1
+        AND COALESCE(a.source_type, 'assignment') <> 'assessment'
       ORDER BY COALESCE(a.sort_order, a.id), a.id
       `,
       [courseId]
@@ -9847,6 +9855,7 @@ Promise.all([
   ensureStudentReportCommentsTable(),
   ensureAssignmentSectionTables(),
   ensureLearningPathItemTables(),
+  ensureAssessmentTables(),
 ])
   .then(() => {
     app.listen(port, () => {

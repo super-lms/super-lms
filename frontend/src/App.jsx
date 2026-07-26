@@ -5,6 +5,7 @@ import AdminLayout from "./components/admin/AdminLayout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 
 import AssignmentsPage from "./pages/AssignmentsPage.jsx";
+import AssessmentsPage from "./pages/AssessmentsPage.jsx";
 import AssignmentSpeedGradingPage from "./pages/AssignmentSpeedGradingPage.jsx";
 import AttendancePage from "./pages/AttendancePage.jsx";
 import ClassEnrollmentPage from "./pages/ClassEnrollmentPage.jsx";
@@ -22,6 +23,7 @@ import ParentDashboardPage from "./pages/ParentDashboardPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import RubricRepositoryPage from "./pages/RubricRepositoryPage.jsx";
 import StudentDashboardPage from "./pages/StudentDashboardPage.jsx";
+import StudentAssessmentsPage from "./pages/StudentAssessmentsPage.jsx";
 import StudentImportPage from "./pages/StudentImportPage.jsx";
 import StudentLearningPathsPage from "./pages/StudentLearningPathsPage.jsx";
 import StudentProgressPage from "./pages/StudentProgressPage.jsx";
@@ -117,6 +119,7 @@ function App() {
         <Route path="/course-assignments/:courseId" element={<CourseAssignmentsPage />} />
         <Route path="/lessons" element={<LessonsPage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
+        <Route path="/assessments" element={<AssessmentsPage />} />
         <Route path="/gradebook" element={<GradebookPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/rubric-repository" element={<RubricRepositoryPage />} />
@@ -157,6 +160,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["student"]}>
             <StudentDashboardPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/student-assessments"
+        element={
+          <ProtectedRoute allowedRoles={["student"]}>
+            <StudentAssessmentsPage />
           </ProtectedRoute>
         }
       />

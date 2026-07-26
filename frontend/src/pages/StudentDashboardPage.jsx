@@ -1043,6 +1043,24 @@ export default function StudentDashboardPage() {
   if (loading) {
     return (
       <div className="content-area">
+        <section
+          className="panel"
+          style={{
+            border: "2px solid #2563eb",
+            background: "#eff6ff",
+          }}
+        >
+          <SectionHeader
+            title="Tests & Assessments"
+            subtitle="Open available tests, continue saved work, and review submitted assessments."
+            action={
+              <ActionButton onClick={() => navigate("/student-assessments")}>
+                Open Tests & Assessments
+              </ActionButton>
+            }
+          />
+        </section>
+
         <section className="panel">
           <p>Loading student dashboard...</p>
         </section>
@@ -1093,6 +1111,24 @@ export default function StudentDashboardPage() {
               <div>{user?.role || "student"}</div>
             </DetailCard>
           </div>
+        </section>
+
+        <section
+          className="panel"
+          style={{
+            border: "2px solid #2563eb",
+            background: "#eff6ff",
+          }}
+        >
+          <SectionHeader
+            title="Tests & Assessments"
+            subtitle="Open available tests, continue saved work, and review submitted assessments."
+            action={
+              <ActionButton onClick={() => navigate("/student-assessments")}>
+                Open Tests & Assessments
+              </ActionButton>
+            }
+          />
         </section>
 
         {errorText ? (
