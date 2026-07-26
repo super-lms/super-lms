@@ -31,6 +31,15 @@ const EMPTY_GROUP = {
   points_per_question: "1",
 };
 
+const EMPTY_IMPORT = {
+  title: "",
+  instructions: "",
+  questions: [],
+  report: null,
+  source: null,
+  warnings: [],
+};
+
 function localDateTimeValue(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -144,6 +153,9 @@ export default function AssessmentsPage() {
   const [status, setStatus] = useState("Loading assessments...");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importPreview, setImportPreview] = useState(EMPTY_IMPORT);
+  const [importing, setImporting] = useState(false);
 
   const selectedCourse = courses.find(
     (course) => String(course.id) === String(form.course_id)
@@ -352,6 +364,101 @@ export default function AssessmentsPage() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function previewAssessmentImport(event) {
+    event.preventDefault();
+    if (!form.course_id || !importFile) {
+      setError("Select a course and choose a file first.");
+      return;
+    }
+    setImporting(true);
+    setError("");
+    setStatus("Reading assessment file...");
+    try {
+      const body = new FormData();
+      body.append("course_id", form.course_id);
+      body.append("file", importFile);
+      const data = await request("/api/assessment-imports/preview", {
+        method: "POST",
+        body,
+      });
+      setImportPreview(data);
+      setStatus(
+        `Import review ready: ${data.report.accepted} accepted, ${data.report.flagged} flagged.`
+      );
+    } catch (err) {
+      setError(err.message);
+      setStatus("");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function downloadAssessmentTemplate() {
+    setError("");
+    try {
+      const response = await authFetch("/api/assessment-imports/template.xlsx");
+      if (!response.ok) throw new Error("Failed to download assessment template.");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "SUPER_LMS_Assessment_Import_Template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  function updateImportedQuestion(index, changes) {
+    setImportPreview((current) => ({
+      ...current,
+      questions: current.questions.map((question, questionIndex) =>
+        questionIndex === index
+          ? { ...question, ...changes, status: "reviewing", issues: [] }
+          : question
+      ),
+    }));
+  }
+
+  function removeImportedQuestion(index) {
+    setImportPreview((current) => ({
+      ...current,
+      questions: current.questions.filter((_, questionIndex) => questionIndex !== index),
+    }));
+  }
+
+  async function createImportedDraft() {
+    setImporting(true);
+    setError("");
+    try {
+      const created = await request("/api/assessment-imports/create-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course_id: form.course_id,
+          teacher_id: user?.id,
+          title: importPreview.title,
+          instructions: importPreview.instructions,
+          questions: importPreview.questions,
+        }),
+      });
+      setImportPreview(EMPTY_IMPORT);
+      setImportFile(null);
+      await loadAssessments(created.id);
+      await openAssessment(created.id);
+      setStatus(
+        `Imported ${created.imported_question_count} questions into a draft assessment.`
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -609,6 +716,8 @@ export default function AssessmentsPage() {
     setView("build");
     setError("");
     setStatus("");
+    setImportFile(null);
+    setImportPreview(EMPTY_IMPORT);
   }
 
   return (
@@ -651,6 +760,7 @@ export default function AssessmentsPage() {
 
           <main style={{ minWidth: 0 }}>
             {!assessment ? (
+              <div style={{ display: "grid", gap: "18px" }}>
               <form onSubmit={createAssessment} style={cardStyle}>
                 <h2 style={{ marginTop: 0 }}>Create Assessment Draft</h2>
                 <label style={labelStyle}>
@@ -701,6 +811,206 @@ export default function AssessmentsPage() {
                   {saving ? "Creating..." : "Create Draft"}
                 </Button>
               </form>
+              <form onSubmit={previewAssessmentImport} style={cardStyle}>
+                <div>
+                  <h2 style={{ margin: 0 }}>Import Assessment File</h2>
+                  <p style={mutedStyle}>
+                    Upload the SUPER LMS Excel template or a structured Word/PDF assessment.
+                    Imported questions are reviewed before a draft is created.
+                  </p>
+                </div>
+                <div style={actionRowStyle}>
+                  <Button quiet onClick={downloadAssessmentTemplate}>
+                    Download Excel Template
+                  </Button>
+                  <span style={mutedStyle}>
+                    Word/PDF format: numbered question, A–E choices, then Answer:, Points:, and Type:.
+                  </span>
+                </div>
+                <label style={labelStyle}>
+                  Course
+                  <select
+                    required
+                    value={form.course_id}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, course_id: event.target.value }))
+                    }
+                    style={inputStyle}
+                  >
+                    <option value="">Select course</option>
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.title || course.class_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={labelStyle}>
+                  Assessment file
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.docx,.pdf"
+                    onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+                    style={inputStyle}
+                  />
+                </label>
+                <Button
+                  type="submit"
+                  disabled={importing || !form.course_id || !importFile}
+                >
+                  {importing ? "Reading File..." : "Preview Import"}
+                </Button>
+              </form>
+
+              {importPreview.source ? (
+                <div style={cardStyle}>
+                  <div style={rowBetweenStyle}>
+                    <div>
+                      <h2 style={{ margin: 0 }}>Review Imported Assessment</h2>
+                      <p style={mutedStyle}>
+                        {importPreview.source.file_name} · {importPreview.report.found} found ·{" "}
+                        {importPreview.report.accepted} accepted · {importPreview.report.flagged} flagged
+                      </p>
+                    </div>
+                    <StatusPill>Draft only</StatusPill>
+                  </div>
+                  {importPreview.warnings.map((warning) => (
+                    <div key={warning} style={errorStyle}>{warning}</div>
+                  ))}
+                  <label style={labelStyle}>
+                    Assessment title
+                    <input
+                      value={importPreview.title}
+                      onChange={(event) =>
+                        setImportPreview({ ...importPreview, title: event.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={labelStyle}>
+                    Instructions
+                    <textarea
+                      rows="4"
+                      value={importPreview.instructions}
+                      onChange={(event) =>
+                        setImportPreview({ ...importPreview, instructions: event.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                  </label>
+                  {importPreview.questions.map((question, index) => (
+                    <div key={question.import_id || index} style={questionCardStyle}>
+                      <div style={rowBetweenStyle}>
+                        <strong>Question {index + 1}</strong>
+                        <div style={actionRowStyle}>
+                          <StatusPill>{question.status}</StatusPill>
+                          <Button quiet danger onClick={() => removeImportedQuestion(index)}>
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                      {question.issues?.length ? (
+                        <div style={errorStyle}>{question.issues.join(" ")}</div>
+                      ) : null}
+                      <div style={twoColumnStyle}>
+                        <label style={labelStyle}>
+                          Type
+                          <select
+                            value={question.question_type}
+                            onChange={(event) =>
+                              updateImportedQuestion(index, {
+                                question_type: event.target.value,
+                                options:
+                                  event.target.value === "true_false"
+                                    ? ["True", "False"]
+                                    : question.options,
+                              })
+                            }
+                            style={inputStyle}
+                          >
+                            <option value="multiple_choice">Multiple Choice</option>
+                            <option value="true_false">True / False</option>
+                            <option value="short_answer">Short Answer</option>
+                            <option value="essay">Essay</option>
+                          </select>
+                        </label>
+                        <label style={labelStyle}>
+                          Points
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            value={question.points}
+                            onChange={(event) =>
+                              updateImportedQuestion(index, { points: event.target.value })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                      </div>
+                      <label style={labelStyle}>
+                        Question
+                        <textarea
+                          rows="3"
+                          value={question.prompt}
+                          onChange={(event) =>
+                            updateImportedQuestion(index, { prompt: event.target.value })
+                          }
+                          style={inputStyle}
+                        />
+                      </label>
+                      {question.question_type === "multiple_choice" ? (
+                        <label style={labelStyle}>
+                          Answer choices (one per line)
+                          <textarea
+                            rows="4"
+                            value={(question.options || []).join("\n")}
+                            onChange={(event) =>
+                              updateImportedQuestion(index, {
+                                options: event.target.value.split("\n"),
+                              })
+                            }
+                            style={inputStyle}
+                          />
+                        </label>
+                      ) : null}
+                      {["multiple_choice", "true_false"].includes(question.question_type) ? (
+                        <label style={labelStyle}>
+                          Correct answer
+                          <select
+                            value={question.correct_answer}
+                            onChange={(event) =>
+                              updateImportedQuestion(index, {
+                                correct_answer: event.target.value,
+                              })
+                            }
+                            style={inputStyle}
+                          >
+                            <option value="">Select correct answer</option>
+                            {(question.question_type === "true_false"
+                              ? ["True", "False"]
+                              : (question.options || []).map((option) => option.trim()).filter(Boolean)
+                            ).map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  ))}
+                  <Button
+                    onClick={createImportedDraft}
+                    disabled={
+                      importing ||
+                      !importPreview.title.trim() ||
+                      importPreview.questions.length === 0
+                    }
+                  >
+                    {importing ? "Creating Draft..." : "Create Reviewed Draft"}
+                  </Button>
+                </div>
+              ) : null}
+              </div>
             ) : (
               <div style={{ display: "grid", gap: "18px" }}>
                 <div style={rowBetweenStyle}>
@@ -1434,7 +1744,7 @@ const workspaceGridStyle = { display: "grid", gridTemplateColumns: "minmax(230px
 const gradingGridStyle = { display: "grid", gridTemplateColumns: "minmax(220px, 300px) minmax(0, 1fr)", gap: "18px", alignItems: "start" };
 const twoColumnStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px" };
 const metaGridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px", margin: "18px 0" };
-const sidebarStyle = { border: "1px solid #dbe3ee", borderRadius: "14px", padding: "14px", display: "grid", gap: "10px", background: "#f8fafc", position: "sticky", top: "16px" };
+const sidebarStyle = { minWidth: 0, border: "1px solid #dbe3ee", borderRadius: "14px", padding: "14px", display: "grid", gap: "10px", background: "#f8fafc", position: "sticky", top: "16px" };
 const cardStyle = { border: "1px solid #dbe3ee", borderRadius: "14px", padding: "20px", background: "#fff", display: "grid", gap: "14px" };
 const questionCardStyle = { border: "1px solid #dbe3ee", borderRadius: "12px", padding: "16px", background: "#fff" };
 const compactQuestionStyle = { border: "1px solid #e2e8f0", borderRadius: "10px", padding: "12px", display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" };
@@ -1452,6 +1762,9 @@ const errorStyle = { border: "1px solid #fca5a5", background: "#fff1f2", color: 
 function libraryItemStyle(active) {
   return {
     width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
+    overflowWrap: "anywhere",
     textAlign: "left",
     border: active ? "2px solid #2563eb" : "1px solid #dbe3ee",
     borderRadius: "10px",

@@ -12,6 +12,7 @@ const teacherDesignedRubricImportRoutes = require("./routes/teacherDesignedRubri
 const adminUserRoutes = require("./routes/adminUserRoutes");
 const rubricRepositoryRoutes = require("./routes/rubricRepositoryRoutes");
 const questionBankRoutes = require("./routes/questionBankRoutes");
+const assessmentImportRoutes = require("./routes/assessmentImportRoutes");
 const {
   router: assessmentRoutes,
   ensureAssessmentTables,
@@ -43,6 +44,7 @@ app.use("/api/master-students", upload.single("file"), masterStudentRoutes);
 app.use("/api", teacherDesignedRubricImportRoutes);
 app.use("/api", rubricRepositoryRoutes);
 app.use("/api", questionBankRoutes);
+app.use("/api", assessmentImportRoutes);
 app.use("/api", assessmentRoutes);
 app.use("/api/users", adminUserRoutes);
 async function ensureStudentInfoColumns() {
