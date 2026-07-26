@@ -19,7 +19,9 @@ const port = 3000;
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 
-const uploadDir = path.join(__dirname, "uploads");
+const uploadDir = process.env.RAILWAY_VOLUME_MOUNT_PATH
+  ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH)
+  : path.join(__dirname, "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const upload = multer({

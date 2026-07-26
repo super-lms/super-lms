@@ -1575,6 +1575,9 @@ export default function AssignmentSpeedGradingPage() {
                             : filePath
                               ? `${API_BASE}${filePath}`
                               : "";
+                          const mimeType = String(file.mime_type || "").toLowerCase();
+                          const isAudioFile = mimeType.startsWith("audio/");
+                          const isVideoFile = mimeType.startsWith("video/");
                           const sizeText = formatAttachmentSize(file.size_bytes || file.size || 0);
                           const uploadedAt = file.created_at
                             ? new Date(file.created_at).toLocaleString()
@@ -1594,6 +1597,33 @@ export default function AssignmentSpeedGradingPage() {
                               </div>
 
                               <div style={teacherAttachmentActionWrapStyle}>
+                                {href && isAudioFile ? (
+                                  <audio
+                                    controls
+                                    preload="metadata"
+                                    src={href}
+                                    style={{ width: "min(100%, 420px)" }}
+                                  >
+                                    Your browser does not support audio playback.
+                                  </audio>
+                                ) : null}
+
+                                {href && isVideoFile ? (
+                                  <video
+                                    controls
+                                    preload="metadata"
+                                    src={href}
+                                    style={{
+                                      width: "min(100%, 560px)",
+                                      maxHeight: "360px",
+                                      borderRadius: "10px",
+                                      background: "#000000",
+                                    }}
+                                  >
+                                    Your browser does not support video playback.
+                                  </video>
+                                ) : null}
+
                                 {href ? (
                                   <a
                                     href={href}
