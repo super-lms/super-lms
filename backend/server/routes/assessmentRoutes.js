@@ -69,7 +69,63 @@ async function ensureAssessmentTables() {
       autosaved_at TIMESTAMPTZ DEFAULT NOW(),
       submitted_at TIMESTAMPTZ,
       graded_at TIMESTAMPTZ,
+      question_snapshot_json JSONB NOT NULL DEFAULT '[]'::jsonb,
       UNIQUE (assessment_id, student_user_id)
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE assessments
+    ADD COLUMN IF NOT EXISTS shuffle_questions BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS shuffle_answers BOOLEAN NOT NULL DEFAULT false
+  `);
+
+  await pool.query(`
+    ALTER TABLE assessment_attempts
+    ADD COLUMN IF NOT EXISTS question_snapshot_json JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assessment_question_banks (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      tags_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assessment_question_bank_items (
+      id SERIAL PRIMARY KEY,
+      bank_id INTEGER NOT NULL REFERENCES assessment_question_banks(id) ON DELETE CASCADE,
+      question_type TEXT NOT NULL
+        CHECK (question_type IN ('multiple_choice', 'true_false', 'short_answer', 'essay')),
+      prompt TEXT NOT NULL,
+      options_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+      correct_answer_json JSONB,
+      points NUMERIC NOT NULL DEFAULT 1 CHECK (points > 0),
+      teacher_feedback TEXT DEFAULT '',
+      tags_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assessment_question_groups (
+      id SERIAL PRIMARY KEY,
+      assessment_id INTEGER NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+      bank_id INTEGER NOT NULL REFERENCES assessment_question_banks(id) ON DELETE RESTRICT,
+      title TEXT NOT NULL,
+      draw_count INTEGER NOT NULL CHECK (draw_count > 0),
+      points_per_question NUMERIC NOT NULL DEFAULT 1 CHECK (points_per_question > 0),
+      sort_order INTEGER NOT NULL DEFAULT 1,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
@@ -81,6 +137,16 @@ async function ensureAssessmentTables() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS assessment_attempts_assessment_status_idx
     ON assessment_attempts (assessment_id, status)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS assessment_question_bank_items_bank_idx
+    ON assessment_question_bank_items (bank_id, id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS assessment_question_groups_assessment_idx
+    ON assessment_question_groups (assessment_id, sort_order, id)
   `);
 }
 
@@ -103,6 +169,100 @@ function normalizeAnswer(value) {
   return value;
 }
 
+function shuffleArray(values) {
+  const next = [...values];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[randomIndex]] = [next[randomIndex], next[index]];
+  }
+  return next;
+}
+
+function hideSnapshotAnswers(questions) {
+  return questions.map(({ correct_answer_json, teacher_feedback, ...question }) => question);
+}
+
+async function loadQuestionGroups(assessmentId) {
+  const result = await pool.query(
+    `
+    SELECT
+      g.*,
+      b.title AS bank_title,
+      COUNT(i.id)::INTEGER AS bank_question_count
+    FROM assessment_question_groups g
+    JOIN assessment_question_banks b ON b.id = g.bank_id
+    LEFT JOIN assessment_question_bank_items i ON i.bank_id = b.id
+    WHERE g.assessment_id = $1
+    GROUP BY g.id, b.title
+    ORDER BY g.sort_order ASC, g.id ASC
+    `,
+    [assessmentId]
+  );
+  return result.rows.map((group) => ({
+    ...group,
+    draw_count: Number(group.draw_count),
+    points_per_question: Number(group.points_per_question),
+    bank_question_count: Number(group.bank_question_count),
+  }));
+}
+
+async function buildAttemptQuestionSnapshot(assessment) {
+  const directQuestions = await loadQuestions(assessment.id, true);
+  const groups = await loadQuestionGroups(assessment.id);
+  const snapshot = directQuestions.map((question) => ({
+    ...question,
+    id: `direct:${question.id}`,
+    source_question_id: question.id,
+    source_type: "direct",
+  }));
+
+  for (const group of groups) {
+    const itemResult = await pool.query(
+      `
+      SELECT *
+      FROM assessment_question_bank_items
+      WHERE bank_id = $1
+      ORDER BY id ASC
+      `,
+      [group.bank_id]
+    );
+    const selectedItems = shuffleArray(itemResult.rows).slice(0, group.draw_count);
+    selectedItems.forEach((item) => {
+      snapshot.push({
+        id: `group:${group.id}:item:${item.id}`,
+        source_question_id: item.id,
+        source_group_id: group.id,
+        source_type: "question_bank",
+        question_type: item.question_type,
+        prompt: item.prompt,
+        options_json: Array.isArray(item.options_json) ? item.options_json : [],
+        correct_answer_json: item.correct_answer_json,
+        points: Number(group.points_per_question),
+        teacher_feedback: item.teacher_feedback || "",
+      });
+    });
+  }
+
+  const ordered = assessment.shuffle_questions ? shuffleArray(snapshot) : snapshot;
+  return ordered.map((question) => ({
+    ...question,
+    options_json:
+      assessment.shuffle_answers && question.question_type === "multiple_choice"
+        ? shuffleArray(question.options_json || [])
+        : question.options_json || [],
+  }));
+}
+
+async function loadAttemptQuestions(attempt, includeAnswers) {
+  const snapshot = Array.isArray(attempt.question_snapshot_json)
+    ? attempt.question_snapshot_json
+    : [];
+  if (snapshot.length > 0) {
+    return includeAnswers ? snapshot : hideSnapshotAnswers(snapshot);
+  }
+  return loadQuestions(attempt.assessment_id, includeAnswers);
+}
+
 function serializeAssessment(row) {
   return {
     ...row,
@@ -122,8 +282,16 @@ async function getAssessment(assessmentId) {
       c.title AS course_title,
       cs.name AS subcategory_name,
       cc.name AS category_name,
-      COALESCE(SUM(q.points), 0) AS points_possible,
-      COUNT(q.id)::INTEGER AS question_count,
+      COALESCE(SUM(q.points), 0) + COALESCE((
+        SELECT SUM(g.draw_count * g.points_per_question)
+        FROM assessment_question_groups g
+        WHERE g.assessment_id = a.id
+      ), 0) AS points_possible,
+      COUNT(q.id)::INTEGER + COALESCE((
+        SELECT SUM(g.draw_count)::INTEGER
+        FROM assessment_question_groups g
+        WHERE g.assessment_id = a.id
+      ), 0) AS question_count,
       (
         SELECT COUNT(*)::INTEGER
         FROM assessment_attempts at
@@ -336,7 +504,7 @@ async function calculateAttempt(attemptId, manualScores = null) {
   const attempt = attemptResult.rows[0];
   if (!attempt) return null;
 
-  const questions = await loadQuestions(attempt.assessment_id, true);
+  const questions = await loadAttemptQuestions(attempt, true);
   const answers = attempt.answers_json || {};
   const savedManualScores =
     manualScores && typeof manualScores === "object"
@@ -433,12 +601,20 @@ router.get(
             SELECT SUM(q.points)
             FROM assessment_questions q
             WHERE q.assessment_id = a.id
+          ), 0) + COALESCE((
+            SELECT SUM(g.draw_count * g.points_per_question)
+            FROM assessment_question_groups g
+            WHERE g.assessment_id = a.id
           ), 0) AS points_possible,
           (
             SELECT COUNT(*)::INTEGER
             FROM assessment_questions q
             WHERE q.assessment_id = a.id
-          ) AS question_count,
+          ) + COALESCE((
+            SELECT SUM(g.draw_count)::INTEGER
+            FROM assessment_question_groups g
+            WHERE g.assessment_id = a.id
+          ), 0) AS question_count,
           (
             SELECT COUNT(*)::INTEGER
             FROM assessment_attempts at
@@ -562,9 +738,13 @@ router.get(
       }
 
       const questions = await loadQuestions(assessmentId, isManager);
+      const questionGroups = isManager
+        ? await loadQuestionGroups(assessmentId)
+        : [];
       return res.json({
         assessment: serializeAssessment(assessment),
         questions,
+        question_groups: questionGroups,
       });
     } catch (error) {
       console.error("GET /api/assessments/:assessmentId failed:", error);
@@ -602,8 +782,10 @@ router.put(
             subcategory_id = $3,
             available_from = $4,
             due_at = $5,
+            shuffle_questions = $6,
+            shuffle_answers = $7,
             updated_at = NOW()
-        WHERE id = $6
+        WHERE id = $8
         RETURNING *
         `,
         [
@@ -612,6 +794,8 @@ router.put(
           parseId(req.body.subcategory_id),
           req.body.available_from || null,
           req.body.due_at || null,
+          Boolean(req.body.shuffle_questions),
+          Boolean(req.body.shuffle_answers),
           assessmentId,
         ]
       );
@@ -846,6 +1030,121 @@ router.delete(
 );
 
 router.post(
+  "/assessments/:assessmentId/question-groups",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  async (req, res) => {
+    try {
+      const assessmentId = parseId(req.params.assessmentId);
+      const bankId = parseId(req.body.bank_id);
+      const drawCount = Number(req.body.draw_count);
+      const pointsPerQuestion = Number(req.body.points_per_question);
+      const access = assessmentId
+        ? await canManageAssessment(req.user, assessmentId)
+        : { allowed: false, assessment: null };
+      if (!access.assessment) {
+        return res.status(404).json({ error: "Assessment not found" });
+      }
+      if (!access.allowed) {
+        return res.status(403).json({ error: "You cannot manage this assessment" });
+      }
+      if (access.assessment.status !== "draft") {
+        return res.status(409).json({ error: "Published assessment groups are locked" });
+      }
+      if (!bankId || !Number.isInteger(drawCount) || drawCount < 1 || !(pointsPerQuestion > 0)) {
+        return res.status(400).json({ error: "Bank, draw count, and points are required" });
+      }
+
+      const bankResult = await pool.query(
+        `
+        SELECT b.id, b.title, b.course_id, COUNT(i.id)::INTEGER AS question_count
+        FROM assessment_question_banks b
+        LEFT JOIN assessment_question_bank_items i ON i.bank_id = b.id
+        WHERE b.id = $1
+        GROUP BY b.id
+        `,
+        [bankId]
+      );
+      const bank = bankResult.rows[0];
+      if (!bank || Number(bank.course_id) !== Number(access.assessment.course_id)) {
+        return res.status(400).json({ error: "Choose a question bank from this course" });
+      }
+      if (drawCount > Number(bank.question_count)) {
+        return res.status(400).json({
+          error: `This bank contains only ${bank.question_count} questions`,
+        });
+      }
+
+      const orderResult = await pool.query(
+        `
+        SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order
+        FROM assessment_question_groups
+        WHERE assessment_id = $1
+        `,
+        [assessmentId]
+      );
+      const result = await pool.query(
+        `
+        INSERT INTO assessment_question_groups (
+          assessment_id, bank_id, title, draw_count,
+          points_per_question, sort_order
+        )
+        VALUES ($1,$2,$3,$4,$5,$6)
+        RETURNING *
+        `,
+        [
+          assessmentId,
+          bankId,
+          cleanText(req.body.title) || bank.title,
+          drawCount,
+          pointsPerQuestion,
+          orderResult.rows[0].next_order,
+        ]
+      );
+      return res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("POST assessment question group failed:", error);
+      return res.status(500).json({ error: "Failed to add random question group" });
+    }
+  }
+);
+
+router.delete(
+  "/assessments/:assessmentId/question-groups/:groupId",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  async (req, res) => {
+    try {
+      const assessmentId = parseId(req.params.assessmentId);
+      const groupId = parseId(req.params.groupId);
+      const access = assessmentId
+        ? await canManageAssessment(req.user, assessmentId)
+        : { allowed: false, assessment: null };
+      if (!access.assessment) {
+        return res.status(404).json({ error: "Assessment not found" });
+      }
+      if (!access.allowed) {
+        return res.status(403).json({ error: "You cannot manage this assessment" });
+      }
+      if (access.assessment.status !== "draft") {
+        return res.status(409).json({ error: "Published assessment groups are locked" });
+      }
+      await pool.query(
+        `
+        DELETE FROM assessment_question_groups
+        WHERE id = $1 AND assessment_id = $2
+        `,
+        [groupId, assessmentId]
+      );
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("DELETE assessment question group failed:", error);
+      return res.status(500).json({ error: "Failed to delete random question group" });
+    }
+  }
+);
+
+router.post(
   "/assessments/:assessmentId/publish",
   authenticateJWT,
   requireRole("admin", "teacher"),
@@ -999,20 +1298,30 @@ router.post(
         return res.status(409).json({ error: "Assessment has closed" });
       }
 
+      const questionSnapshot = await buildAttemptQuestionSnapshot(assessment);
       const result = await pool.query(
         `
-        INSERT INTO assessment_attempts (assessment_id, student_user_id)
-        VALUES ($1,$2)
+        INSERT INTO assessment_attempts (
+          assessment_id, student_user_id, question_snapshot_json
+        )
+        VALUES ($1,$2,$3)
         ON CONFLICT (assessment_id, student_user_id)
         DO UPDATE SET autosaved_at = assessment_attempts.autosaved_at
         RETURNING *
         `,
-        [assessmentId, req.user.id]
+        [assessmentId, req.user.id, JSON.stringify(questionSnapshot)]
       );
       if (result.rows[0].status !== "in_progress") {
         return res.status(409).json({ error: "This assessment has already been submitted" });
       }
-      return res.json(result.rows[0]);
+      return res.json({
+        ...result.rows[0],
+        question_snapshot_json: hideSnapshotAnswers(
+          Array.isArray(result.rows[0].question_snapshot_json)
+            ? result.rows[0].question_snapshot_json
+            : []
+        ),
+      });
     } catch (error) {
       console.error("POST assessment attempt start failed:", error);
       return res.status(500).json({ error: "Failed to start assessment" });
@@ -1047,8 +1356,19 @@ router.get(
           : await canManageCourse(req.user, attempt.course_id);
       if (!allowed) return res.status(403).json({ error: "Attempt access denied" });
 
-      const questions = await loadQuestions(attempt.assessment_id, role !== "student");
-      return res.json({ attempt, questions });
+      const questions = await loadAttemptQuestions(attempt, role !== "student");
+      const safeAttempt =
+        role === "student"
+          ? {
+              ...attempt,
+              question_snapshot_json: hideSnapshotAnswers(
+                Array.isArray(attempt.question_snapshot_json)
+                  ? attempt.question_snapshot_json
+                  : []
+              ),
+            }
+          : attempt;
+      return res.json({ attempt: safeAttempt, questions });
     } catch (error) {
       console.error("GET assessment attempt failed:", error);
       return res.status(500).json({ error: "Failed to load attempt" });

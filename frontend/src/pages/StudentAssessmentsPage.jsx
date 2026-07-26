@@ -172,17 +172,18 @@ export default function StudentAssessmentsPage() {
     try {
       const detail = await request(`/api/assessments/${assessment.id}`);
       setSelected(detail.assessment);
-      setQuestions(detail.questions || []);
 
       if (assessment.student_attempt_id) {
         const attemptData = await request(
           `/api/assessment-attempts/${assessment.student_attempt_id}`
         );
         setAttempt(attemptData.attempt);
+        setQuestions(attemptData.questions || []);
         setAnswers(attemptData.attempt.answers_json || {});
         hasLoadedAttempt.current = true;
       } else {
         setAttempt(null);
+        setQuestions([]);
         setAnswers({});
       }
     } catch (err) {
@@ -207,8 +208,10 @@ export default function StudentAssessmentsPage() {
         `/api/assessments/${selected.id}/attempts/start`,
         { method: "POST" }
       );
-      setAttempt(started);
-      setAnswers(started.answers_json || {});
+      const attemptData = await request(`/api/assessment-attempts/${started.id}`);
+      setAttempt(attemptData.attempt);
+      setQuestions(attemptData.questions || []);
+      setAnswers(attemptData.attempt.answers_json || {});
       hasLoadedAttempt.current = true;
       setMessage("Assessment started. Your answers will save automatically.");
     } catch (err) {

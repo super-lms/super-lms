@@ -9,6 +9,8 @@ const EMPTY_ASSESSMENT = {
   subcategory_id: "",
   available_from: "",
   due_at: "",
+  shuffle_questions: false,
+  shuffle_answers: false,
 };
 
 const EMPTY_QUESTION = {
@@ -18,6 +20,13 @@ const EMPTY_QUESTION = {
   correct_answer: "",
   points: "1",
   teacher_feedback: "",
+};
+
+const EMPTY_GROUP = {
+  bank_id: "",
+  title: "",
+  draw_count: "1",
+  points_per_question: "1",
 };
 
 function localDateTimeValue(value) {
@@ -106,6 +115,9 @@ export default function AssessmentsPage() {
   const [selectedId, setSelectedId] = useState("");
   const [assessment, setAssessment] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [questionGroups, setQuestionGroups] = useState([]);
+  const [questionBanks, setQuestionBanks] = useState([]);
+  const [groupForm, setGroupForm] = useState(EMPTY_GROUP);
   const [tiers, setTiers] = useState([]);
   const [form, setForm] = useState(EMPTY_ASSESSMENT);
   const [questionForm, setQuestionForm] = useState(EMPTY_QUESTION);
@@ -124,9 +136,21 @@ export default function AssessmentsPage() {
     (course) => String(course.id) === String(form.course_id)
   );
   const pointsPossible = useMemo(
-    () => questions.reduce((sum, question) => sum + Number(question.points || 0), 0),
-    [questions]
+    () =>
+      questions.reduce((sum, question) => sum + Number(question.points || 0), 0) +
+      questionGroups.reduce(
+        (sum, group) =>
+          sum + Number(group.draw_count || 0) * Number(group.points_per_question || 0),
+        0
+      ),
+    [questions, questionGroups]
   );
+  const totalQuestionCount =
+    questions.length +
+    questionGroups.reduce(
+      (sum, group) => sum + Number(group.draw_count || 0),
+      0
+    );
 
   async function request(path, options) {
     const response = await authFetch(path, options);
@@ -169,6 +193,15 @@ export default function AssessmentsPage() {
     setTiers(tierGroups.flat());
   }
 
+  async function loadQuestionBanks(courseId) {
+    if (!courseId) {
+      setQuestionBanks([]);
+      return;
+    }
+    const data = await request(`/api/question-banks?courseId=${courseId}`);
+    setQuestionBanks(Array.isArray(data) ? data : []);
+  }
+
   async function openAssessment(id, nextView = "build") {
     setError("");
     setStatus("Loading assessment...");
@@ -177,6 +210,7 @@ export default function AssessmentsPage() {
       setSelectedId(String(id));
       setAssessment(data.assessment);
       setQuestions(data.questions || []);
+      setQuestionGroups(data.question_groups || []);
       setForm({
         course_id: String(data.assessment.course_id),
         title: data.assessment.title || "",
@@ -186,11 +220,17 @@ export default function AssessmentsPage() {
           : "",
         available_from: localDateTimeValue(data.assessment.available_from),
         due_at: localDateTimeValue(data.assessment.due_at),
+        shuffle_questions: Boolean(data.assessment.shuffle_questions),
+        shuffle_answers: Boolean(data.assessment.shuffle_answers),
       });
-      await loadCourseStructure(data.assessment.course_id);
+      await Promise.all([
+        loadCourseStructure(data.assessment.course_id),
+        loadQuestionBanks(data.assessment.course_id),
+      ]);
       setView(nextView);
       setQuestionForm(EMPTY_QUESTION);
       setEditingQuestionId("");
+      setGroupForm(EMPTY_GROUP);
       if (nextView === "grade") await loadAttempts(id);
       setStatus("");
     } catch (err) {
@@ -305,6 +345,7 @@ export default function AssessmentsPage() {
       setSelectedId("");
       setAssessment(null);
       setQuestions([]);
+      setQuestionGroups([]);
       setForm(EMPTY_ASSESSMENT);
       await loadAssessments("");
       setStatus("Draft assessment deleted.");
@@ -379,6 +420,45 @@ export default function AssessmentsPage() {
     }
   }
 
+  async function addQuestionGroup(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await request(`/api/assessments/${selectedId}/question-groups`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(groupForm),
+      });
+      await openAssessment(selectedId);
+      await loadAssessments(selectedId);
+      setGroupForm(EMPTY_GROUP);
+      setStatus("Random question group added.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteQuestionGroup(groupId) {
+    if (!window.confirm("Remove this random question group?")) return;
+    setSaving(true);
+    setError("");
+    try {
+      await request(`/api/assessments/${selectedId}/question-groups/${groupId}`, {
+        method: "DELETE",
+      });
+      await openAssessment(selectedId);
+      await loadAssessments(selectedId);
+      setStatus("Random question group removed.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function openAttempt(attempt) {
     setError("");
     try {
@@ -418,8 +498,11 @@ export default function AssessmentsPage() {
     setSelectedId("");
     setAssessment(null);
     setQuestions([]);
+    setQuestionGroups([]);
     setForm(EMPTY_ASSESSMENT);
     setTiers([]);
+    setQuestionBanks([]);
+    setGroupForm(EMPTY_GROUP);
     setView("build");
     setError("");
     setStatus("");
@@ -521,7 +604,7 @@ export default function AssessmentsPage() {
                   <div>
                     <h2 style={{ margin: 0 }}>{assessment.title}</h2>
                     <p style={mutedStyle}>
-                      {assessment.course_title} · {questions.length} questions · {pointsPossible.toFixed(1)} points
+                      {assessment.course_title} · {totalQuestionCount} questions · {pointsPossible.toFixed(1)} points
                     </p>
                   </div>
                   <StatusPill>{assessment.status}</StatusPill>
@@ -599,6 +682,28 @@ export default function AssessmentsPage() {
                           />
                         </label>
                       </div>
+                      <div style={twoColumnStyle}>
+                        <label style={choiceStyle}>
+                          <input
+                            type="checkbox"
+                            checked={form.shuffle_questions}
+                            onChange={(event) =>
+                              setForm({ ...form, shuffle_questions: event.target.checked })
+                            }
+                          />
+                          Shuffle question order separately for each student
+                        </label>
+                        <label style={choiceStyle}>
+                          <input
+                            type="checkbox"
+                            checked={form.shuffle_answers}
+                            onChange={(event) =>
+                              setForm({ ...form, shuffle_answers: event.target.checked })
+                            }
+                          />
+                          Shuffle multiple-choice answers separately for each student
+                        </label>
+                      </div>
                       <div style={actionRowStyle}>
                         <Button onClick={saveAssessment} disabled={saving}>Save Details</Button>
                         {assessment.status === "draft" ? (
@@ -616,7 +721,11 @@ export default function AssessmentsPage() {
                     <div style={cardStyle}>
                       <h3 style={{ marginTop: 0 }}>Questions</h3>
                       {questions.length === 0 ? (
-                        <p style={mutedStyle}>Add the first question below.</p>
+                        <p style={mutedStyle}>
+                          {questionGroups.length > 0
+                            ? "This assessment uses the random question groups below."
+                            : "Add the first question below."}
+                        </p>
                       ) : (
                         <div style={{ display: "grid", gap: "12px" }}>
                           {questions.map((question, index) => (
@@ -641,6 +750,130 @@ export default function AssessmentsPage() {
                           ))}
                         </div>
                       )}
+                    </div>
+
+                    <div style={cardStyle}>
+                      <div style={rowBetweenStyle}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>Random Question Groups</h3>
+                          <p style={mutedStyle}>
+                            Draw a fixed number of questions from a reusable bank. Each student’s selection is frozen when the attempt begins.
+                          </p>
+                        </div>
+                        <Button quiet onClick={() => window.location.assign("/question-banks")}>
+                          Manage Question Banks
+                        </Button>
+                      </div>
+
+                      {questionGroups.length === 0 ? (
+                        <p style={mutedStyle}>No random question groups attached.</p>
+                      ) : (
+                        <div style={{ display: "grid", gap: "10px" }}>
+                          {questionGroups.map((group) => (
+                            <div key={group.id} style={compactQuestionStyle}>
+                              <div>
+                                <strong>{group.title}</strong>
+                                <div style={mutedStyle}>
+                                  Draw {group.draw_count} from {group.bank_title} · {group.points_per_question} points each · {group.bank_question_count} available
+                                </div>
+                              </div>
+                              {assessment.status === "draft" ? (
+                                <Button danger quiet onClick={() => deleteQuestionGroup(group.id)}>
+                                  Remove
+                                </Button>
+                              ) : (
+                                <StatusPill>Locked after publish</StatusPill>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {assessment.status === "draft" ? (
+                        <form onSubmit={addQuestionGroup} style={{ display: "grid", gap: "12px" }}>
+                          <div style={twoColumnStyle}>
+                            <label style={labelStyle}>
+                              Question bank
+                              <select
+                                required
+                                value={groupForm.bank_id}
+                                onChange={(event) => {
+                                  const bank = questionBanks.find(
+                                    (item) => String(item.id) === String(event.target.value)
+                                  );
+                                  setGroupForm({
+                                    ...groupForm,
+                                    bank_id: event.target.value,
+                                    title: groupForm.title || bank?.title || "",
+                                  });
+                                }}
+                                style={inputStyle}
+                              >
+                                <option value="">Select bank</option>
+                                {questionBanks.map((bank) => (
+                                  <option key={bank.id} value={bank.id}>
+                                    {bank.title} ({bank.question_count} questions)
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label style={labelStyle}>
+                              Group title
+                              <input
+                                required
+                                value={groupForm.title}
+                                onChange={(event) =>
+                                  setGroupForm({ ...groupForm, title: event.target.value })
+                                }
+                                style={inputStyle}
+                              />
+                            </label>
+                          </div>
+                          <div style={twoColumnStyle}>
+                            <label style={labelStyle}>
+                              Questions to draw
+                              <input
+                                type="number"
+                                min="1"
+                                required
+                                value={groupForm.draw_count}
+                                onChange={(event) =>
+                                  setGroupForm({ ...groupForm, draw_count: event.target.value })
+                                }
+                                style={inputStyle}
+                              />
+                            </label>
+                            <label style={labelStyle}>
+                              Points per selected question
+                              <input
+                                type="number"
+                                min="0.1"
+                                step="0.1"
+                                required
+                                value={groupForm.points_per_question}
+                                onChange={(event) =>
+                                  setGroupForm({
+                                    ...groupForm,
+                                    points_per_question: event.target.value,
+                                  })
+                                }
+                                style={inputStyle}
+                              />
+                            </label>
+                          </div>
+                          <Button
+                            type="submit"
+                            disabled={saving || questionBanks.length === 0}
+                          >
+                            Add Random Group
+                          </Button>
+                          {questionBanks.length === 0 ? (
+                            <p style={mutedStyle}>
+                              Create a question bank for this course before adding a random group.
+                            </p>
+                          ) : null}
+                        </form>
+                      ) : null}
                     </div>
 
                     {assessment.status === "draft" ? (
@@ -817,6 +1050,15 @@ export default function AssessmentsPage() {
                     <div style={{ display: "grid", gap: "14px" }}>
                       {questions.map((question, index) => (
                         <QuestionPreview key={question.id} question={question} number={index + 1} />
+                      ))}
+                      {questionGroups.map((group) => (
+                        <div key={group.id} style={noticeStyle}>
+                          <strong>{group.title}</strong>
+                          <div>
+                            Each student receives {group.draw_count} randomly selected questions
+                            from {group.bank_title} when the assessment begins.
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>

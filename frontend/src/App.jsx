@@ -20,6 +20,7 @@ import LessonsPage from "./pages/LessonsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ObserverPage from "./pages/ObserverPage.jsx";
 import ParentDashboardPage from "./pages/ParentDashboardPage.jsx";
+import QuestionBanksPage from "./pages/QuestionBanksPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import RubricRepositoryPage from "./pages/RubricRepositoryPage.jsx";
 import StudentDashboardPage from "./pages/StudentDashboardPage.jsx";
@@ -120,6 +121,7 @@ function App() {
         <Route path="/lessons" element={<LessonsPage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
         <Route path="/assessments" element={<AssessmentsPage />} />
+        <Route path="/question-banks" element={<QuestionBanksPage />} />
         <Route path="/gradebook" element={<GradebookPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/rubric-repository" element={<RubricRepositoryPage />} />
