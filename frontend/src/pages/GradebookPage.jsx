@@ -135,6 +135,8 @@ export default function GradebookPage() {
   const [activeGradebookSection, setActiveGradebookSection] = useState("spreadsheet");
   const [spreadsheetStudentSort, setSpreadsheetStudentSort] = useState("first-name");
   const [spreadsheetAssignmentSort, setSpreadsheetAssignmentSort] = useState("due-date");
+  const [spreadsheetCustomOrder, setSpreadsheetCustomOrder] = useState([]);
+  const [draggedAssignmentId, setDraggedAssignmentId] = useState("");
   const [communicationType, setCommunicationType] = useState("progress-update");
   const [communicationRecipient, setCommunicationRecipient] = useState("parent");
   const [communicationNotes, setCommunicationNotes] = useState("");
@@ -350,6 +352,36 @@ export default function GradebookPage() {
   }, []);
 
   const assignments = gradebook?.assignments || [];
+
+  useEffect(() => {
+    if (!selectedCourseId || assignments.length === 0) {
+      setSpreadsheetCustomOrder([]);
+      return;
+    }
+
+    const storageKey = `super-lms-gradebook-assignment-order:${selectedCourseId}`;
+    let savedOrder = [];
+
+    try {
+      const parsedOrder = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+      savedOrder = Array.isArray(parsedOrder) ? parsedOrder.map(String) : [];
+    } catch {
+      savedOrder = [];
+    }
+
+    const currentIds = assignments.map((assignment) => String(assignment.id));
+    const reconciledOrder = [
+      ...savedOrder.filter((assignmentId) => currentIds.includes(assignmentId)),
+      ...currentIds.filter((assignmentId) => !savedOrder.includes(assignmentId)),
+    ];
+
+    setSpreadsheetCustomOrder(reconciledOrder);
+
+    if (savedOrder.length > 0) {
+      setSpreadsheetAssignmentSort("custom");
+    }
+  }, [selectedCourseId, gradebook?.assignments]);
+
   function toggleCompetencySnapshot(studentId) {
     setExpandedCompetencyStudents((current) => ({
       ...current,
@@ -472,6 +504,16 @@ export default function GradebookPage() {
   }, [students, spreadsheetStudentSort]);
 
   const spreadsheetAssignments = useMemo(() => {
+    if (spreadsheetAssignmentSort === "custom") {
+      const assignmentById = new Map(
+        assignments.map((assignment) => [String(assignment.id), assignment])
+      );
+
+      return spreadsheetCustomOrder
+        .map((assignmentId) => assignmentById.get(String(assignmentId)))
+        .filter(Boolean);
+    }
+
     return [...assignments].sort((assignmentA, assignmentB) => {
       if (spreadsheetAssignmentSort === "title") {
         return String(assignmentA.title || "").localeCompare(
@@ -513,7 +555,65 @@ export default function GradebookPage() {
 
       return dueDateA - dueDateB;
     });
-  }, [assignments, spreadsheetAssignmentSort]);
+  }, [assignments, spreadsheetAssignmentSort, spreadsheetCustomOrder]);
+
+  function saveSpreadsheetCustomOrder(nextOrder) {
+    const normalizedOrder = nextOrder.map(String);
+    setSpreadsheetCustomOrder(normalizedOrder);
+    setSpreadsheetAssignmentSort("custom");
+
+    if (selectedCourseId) {
+      window.localStorage.setItem(
+        `super-lms-gradebook-assignment-order:${selectedCourseId}`,
+        JSON.stringify(normalizedOrder)
+      );
+    }
+  }
+
+  function moveSpreadsheetAssignment(assignmentId, direction) {
+    const currentOrder = spreadsheetAssignments.map((assignment) =>
+      String(assignment.id)
+    );
+    const currentIndex = currentOrder.indexOf(String(assignmentId));
+    const nextIndex = currentIndex + direction;
+
+    if (
+      currentIndex === -1 ||
+      nextIndex < 0 ||
+      nextIndex >= currentOrder.length
+    ) {
+      return;
+    }
+
+    const nextOrder = [...currentOrder];
+    const [movedAssignmentId] = nextOrder.splice(currentIndex, 1);
+    nextOrder.splice(nextIndex, 0, movedAssignmentId);
+    saveSpreadsheetCustomOrder(nextOrder);
+  }
+
+  function dropSpreadsheetAssignment(targetAssignmentId) {
+    if (!draggedAssignmentId || String(draggedAssignmentId) === String(targetAssignmentId)) {
+      setDraggedAssignmentId("");
+      return;
+    }
+
+    const currentOrder = spreadsheetAssignments.map((assignment) =>
+      String(assignment.id)
+    );
+    const sourceIndex = currentOrder.indexOf(String(draggedAssignmentId));
+    const targetIndex = currentOrder.indexOf(String(targetAssignmentId));
+
+    if (sourceIndex === -1 || targetIndex === -1) {
+      setDraggedAssignmentId("");
+      return;
+    }
+
+    const nextOrder = [...currentOrder];
+    const [movedAssignmentId] = nextOrder.splice(sourceIndex, 1);
+    nextOrder.splice(targetIndex, 0, movedAssignmentId);
+    saveSpreadsheetCustomOrder(nextOrder);
+    setDraggedAssignmentId("");
+  }
 
   const selectedStudent =
     students.find((student) => student.student_email === selectedStudentEmail) ||
@@ -858,6 +958,15 @@ export default function GradebookPage() {
                 <summary style={spreadsheetMenuSummaryStyle}>View</summary>
                 <div style={spreadsheetMenuPanelStyle}>
                   <div style={spreadsheetMenuHeadingStyle}>Arrange assignments by</div>
+                  {spreadsheetCustomOrder.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSpreadsheetAssignmentSort("custom")}
+                      style={spreadsheetMenuButtonStyle}
+                    >
+                      {spreadsheetAssignmentSort === "custom" ? "✓ " : ""}Custom Order
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setSpreadsheetAssignmentSort("due-date")}
@@ -898,7 +1007,9 @@ export default function GradebookPage() {
                       ? "Assignment Title"
                       : spreadsheetAssignmentSort === "assignment-weight"
                         ? "Assignment Weight"
-                        : "Assessment Pathway"}
+                        : spreadsheetAssignmentSort === "assessment-pathway"
+                          ? "Assessment Pathway"
+                          : "Custom Order"}
                 </strong>
               </div>
             </div>
@@ -939,8 +1050,44 @@ export default function GradebookPage() {
                           </details>
                         </div>
                       </th>
-                      {spreadsheetAssignments.map((assignment) => (
-                        <th key={assignment.id} style={spreadsheetAssignmentHeaderStyle}>
+                      {spreadsheetAssignments.map((assignment, assignmentIndex) => (
+                        <th
+                          key={assignment.id}
+                          draggable
+                          onDragStart={() => setDraggedAssignmentId(String(assignment.id))}
+                          onDragEnd={() => setDraggedAssignmentId("")}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => dropSpreadsheetAssignment(assignment.id)}
+                          style={{
+                            ...spreadsheetAssignmentHeaderStyle,
+                            ...(String(draggedAssignmentId) === String(assignment.id)
+                              ? spreadsheetDraggingHeaderStyle
+                              : {}),
+                          }}
+                        >
+                          <div style={spreadsheetColumnMoveControlsStyle}>
+                            <span style={spreadsheetDragHandleStyle} title="Drag to rearrange">
+                              ↔ Drag
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => moveSpreadsheetAssignment(assignment.id, -1)}
+                              disabled={assignmentIndex === 0}
+                              style={spreadsheetMoveButtonStyle}
+                              title="Move assignment left"
+                            >
+                              ←
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveSpreadsheetAssignment(assignment.id, 1)}
+                              disabled={assignmentIndex === spreadsheetAssignments.length - 1}
+                              style={spreadsheetMoveButtonStyle}
+                              title="Move assignment right"
+                            >
+                              →
+                            </button>
+                          </div>
                           <button
                             type="button"
                             title={`Open ${assignment.title || "Untitled Assignment"} in Speed Grading`}
@@ -1725,6 +1872,43 @@ const spreadsheetAssignmentHeaderStyle = {
   background: "#f8fafc",
   whiteSpace: "normal",
   overflow: "hidden",
+};
+
+const spreadsheetDraggingHeaderStyle = {
+  opacity: 0.55,
+  outline: "3px dashed #2563eb",
+  outlineOffset: "-4px",
+};
+
+const spreadsheetColumnMoveControlsStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: "5px",
+  marginBottom: "8px",
+};
+
+const spreadsheetDragHandleStyle = {
+  marginRight: "auto",
+  color: "#4b5563",
+  fontSize: "0.76rem",
+  fontWeight: 800,
+  cursor: "grab",
+  userSelect: "none",
+};
+
+const spreadsheetMoveButtonStyle = {
+  width: "28px",
+  height: "28px",
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid #cbd5e1",
+  borderRadius: "7px",
+  background: "#ffffff",
+  color: "#111827",
+  fontSize: "0.95rem",
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
 const spreadsheetAssignmentButtonStyle = {
