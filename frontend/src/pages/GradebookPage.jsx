@@ -127,7 +127,7 @@ export default function GradebookPage() {
   const [cellSaveStatus, setCellSaveStatus] = useState({});
   const [expandedCompetencyStudents, setExpandedCompetencyStudents] = useState({});
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("");
-  const [activeGradebookSection, setActiveGradebookSection] = useState("student-standing");
+  const [activeGradebookSection, setActiveGradebookSection] = useState("spreadsheet");
   const [communicationType, setCommunicationType] = useState("progress-update");
   const [communicationRecipient, setCommunicationRecipient] = useState("parent");
   const [communicationNotes, setCommunicationNotes] = useState("");
@@ -678,6 +678,7 @@ export default function GradebookPage() {
             >
               <option value="summary">Class Summary</option>
               <option value="assessment-groups">Assessment Groups</option>
+              <option value="spreadsheet">Spreadsheet Gradebook</option>
               <option value="student-standing">Student Course Standing</option>
               <option value="selected-student">Selected Student Detail</option>
               <option value="assignment-kdu">Assignment KDU Scores</option>
@@ -776,6 +777,82 @@ export default function GradebookPage() {
                 </tbody>
               </table>
             </div>
+          </section>
+          ) : null}
+
+          {activeGradebookSection === "spreadsheet" ? (
+          <section className="panel">
+            <h2>Spreadsheet Gradebook</h2>
+            <p className="section-subtitle">
+              Scroll horizontally to review assignments. Select an assignment heading to open it in Speed Grading.
+            </p>
+
+            {assignments.length === 0 ? (
+              <p>No assignments found for this course yet.</p>
+            ) : (
+              <div style={spreadsheetGradebookWrapStyle}>
+                <table style={spreadsheetGradebookTableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={spreadsheetStudentHeaderStyle}>Student</th>
+                      {assignments.map((assignment) => (
+                        <th key={assignment.id} style={spreadsheetAssignmentHeaderStyle}>
+                          <button
+                            type="button"
+                            title={`Open ${assignment.title || "Untitled Assignment"} in Speed Grading`}
+                            onClick={() => {
+                              window.location.href = `/assignments/${assignment.id}/grade`;
+                            }}
+                            style={spreadsheetAssignmentButtonStyle}
+                          >
+                            {assignment.title || "Untitled Assignment"}
+                          </button>
+                          <div style={spreadsheetAssignmentMetaStyle}>
+                            {assignment.due_date
+                              ? `Due ${new Date(assignment.due_date).toLocaleDateString()}`
+                              : "No due date"}
+                          </div>
+                          <div
+                            style={spreadsheetAssignmentPathwayStyle}
+                            title={assignment.category_name || "No assessment pathway"}
+                          >
+                            {assignment.category_name || "No assessment pathway"}
+                          </div>
+                        </th>
+                      ))}
+                      <th style={spreadsheetSummaryHeaderStyle}>Current Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((student) => (
+                      <tr key={student.student_user_id}>
+                        <td style={spreadsheetStudentCellStyle}>
+                          <strong>{student.student_name}</strong>
+                          <div style={spreadsheetStudentEmailStyle}>
+                            {student.student_email}
+                          </div>
+                        </td>
+                        {assignments.map((assignment) => {
+                          const match = (student.assignment_scores || []).find(
+                            (item) => item.assignment_id === assignment.id
+                          );
+
+                          return (
+                            <td key={assignment.id} style={spreadsheetScoreCellStyle}>
+                              {formatPercent(match?.score)}
+                            </td>
+                          );
+                        })}
+                        <td style={spreadsheetSummaryCellStyle}>
+                          <strong>{formatPercent(student.current_percent)}</strong>
+                          <div>{getProficiency(student.current_percent)}</div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
           ) : null}
 
@@ -1374,6 +1451,105 @@ const focusedStudentRowStyle = {
   outline: "3px solid #111",
   outlineOffset: "2px",
   background: "#f8fafc",
+};
+
+const spreadsheetGradebookWrapStyle = {
+  maxWidth: "100%",
+  overflowX: "auto",
+  border: "1px solid #d7dce5",
+  borderRadius: "14px",
+  background: "#ffffff",
+};
+
+const spreadsheetGradebookTableStyle = {
+  width: "max-content",
+  minWidth: "100%",
+  borderCollapse: "separate",
+  borderSpacing: 0,
+};
+
+const spreadsheetStudentHeaderStyle = {
+  position: "sticky",
+  left: 0,
+  zIndex: 3,
+  minWidth: "220px",
+  background: "#f8fafc",
+  borderRight: "2px solid #cbd5e1",
+};
+
+const spreadsheetAssignmentHeaderStyle = {
+  width: "220px",
+  minWidth: "220px",
+  maxWidth: "220px",
+  verticalAlign: "top",
+  background: "#f8fafc",
+  whiteSpace: "normal",
+  overflow: "hidden",
+};
+
+const spreadsheetAssignmentButtonStyle = {
+  width: "100%",
+  border: 0,
+  padding: 0,
+  background: "transparent",
+  color: "#111827",
+  font: "inherit",
+  fontWeight: 900,
+  textAlign: "left",
+  textDecoration: "underline",
+  cursor: "pointer",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  lineHeight: 1.35,
+};
+
+const spreadsheetAssignmentMetaStyle = {
+  marginTop: "6px",
+  color: "#4b5563",
+  fontSize: "0.82rem",
+  fontWeight: 500,
+  lineHeight: 1.35,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+};
+
+const spreadsheetAssignmentPathwayStyle = {
+  ...spreadsheetAssignmentMetaStyle,
+  paddingTop: "6px",
+  borderTop: "1px solid #d7dce5",
+};
+
+const spreadsheetStudentCellStyle = {
+  position: "sticky",
+  left: 0,
+  zIndex: 2,
+  minWidth: "220px",
+  background: "#ffffff",
+  borderRight: "2px solid #cbd5e1",
+};
+
+const spreadsheetStudentEmailStyle = {
+  marginTop: "4px",
+  color: "#4b5563",
+  fontSize: "0.82rem",
+};
+
+const spreadsheetScoreCellStyle = {
+  width: "220px",
+  minWidth: "220px",
+  maxWidth: "220px",
+  textAlign: "center",
+  fontWeight: 800,
+};
+
+const spreadsheetSummaryHeaderStyle = {
+  minWidth: "150px",
+  background: "#f8fafc",
+};
+
+const spreadsheetSummaryCellStyle = {
+  minWidth: "150px",
+  lineHeight: 1.5,
 };
 
 const studentSuccessCommunicationCentreStyle = {
