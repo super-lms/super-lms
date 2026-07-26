@@ -3098,19 +3098,6 @@ export default function CoursesPage() {
 
                     <button
                       type="button"
-                      onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        beginEditCourse(course)
-                      }}
-                      disabled={savingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      Edit Course
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={() => duplicateCourse(course)}
                       disabled={duplicatingCourseId === course.id}
                       style={buttonStyle}
