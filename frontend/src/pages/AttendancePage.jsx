@@ -132,11 +132,12 @@ function NoticeBox({ children, type = "info" }) {
   );
 }
 
-function ActionButton({ children, onClick, type = "button", quiet = false }) {
+function ActionButton({ children, onClick, type = "button", quiet = false, disabled = false }) {
   return (
     <button
       type={type}
       onClick={onClick}
+      disabled={disabled}
       style={{
         padding: "10px 14px",
         borderRadius: "10px",
@@ -144,7 +145,8 @@ function ActionButton({ children, onClick, type = "button", quiet = false }) {
         background: quiet ? "#ffffff" : "#f3f4f6",
         font: "inherit",
         fontWeight: 700,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
       }}
     >
       {children}
@@ -179,6 +181,9 @@ export default function AttendancePage() {
   const [errorText, setErrorText] = useState("");
   const [selectedClassId, setSelectedClassId] = useState(routeCourseId || "");
   const [selectedDate, setSelectedDate] = useState(todayIsoDate());
+  const [attendanceRows, setAttendanceRows] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
     if (routeCourseId) {
@@ -256,6 +261,19 @@ export default function AttendancePage() {
   const classInfo = data?.class || {};
   const students = useMemo(() => toArray(data?.students), [data]);
 
+  useEffect(() => {
+    setAttendanceRows(
+      students.map((student, index) => ({
+        key: student.student_email || student.student_name || index,
+        student_name: student.student_name || "—",
+        student_email: student.student_email || "—",
+        attendance_status: student.attendance_status || "",
+        attendance_note: student.attendance_note || "",
+      }))
+    );
+    setSaveMessage("");
+  }, [students]);
+
   const attendanceSummary = useMemo(() => {
     const summary = {
       Present: 0,
@@ -265,24 +283,74 @@ export default function AttendancePage() {
       Unrecorded: 0,
     };
 
-    students.forEach((student) => {
+    attendanceRows.forEach((student) => {
       const group = getStatusGroup(student);
       summary[group] += 1;
     });
 
     return summary;
-  }, [students]);
+  }, [attendanceRows]);
 
-  const attendanceRows = useMemo(() => {
-    return students.map((student, index) => ({
-      key: student.student_email || student.student_name || index,
-      student_name: student.student_name || "—",
-      student_email: student.student_email || "—",
-      attendance_status: getStatusLabel(student),
-      attendance_note: student.attendance_note || "—",
-      attendance_group: getStatusGroup(student),
-    }));
-  }, [students]);
+  function setAllStatuses(status) {
+    setAttendanceRows((current) =>
+      current.map((student) => ({
+        ...student,
+        attendance_status: status,
+      }))
+    );
+    setSaveMessage("");
+  }
+
+  function updateAttendanceRow(key, field, value) {
+    setAttendanceRows((current) =>
+      current.map((student) =>
+        student.key === key ? { ...student, [field]: value } : student
+      )
+    );
+    setSaveMessage("");
+  }
+
+  async function saveAttendance() {
+    const unrecordedCount = attendanceRows.filter(
+      (student) => !String(student.attendance_status || "").trim()
+    ).length;
+
+    if (unrecordedCount > 0) {
+      setSaveMessage(
+        `Choose a status for all students before saving. ${unrecordedCount} still unrecorded.`
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setSaveMessage("Saving attendance...");
+
+      const response = await authFetch(attendanceUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          records: attendanceRows.map((student) => ({
+            student_email: student.student_email,
+            status: student.attendance_status,
+            note: student.attendance_note,
+          })),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Attendance could not be saved.");
+      }
+
+      setSaveMessage(`Attendance saved for ${result.saved_count} students.`);
+    } catch (error) {
+      setSaveMessage(error.message || "Attendance could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const backTarget = routeCourseId
     ? `/admin/courses/${encodeURIComponent(routeCourseId)}`
@@ -476,7 +544,19 @@ export default function AttendancePage() {
             <section className="panel">
               <SectionHeader
                 title="Attendance Roster"
-                subtitle="A simple roster view for attendance review."
+                subtitle="Mark the class present or absent, then adjust individual students as needed."
+                action={
+                  attendanceRows.length > 0 ? (
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <ActionButton onClick={() => setAllStatuses("Present")}>
+                        All Present
+                      </ActionButton>
+                      <ActionButton onClick={() => setAllStatuses("Absent")}>
+                        All Absent
+                      </ActionButton>
+                    </div>
+                  ) : null
+                }
               />
 
               {attendanceRows.length === 0 ? (
@@ -517,10 +597,53 @@ export default function AttendancePage() {
                             {student.student_email}
                           </td>
                           <td style={{ padding: "12px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top", fontWeight: 700 }}>
-                            {student.attendance_status}
+                            <select
+                              value={student.attendance_status}
+                              onChange={(event) =>
+                                updateAttendanceRow(
+                                  student.key,
+                                  "attendance_status",
+                                  event.target.value
+                                )
+                              }
+                              style={{
+                                width: "100%",
+                                minWidth: "140px",
+                                padding: "9px 10px",
+                                borderRadius: "9px",
+                                border: "1px solid #cbd5e1",
+                                background: "#ffffff",
+                                font: "inherit",
+                              }}
+                            >
+                              <option value="">Not recorded</option>
+                              <option value="Present">Present</option>
+                              <option value="Absent">Absent</option>
+                              <option value="Late">Late</option>
+                              <option value="Excused">Excused</option>
+                            </select>
                           </td>
                           <td style={{ padding: "12px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top" }}>
-                            {student.attendance_note}
+                            <input
+                              value={student.attendance_note}
+                              onChange={(event) =>
+                                updateAttendanceRow(
+                                  student.key,
+                                  "attendance_note",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Optional note"
+                              style={{
+                                width: "100%",
+                                minWidth: "220px",
+                                boxSizing: "border-box",
+                                padding: "9px 10px",
+                                borderRadius: "9px",
+                                border: "1px solid #cbd5e1",
+                                font: "inherit",
+                              }}
+                            />
                           </td>
                         </tr>
                       ))}
@@ -528,6 +651,25 @@ export default function AttendancePage() {
                   </table>
                 </div>
               )}
+
+              {attendanceRows.length > 0 ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "14px",
+                    flexWrap: "wrap",
+                    marginTop: "16px",
+                  }}
+                >
+                  <ActionButton onClick={saveAttendance} disabled={saving}>
+                    {saving ? "Saving Attendance..." : "Save Attendance"}
+                  </ActionButton>
+                  {saveMessage ? (
+                    <div style={{ fontWeight: 700, color: "#374151" }}>{saveMessage}</div>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
           </>
         ) : null}

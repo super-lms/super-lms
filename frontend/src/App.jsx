@@ -132,6 +132,7 @@ function App() {
         <Route path="/class-roster" element={<ClassRosterPage />} />
         <Route path="/enrolled-students" element={<Navigate to="/class-roster" replace />} />
         <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/courses/:courseId/attendance" element={<AttendancePage />} />
         <Route path="/student-snapshot/:courseId/:studentEmail" element={<StudentSnapshotPage />} />
       </Route>
 

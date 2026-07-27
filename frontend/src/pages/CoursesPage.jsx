@@ -2708,6 +2708,7 @@ export default function CoursesPage() {
                         padding: "14px",
                         marginBottom: "14px",
                         background: "#f8fafc",
+                        order: -2,
                       }}
                     >
                       <h2 style={{ marginTop: 0, marginBottom: "12px" }}>Edit Course</h2>
@@ -2778,6 +2779,7 @@ export default function CoursesPage() {
                     </div>
                   ) : (
                     <>
+                    <div style={{ order: -2 }}>
                       <h2 style={{ marginTop: 0, marginBottom: "8px" }}>{courseName}</h2>
 
                       {course.description ? (
@@ -2785,7 +2787,9 @@ export default function CoursesPage() {
                       ) : null}
 
                       <div style={{ marginBottom: "14px", color: "#4b5563" }}>Course ID: {course.id}</div>
+                    </div>
 
+                    <div>
                       <div
                         style={{
                           border: "1px solid #d7dce5",
@@ -2932,10 +2936,35 @@ export default function CoursesPage() {
                           </div>
                         </div>
                       </div>
+                    </div>
                     </>
                   )}
 
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      flexWrap: "wrap",
+                      order: -1,
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/courses/${course.id}/attendance`)
+                      }}
+                      style={{
+                        ...primaryButtonStyle,
+                        flexBasis: "100%",
+                        padding: "14px 18px",
+                        fontSize: "18px",
+                      }}
+                    >
+                      Take Attendance
+                    </button>
+
                     <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "4px" }}>
                       Main Teacher Workflow
                     </div>
@@ -4666,6 +4695,8 @@ const courseCardStyle = {
   borderRadius: "14px",
   padding: "18px",
   background: "#ffffff",
+  display: "flex",
+  flexDirection: "column",
 }
 
 const emptyStateStyle = {

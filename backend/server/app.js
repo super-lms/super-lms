@@ -8747,6 +8747,167 @@ app.get("/api/classes/:classId/attendance", authenticateJWT, requireRole("admin"
   }
 });
 
+/* SAVE CLASS ATTENDANCE */
+app.post("/api/classes/:classId/attendance", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const classId = Number(req.params.classId);
+    const requestedDate = String(req.query.date || "").trim();
+    const attendanceDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? requestedDate
+      : new Date().toISOString().slice(0, 10);
+    const records = Array.isArray(req.body?.records) ? req.body.records : [];
+    const allowedStatuses = new Set(["Present", "Absent", "Late", "Excused"]);
+
+    if (!classId) {
+      return res.status(400).json({ error: "Valid classId is required" });
+    }
+
+    if (records.length === 0) {
+      return res.status(400).json({ error: "At least one attendance record is required" });
+    }
+
+    const normalizedRecords = records.map((record) => ({
+      student_email: String(record?.student_email || "").trim().toLowerCase(),
+      status: String(record?.status || "").trim(),
+      note: String(record?.note || "").trim(),
+    }));
+
+    const invalidRecord = normalizedRecords.find(
+      (record) => !record.student_email || !allowedStatuses.has(record.status)
+    );
+
+    if (invalidRecord) {
+      return res.status(400).json({
+        error: "Every student requires a valid attendance status",
+      });
+    }
+
+    const enrolledResult = await client.query(
+      `
+      SELECT LOWER(u.email) AS student_email
+      FROM class_enrollments ce
+      JOIN users u
+        ON u.id = ce.student_user_id
+      WHERE ce.class_id = $1
+      `,
+      [classId]
+    );
+    const enrolledEmails = new Set(
+      enrolledResult.rows.map((row) => String(row.student_email || "").toLowerCase())
+    );
+    const unenrolledRecord = normalizedRecords.find(
+      (record) => !enrolledEmails.has(record.student_email)
+    );
+
+    if (unenrolledRecord) {
+      return res.status(400).json({
+        error: "Attendance can only be saved for students enrolled in this course",
+      });
+    }
+
+    await client.query("BEGIN");
+
+    const existingSessionResult = await client.query(
+      `
+      SELECT id
+      FROM attendance_sessions
+      WHERE course_id = $1
+        AND attendance_date = $2::date
+      ORDER BY id ASC
+      LIMIT 1
+      `,
+      [classId, attendanceDate]
+    );
+    const teacherEmail = String(
+      req.user?.email || req.user?.username || ""
+    ).trim().toLowerCase();
+    let attendanceSessionId = existingSessionResult.rows[0]?.id;
+
+    if (attendanceSessionId) {
+      await client.query(
+        `
+        UPDATE attendance_sessions
+        SET teacher_email = $1,
+            updated_at = NOW()
+        WHERE id = $2
+        `,
+        [teacherEmail, attendanceSessionId]
+      );
+    } else {
+      const insertedSessionResult = await client.query(
+        `
+        INSERT INTO attendance_sessions (
+          course_id,
+          attendance_date,
+          teacher_email,
+          updated_at
+        )
+        VALUES ($1, $2::date, $3, NOW())
+        RETURNING id
+        `,
+        [classId, attendanceDate, teacherEmail]
+      );
+      attendanceSessionId = insertedSessionResult.rows[0].id;
+    }
+
+    for (const record of normalizedRecords) {
+      const updatedRecordResult = await client.query(
+        `
+        UPDATE attendance_records
+        SET status = $3,
+            note = $4,
+          updated_at = NOW()
+        WHERE attendance_session_id = $1
+          AND LOWER(student_email) = LOWER($2)
+        `,
+        [
+          attendanceSessionId,
+          record.student_email,
+          record.status,
+          record.note,
+        ]
+      );
+
+      if (updatedRecordResult.rowCount === 0) {
+        await client.query(
+          `
+          INSERT INTO attendance_records (
+            attendance_session_id,
+            student_email,
+            status,
+            note,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, NOW())
+          `,
+          [
+            attendanceSessionId,
+            record.student_email,
+            record.status,
+            record.note,
+          ]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      saved_count: normalizedRecords.length,
+      date: attendanceDate,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /api/classes/:classId/attendance failed:", err);
+    return res.status(500).json({ error: "Failed to save attendance" });
+  } finally {
+    client.release();
+  }
+});
+
 
 /* MANUAL STUDENT ENROLLMENT */
 app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {

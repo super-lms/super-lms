@@ -88,6 +88,14 @@ export default function Layout() {
     return `/gradebook?classId=${primaryCourseId}`
   }, [teacherCourses])
 
+  const attendancePath = useMemo(() => {
+    const storedCourseId = window.localStorage.getItem("super-lms-last-course-id")
+    const fallbackCourseId = teacherCourses[0]?.id
+    const courseId = storedCourseId || fallbackCourseId
+
+    return courseId ? `/courses/${courseId}/attendance` : "/attendance"
+  }, [teacherCourses, location.pathname, location.search])
+
   function getNavLinkStyle(path) {
     const isActive =
       path === "/student"
@@ -133,7 +141,7 @@ export default function Layout() {
     if (location.pathname === "/homeform-assignment") return "Homeform Assignment"
     if (location.pathname === "/class-roster") return "Class Roster"
     if (location.pathname === "/enrolled-students") return "Class Roster"
-    if (location.pathname === "/attendance") return "Attendance"
+    if (location.pathname.endsWith("/attendance")) return "Attendance"
 
     if (location.pathname === "/student") return "My Learning"
     if (location.pathname === "/student-progress") return "My Progress"
@@ -250,7 +258,7 @@ export default function Layout() {
             <NavItem to="/class-roster" style={getNavLinkStyle("/class-roster")} icon={UserCheck}>
               Class Roster
             </NavItem>
-            <NavItem to="/attendance" style={getNavLinkStyle("/attendance")} icon={CalendarCheck}>
+            <NavItem to={attendancePath} style={getNavLinkStyle(attendancePath)} icon={CalendarCheck}>
               Attendance
             </NavItem>
 
