@@ -183,40 +183,43 @@ const assignmentInboxPanelStyle = {
 }
 
 const assignmentInboxGridStyle = {
-  display: "grid",
-  gap: "12px",
-}
-
-const assignmentInboxItemStyle = {
+  overflowX: "auto",
   border: "1px solid #d7dce5",
   borderRadius: "14px",
-  padding: "14px",
+}
+
+const assignmentInboxTableStyle = {
+  width: "100%",
+  minWidth: "900px",
+  borderCollapse: "collapse",
+  tableLayout: "fixed",
+  background: "#ffffff",
+}
+
+const assignmentInboxHeaderCellStyle = {
+  padding: "12px 14px",
+  textAlign: "left",
+  borderBottom: "1px solid #d7dce5",
   background: "#f8fafc",
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) auto",
-  gap: "14px",
-  alignItems: "center",
-}
-
-const assignmentInboxTitleStyle = {
-  fontSize: "1.05rem",
-  fontWeight: 900,
-  lineHeight: 1.35,
-  marginBottom: "6px",
-  overflowWrap: "anywhere",
-}
-
-const assignmentInboxMetaStyle = {
   color: "#4b5563",
-  lineHeight: 1.45,
-  marginTop: "4px",
+  fontSize: "0.82rem",
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  whiteSpace: "nowrap",
+}
+
+const assignmentInboxCellStyle = {
+  padding: "12px 14px",
+  borderBottom: "1px solid #e5e7eb",
+  verticalAlign: "middle",
 }
 
 const assignmentInboxActionStyle = {
   display: "flex",
-  gap: "10px",
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
+  gap: "8px",
+  alignItems: "center",
+  whiteSpace: "nowrap",
 }
 
 
@@ -1506,46 +1509,82 @@ export default function AssignmentsPage() {
                       </NoticeBox>
                     ) : (
                       <div style={assignmentInboxGridStyle}>
-                        {teacherAssignmentInboxItems.map((item) => {
-                          const assignment = item.assignment
-                          const helperText =
-                            item.statusLabel === "Ready to Grade"
-                              ? `${item.ungraded} submitted work ${item.ungraded === 1 ? "item needs" : "items need"} grading.`
-                              : item.statusLabel === "No Submissions"
-                                ? `${item.missing} ${item.missing === 1 ? "student has" : "students have"} not submitted yet.`
-                                : `${item.submissions} submitted, ${item.graded} graded, ${item.ungraded} waiting.`
+                        <table style={assignmentInboxTableStyle}>
+                          <colgroup>
+                            <col style={{ width: "14%" }} />
+                            <col style={{ width: "22%" }} />
+                            <col style={{ width: "10%" }} />
+                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "7%" }} />
+                            <col style={{ width: "7%" }} />
+                            <col style={{ width: "32%" }} />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th style={assignmentInboxHeaderCellStyle}>Status</th>
+                              <th style={assignmentInboxHeaderCellStyle}>Assignment</th>
+                              <th style={assignmentInboxHeaderCellStyle}>Due Date</th>
+                              <th style={assignmentInboxHeaderCellStyle}>Submitted</th>
+                              <th style={assignmentInboxHeaderCellStyle}>Graded</th>
+                              <th style={assignmentInboxHeaderCellStyle}>Missing</th>
+                              <th style={assignmentInboxHeaderCellStyle}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {teacherAssignmentInboxItems.map((item, index) => {
+                              const assignment = item.assignment
+                              const rowCellStyle =
+                                index === teacherAssignmentInboxItems.length - 1
+                                  ? { ...assignmentInboxCellStyle, borderBottom: "none" }
+                                  : assignmentInboxCellStyle
 
-                          return (
-                            <div key={assignment.id} style={assignmentInboxItemStyle}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ marginBottom: "8px" }}>
-                                  <StatusPill label={item.statusLabel} />
-                                </div>
-                                <div style={assignmentInboxTitleStyle}>
-                                  {assignment.title}
-                                </div>
-                                <div style={assignmentInboxMetaStyle}>
-                                  Due: {formatDate(assignment.due_date)}
-                                </div>
-                                <div style={assignmentInboxMetaStyle}>
-                                  {helperText}
-                                </div>
-                                <div style={assignmentInboxMetaStyle}>
-                                  Submitted: <strong>{item.submissions}</strong> · Graded: <strong>{item.graded}</strong> · Missing: <strong>{item.missing}</strong>
-                                </div>
-                              </div>
-
-                              <div style={assignmentInboxActionStyle}>
-                                <ActionButton onClick={() => openGradeAssignmentPage(assignment.id)}>
-                                  Grade Now
-                                </ActionButton>
-                                <ActionButton quiet onClick={() => openEditAssignmentPage(assignment.id)}>
-                                  Edit Assignment
-                                </ActionButton>
-                              </div>
-                            </div>
-                          )
-                        })}
+                              return (
+                                <tr key={assignment.id}>
+                                  <td style={rowCellStyle}>
+                                    <StatusPill label={item.statusLabel} />
+                                  </td>
+                                  <td
+                                    style={{
+                                      ...rowCellStyle,
+                                      fontWeight: 900,
+                                      lineHeight: 1.35,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        display: "-webkit-box",
+                                        WebkitBoxOrient: "vertical",
+                                        WebkitLineClamp: 2,
+                                        overflow: "hidden",
+                                        whiteSpace: "normal",
+                                        overflowWrap: "anywhere",
+                                      }}
+                                      title={assignment.title}
+                                    >
+                                      {assignment.title}
+                                    </div>
+                                  </td>
+                                  <td style={{ ...rowCellStyle, whiteSpace: "nowrap" }}>
+                                    {formatDate(assignment.due_date)}
+                                  </td>
+                                  <td style={{ ...rowCellStyle, fontWeight: 800 }}>{item.submissions}</td>
+                                  <td style={{ ...rowCellStyle, fontWeight: 800 }}>{item.graded}</td>
+                                  <td style={{ ...rowCellStyle, fontWeight: 800 }}>{item.missing}</td>
+                                  <td style={rowCellStyle}>
+                                    <div style={assignmentInboxActionStyle}>
+                                      <ActionButton onClick={() => openGradeAssignmentPage(assignment.id)}>
+                                        Grade Now
+                                      </ActionButton>
+                                      <ActionButton quiet onClick={() => openEditAssignmentPage(assignment.id)}>
+                                        Edit Assignment
+                                      </ActionButton>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
