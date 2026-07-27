@@ -83,6 +83,36 @@ async function ensureSubmissionAttachmentsTable() {
   `);
 }
 
+async function ensureAttendanceTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS attendance_sessions (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      attendance_date DATE NOT NULL,
+      teacher_email TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      CONSTRAINT attendance_sessions_unique_course_date UNIQUE (course_id, attendance_date)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS attendance_records (
+      id SERIAL PRIMARY KEY,
+      attendance_session_id INTEGER NOT NULL REFERENCES attendance_sessions(id) ON DELETE CASCADE,
+      student_email TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('Present', 'Absent', 'Late', 'Excused')),
+      note TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      CONSTRAINT attendance_records_unique_session_student UNIQUE (
+        attendance_session_id,
+        student_email
+      )
+    )
+  `);
+}
+
 async function ensureRubricFrameworkTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS main_competencies (
@@ -8645,6 +8675,78 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
   }
 });
 
+/* GET CLASS ATTENDANCE */
+app.get("/api/classes/:classId/attendance", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const classId = Number(req.params.classId);
+    const requestedDate = String(req.query.date || "").trim();
+    const attendanceDate = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? requestedDate
+      : new Date().toISOString().slice(0, 10);
+
+    if (!classId) {
+      return res.status(400).json({ error: "Valid classId is required" });
+    }
+
+    const courseResult = await pool.query(
+      `
+      SELECT id, title, description
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [classId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const studentsResult = await pool.query(
+      `
+      SELECT
+        u.id AS student_user_id,
+        COALESCE(
+          NULLIF(TRIM(u.name), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''),
+          u.email
+        ) AS student_name,
+        u.email AS student_email,
+        ar.status AS attendance_status,
+        ar.note AS attendance_note
+      FROM class_enrollments ce
+      JOIN users u
+        ON u.id = ce.student_user_id
+      LEFT JOIN attendance_sessions ats
+        ON ats.course_id = ce.class_id
+       AND ats.attendance_date = $2::date
+      LEFT JOIN attendance_records ar
+        ON ar.attendance_session_id = ats.id
+       AND LOWER(ar.student_email) = LOWER(u.email)
+      WHERE ce.class_id = $1
+      ORDER BY
+        COALESCE(NULLIF(TRIM(u.first_name), ''), NULLIF(TRIM(u.name), ''), u.email),
+        COALESCE(NULLIF(TRIM(u.last_name), ''), ''),
+        u.email
+      `,
+      [classId, attendanceDate]
+    );
+
+    return res.json({
+      class: {
+        id: courseResult.rows[0].id,
+        class_name: courseResult.rows[0].title,
+        description: courseResult.rows[0].description || "",
+      },
+      date: attendanceDate,
+      students: studentsResult.rows,
+    });
+  } catch (err) {
+    console.error("GET /api/classes/:classId/attendance failed:", err);
+    return res.status(500).json({ error: "Failed to load attendance" });
+  }
+});
+
 
 /* MANUAL STUDENT ENROLLMENT */
 app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
@@ -9877,6 +9979,7 @@ Promise.all([
   ensureStudentInfoColumns(),
   ensureRubricFrameworkTables(),
   ensureStudentReportCommentsTable(),
+  ensureAttendanceTables(),
   ensureAssignmentSectionTables(),
   ensureLearningPathItemTables(),
   ensureAssessmentTables(),

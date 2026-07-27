@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import authFetch from "../services/authFetch";
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
@@ -210,7 +211,7 @@ export default function AttendancePage() {
         setLoading(true);
         setErrorText("");
 
-        const response = await fetch(attendanceUrl);
+        const response = await authFetch(attendanceUrl);
 
         if (!response.ok) {
           if (response.status === 404) {
