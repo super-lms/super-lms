@@ -453,6 +453,29 @@ function UsersPage() {
     }));
   }
 
+  function addLinkedStudents(studentIds) {
+    const cleanStudentIds = studentIds.map(normalizeId).filter(Boolean);
+
+    setObserverDraft((current) => ({
+      ...current,
+      selectedStudentIds: [
+        ...new Set([
+          ...(current.selectedStudentIds || []).map(normalizeId),
+          ...cleanStudentIds,
+        ]),
+      ],
+      message: "",
+    }));
+  }
+
+  function clearLinkedStudents() {
+    setObserverDraft((current) => ({
+      ...current,
+      selectedStudentIds: [],
+      message: "",
+    }));
+  }
+
   function cancelObserverChanges() {
     if (!editingUser) return;
     loadObserverLinks(editingUser, "Student access changes were cancelled.");
@@ -464,6 +487,16 @@ function UsersPage() {
     const cleanSelectedIds = (observerDraft.selectedStudentIds || [])
       .map(Number)
       .filter(Boolean);
+
+    const relationshipLabel = observerDraft.relationship === "chinese_homeroom_teacher"
+      ? "Chinese Homeroom Teacher"
+      : "Parent";
+    const observerName = getDisplayName(editingUser, "this observer");
+    const confirmed = window.confirm(
+      `Assign ${cleanSelectedIds.length} student${cleanSelectedIds.length === 1 ? "" : "s"} to ${observerName} as ${relationshipLabel}? This will replace the observer's currently saved student list.`
+    );
+
+    if (!confirmed) return;
 
     setObserverDraft((current) => ({
       ...current,
@@ -856,6 +889,8 @@ function UsersPage() {
         updateObserverDraft={updateObserverDraft}
         toggleLinkedStudent={toggleLinkedStudent}
         removeLinkedStudent={removeLinkedStudent}
+        addLinkedStudents={addLinkedStudents}
+        clearLinkedStudents={clearLinkedStudents}
         cancelObserverChanges={cancelObserverChanges}
         saveObserverChanges={saveObserverChanges}
         closeEditDrawer={closeEditDrawer}

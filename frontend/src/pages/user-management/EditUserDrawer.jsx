@@ -14,6 +14,8 @@ function EditUserDrawer({
   updateObserverDraft,
   toggleLinkedStudent,
   removeLinkedStudent,
+  addLinkedStudents,
+  clearLinkedStudents,
   cancelObserverChanges,
   saveObserverChanges,
   closeEditDrawer,
@@ -402,6 +404,8 @@ function EditUserDrawer({
               onUpdateDraft={updateObserverDraft}
               onToggleStudent={toggleLinkedStudent}
               onRemoveStudent={removeLinkedStudent}
+              onSelectStudents={addLinkedStudents}
+              onClearStudents={clearLinkedStudents}
               onCancel={cancelObserverChanges}
               onSave={saveObserverChanges}
             />

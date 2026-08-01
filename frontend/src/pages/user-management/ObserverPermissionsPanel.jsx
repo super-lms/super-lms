@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 function getDisplayName(user, fallback = "Unnamed student") {
   return (
@@ -18,9 +18,42 @@ function ObserverPermissionsPanel({
   onUpdateDraft,
   onToggleStudent,
   onRemoveStudent,
+  onSelectStudents,
+  onClearStudents,
   onCancel,
   onSave,
 }) {
+  const [groupType, setGroupType] = useState("all");
+  const [groupValue, setGroupValue] = useState("");
+
+  const groupOptions = useMemo(() => {
+    const values = new Map();
+
+    students.forEach((student) => {
+      if (groupType === "grade") {
+        const grade = student.current_grade ?? student.grade;
+        if (grade !== null && grade !== undefined && String(grade).trim()) {
+          values.set(String(grade), `Grade ${grade}`);
+        }
+      }
+
+      if (groupType === "homeroom") {
+        const homeform = String(student.current_homeform || "").trim();
+        if (homeform) values.set(homeform, homeform);
+      }
+
+      if (groupType === "course") {
+        (Array.isArray(student.courses) ? student.courses : []).forEach((course) => {
+          if (course?.id) values.set(String(course.id), course.title || `Course ${course.id}`);
+        });
+      }
+    });
+
+    return [...values.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }, [groupType, students]);
+
   const availableStudents = useMemo(() => {
     const cleanSearch = String(observerDraft.studentSearch || "")
       .trim()
@@ -30,22 +63,42 @@ function ObserverPermissionsPanel({
       getDisplayName(a).localeCompare(getDisplayName(b))
     );
 
-    if (!cleanSearch) return sortedStudents;
-
     return sortedStudents.filter((student) => {
+      if (groupType === "grade" && groupValue) {
+        const grade = student.current_grade ?? student.grade;
+        if (String(grade ?? "") !== groupValue) return false;
+      }
+
+      if (groupType === "homeroom" && groupValue) {
+        if (String(student.current_homeform || "") !== groupValue) return false;
+      }
+
+      if (groupType === "course" && groupValue) {
+        const matchesCourse = (Array.isArray(student.courses) ? student.courses : [])
+          .some((course) => String(course?.id ?? "") === groupValue);
+        if (!matchesCourse) return false;
+      }
+
+      if (!cleanSearch) return true;
+
       const searchableText = [
         getDisplayName(student),
         student.email,
-        student.grade,
+        student.current_grade ?? student.grade,
+        student.current_homeform,
         student.student_number,
+        student.student_id,
         student.pen,
+        ...(Array.isArray(student.courses)
+          ? student.courses.map((course) => course?.title || "")
+          : []),
       ]
         .join(" ")
         .toLowerCase();
 
       return searchableText.includes(cleanSearch);
     });
-  }, [observerDraft.studentSearch, students]);
+  }, [groupType, groupValue, observerDraft.studentSearch, students]);
 
   const linkedStudents = useMemo(() => {
     const selectedIds = new Set(
@@ -117,6 +170,79 @@ function ObserverPermissionsPanel({
       </div>
 
       <div style={blockStyle}>
+        <div className="form-label" style={{ marginBottom: "10px" }}>
+          Assign Students by Group
+        </div>
+
+        <div style={filterGridStyle}>
+          <div>
+            <label htmlFor="student-group-type" style={compactLabelStyle}>
+              Group Type
+            </label>
+            <select
+              id="student-group-type"
+              className="form-input"
+              value={groupType}
+              onChange={(event) => {
+                setGroupType(event.target.value);
+                setGroupValue("");
+              }}
+            >
+              <option value="all">All Students</option>
+              <option value="grade">Grade</option>
+              <option value="homeroom">Homeroom Group</option>
+              <option value="course">Course / Class</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="student-group-value" style={compactLabelStyle}>
+              Group
+            </label>
+            <select
+              id="student-group-value"
+              className="form-input"
+              value={groupValue}
+              onChange={(event) => setGroupValue(event.target.value)}
+              disabled={groupType === "all"}
+            >
+              <option value="">
+                {groupType === "all" ? "All students" : `Select ${groupType === "course" ? "course / class" : groupType}`}
+              </option>
+              {groupOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div style={bulkActionStyle}>
+          <button
+            type="button"
+            style={primaryButtonStyle}
+            onClick={() => onSelectStudents(availableStudents.map((student) => student.id))}
+            disabled={availableStudents.length === 0 || (groupType !== "all" && !groupValue)}
+          >
+            Select All Filtered ({availableStudents.length})
+          </button>
+          <button
+            type="button"
+            style={secondaryButtonStyle}
+            onClick={onClearStudents}
+            disabled={linkedStudents.length === 0}
+          >
+            Clear Selection
+          </button>
+        </div>
+
+        <p style={bulkHelpStyle}>
+          Choose a group, optionally narrow it with search, then select all matching students. You can still add or remove individual students before saving.
+        </p>
+      </div>
+
+      <div style={blockStyle}>
         <label htmlFor="student-access-search" className="form-label">
           Search Students
         </label>
@@ -160,6 +286,12 @@ function ObserverPermissionsPanel({
                       <strong>{getDisplayName(student)}</strong>
                       <small style={metaStyle}>
                         {student.email || "No email recorded"}
+                      </small>
+                      <small style={metaStyle}>
+                        {[
+                          student.current_grade ? `Grade ${student.current_grade}` : "",
+                          student.current_homeform ? `Homeroom ${student.current_homeform}` : "",
+                        ].filter(Boolean).join(" • ") || "No grade or homeroom recorded"}
                       </small>
                     </span>
                   </label>
@@ -254,6 +386,34 @@ const relationshipGridStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
   gap: "10px",
+};
+
+const filterGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: "10px",
+};
+
+const compactLabelStyle = {
+  display: "block",
+  marginBottom: "6px",
+  color: "#334155",
+  fontSize: "0.9rem",
+  fontWeight: 800,
+};
+
+const bulkActionStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  marginTop: "12px",
+};
+
+const bulkHelpStyle = {
+  margin: "10px 0 0",
+  color: "#475569",
+  fontSize: "0.9rem",
+  lineHeight: 1.45,
 };
 
 const radioCardStyle = {

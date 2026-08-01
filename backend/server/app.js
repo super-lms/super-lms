@@ -7740,26 +7740,59 @@ app.delete("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teac
 /* GET USERS */
 app.get("/api/users", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
+    await ensureStudentInfoColumns();
+
     const result = await pool.query(
       `
       SELECT
-        id,
-        name,
-        email,
-        role,
-        parent_email,
-        student_id,
-        created_at
-      FROM users
+        u.id,
+        u.name,
+        u.email,
+        u.role,
+        u.parent_email,
+        u.student_id,
+        u.created_at,
+        ms.pen,
+        ms.current_grade,
+        ms.current_homeform,
+        COALESCE(enrollment.courses, '[]'::json) AS courses
+      FROM users u
+      LEFT JOIN LATERAL (
+        SELECT
+          directory.pen,
+          directory.current_grade,
+          directory.current_homeform
+        FROM master_students directory
+        WHERE LOWER(COALESCE(u.role, '')) = 'student'
+          AND (
+            (COALESCE(u.email, '') <> '' AND LOWER(directory.student_email) = LOWER(u.email))
+            OR
+            (COALESCE(u.student_id, '') <> '' AND directory.student_id = u.student_id)
+          )
+        ORDER BY
+          CASE WHEN COALESCE(u.email, '') <> '' AND LOWER(directory.student_email) = LOWER(u.email) THEN 0 ELSE 1 END,
+          directory.id ASC
+        LIMIT 1
+      ) ms ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT json_agg(
+          json_build_object('id', course.id, 'title', course.title)
+          ORDER BY course.title ASC
+        ) AS courses
+        FROM class_enrollments enrollment_row
+        JOIN courses course
+          ON course.id = enrollment_row.class_id
+        WHERE enrollment_row.student_user_id = u.id
+      ) enrollment ON TRUE
       ORDER BY
-        CASE LOWER(COALESCE(role, ''))
+        CASE LOWER(COALESCE(u.role, ''))
           WHEN 'admin' THEN 1
           WHEN 'teacher' THEN 2
           WHEN 'student' THEN 3
           ELSE 4
         END,
-        name ASC,
-        email ASC
+        u.name ASC,
+        u.email ASC
       `
     );
 
