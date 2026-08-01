@@ -30,6 +30,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [setupPassword, setSetupPassword] = useState("")
   const [setupPasswordConfirm, setSetupPasswordConfirm] = useState("")
+  const [recoveryCode, setRecoveryCode] = useState("")
   const [mode, setMode] = useState("login")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -92,6 +93,13 @@ export default function LoginPage() {
       if (data.code === "PASSWORD_SETUP_REQUIRED") {
         setMode("setup")
         setMessage("Please create your password to activate this account.")
+        setPassword("")
+        return
+      }
+
+      if (data.code === "PASSWORD_RESET_CODE_REQUIRED") {
+        setMode("password-reset")
+        setMessage("Enter the one-time reset code provided by your administrator.")
         setPassword("")
         return
       }
@@ -162,6 +170,55 @@ export default function LoginPage() {
       setMessage(data.message || "Password created successfully. Please log in.")
     } catch (err) {
       setError(err.message || "Password setup failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleCodePasswordReset(e) {
+    e.preventDefault()
+    const cleanEmail = String(email || "").trim().toLowerCase()
+
+    if (!cleanEmail || !recoveryCode || !setupPassword) {
+      setError("Email, recovery code, and new password are required")
+      return
+    }
+    if (setupPassword.length < 8) {
+      setError("Password must be at least 8 characters")
+      return
+    }
+    if (setupPassword !== setupPasswordConfirm) {
+      setError("Passwords do not match")
+      return
+    }
+
+    try {
+      resetMessages()
+      setLoading(true)
+      const endpoint = mode === "admin-recovery"
+        ? "/api/auth/recover-admin-password"
+        : "/api/auth/complete-password-reset"
+      const codeField = mode === "admin-recovery" ? "recovery_code" : "reset_code"
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: cleanEmail,
+          [codeField]: recoveryCode,
+          password: setupPassword,
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Password reset failed")
+
+      setMode("login")
+      setRecoveryCode("")
+      setSetupPassword("")
+      setSetupPasswordConfirm("")
+      setPassword("")
+      setMessage(data.message || "Password reset successfully. Please log in.")
+    } catch (err) {
+      setError(err.message || "Password reset failed")
     } finally {
       setLoading(false)
     }
@@ -282,6 +339,37 @@ export default function LoginPage() {
 
               <StatusMessages error={error} message={message} />
             </form>
+          ) : mode === "password-reset" || mode === "admin-recovery" ? (
+            <form onSubmit={handleCodePasswordReset}>
+              <h2 style={{ marginTop: 0, marginBottom: "10px", fontSize: "1.35rem" }}>
+                {mode === "admin-recovery" ? "Administrator Recovery" : "Reset Your Password"}
+              </h2>
+              <p style={{ marginTop: 0, marginBottom: "18px", color: "#4b5563", lineHeight: 1.5 }}>
+                {mode === "admin-recovery"
+                  ? "Use one unused emergency recovery code saved when you had administrator access."
+                  : "Enter the one-time reset code provided by your administrator."}
+              </p>
+
+              <label htmlFor="recoveryEmail" style={labelStyle}>School Email</label>
+              <input id="recoveryEmail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+
+              <label htmlFor="recoveryCode" style={labelStyle}>One-Time Code</label>
+              <input id="recoveryCode" type="text" value={recoveryCode} onChange={(e) => setRecoveryCode(e.target.value)} autoComplete="one-time-code" style={inputStyle} />
+
+              <label htmlFor="recoveryPassword" style={labelStyle}>New Password</label>
+              <input id="recoveryPassword" type="password" value={setupPassword} onChange={(e) => setSetupPassword(e.target.value)} placeholder="At least 8 characters" style={inputStyle} />
+
+              <label htmlFor="recoveryPasswordConfirm" style={labelStyle}>Confirm New Password</label>
+              <input id="recoveryPasswordConfirm" type="password" value={setupPasswordConfirm} onChange={(e) => setSetupPasswordConfirm(e.target.value)} style={inputStyle} />
+
+              <button type="submit" disabled={loading} style={buttonStyle}>
+                {loading ? "Resetting Password..." : "Reset Password"}
+              </button>
+              <button type="button" disabled={loading} onClick={() => { setMode("login"); setRecoveryCode(""); setSetupPassword(""); setSetupPasswordConfirm(""); resetMessages() }} style={secondaryButtonStyle}>
+                Back to Login
+              </button>
+              <StatusMessages error={error} message={message} />
+            </form>
           ) : (
             <form onSubmit={handleLogin}>
               <label htmlFor="email" style={{ display: "block", fontSize: "0.95rem", fontWeight: 700, marginBottom: "8px" }}>
@@ -312,6 +400,13 @@ export default function LoginPage() {
 
               <button type="submit" disabled={loading} style={buttonStyle}>
                 {loading ? "Signing In..." : "Login"}
+              </button>
+
+              <button type="button" onClick={() => { setMode("password-reset"); resetMessages() }} style={secondaryButtonStyle}>
+                I Have a Reset Code
+              </button>
+              <button type="button" onClick={() => { setMode("admin-recovery"); resetMessages() }} style={{ ...secondaryButtonStyle, marginTop: "8px" }}>
+                Administrator Emergency Recovery
               </button>
 
               <StatusMessages error={error} message={message} />

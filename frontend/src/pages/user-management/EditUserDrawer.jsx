@@ -29,6 +29,7 @@ function EditUserDrawer({
   const [saveMessage, setSaveMessage] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetPasswordMessage, setResetPasswordMessage] = useState("");
+  const [resetCode, setResetCode] = useState("");
   const [deletingUser, setDeletingUser] = useState(false);
   const [deleteUserMessage, setDeleteUserMessage] = useState("");
 
@@ -45,6 +46,7 @@ function EditUserDrawer({
 
     setSaveMessage("");
     setResetPasswordMessage("");
+    setResetCode("");
     setDeleteUserMessage("");
   }, [editingUser, getDisplayName]);
 
@@ -133,6 +135,7 @@ function EditUserDrawer({
 
     setResettingPassword(true);
     setResetPasswordMessage("Resetting password access...");
+    setResetCode("");
 
     try {
       const response = await authFetch("/api/auth/admin-reset-password", {
@@ -149,8 +152,9 @@ function EditUserDrawer({
         throw new Error(data?.error || "Password reset failed.");
       }
 
+      setResetCode(String(data.reset_code || ""));
       setResetPasswordMessage(
-        "Password reset complete. The user must create a new password at next login."
+        "Give this one-time code to the user securely. It expires in 30 minutes and is shown only here."
       );
     } catch (error) {
       console.error("Admin password reset failed:", error);
@@ -347,6 +351,20 @@ function EditUserDrawer({
 
           {resetPasswordMessage ? (
             <p className="form-message">{resetPasswordMessage}</p>
+          ) : null}
+
+          {resetCode ? (
+            <div style={{ marginTop: "10px", padding: "12px", border: "1px solid #b45309", borderRadius: "10px", background: "#fffbeb" }}>
+              <div style={{ fontWeight: 800, marginBottom: "6px" }}>One-time reset code</div>
+              <code style={{ fontSize: "18px", letterSpacing: "0.08em" }}>{resetCode}</code>
+              <button
+                type="button"
+                style={{ ...smallActionButtonStyle, marginLeft: "12px" }}
+                onClick={() => navigator.clipboard.writeText(resetCode)}
+              >
+                Copy Code
+              </button>
+            </div>
           ) : null}
 
           <div style={dangerZoneStyle}>

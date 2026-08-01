@@ -5,6 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const authRoutes = require("../api/auth-api/routes");
+const { ensurePasswordRecoveryTables } = authRoutes;
 const { authenticateJWT, requireRole } = require("../middleware/auth");
 const demoRoutes = require("./routes/demoRoutes");
 const masterStudentRoutes = require("./routes/masterStudentRoutes");
@@ -10137,6 +10138,7 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
 
 
 Promise.all([
+  ensurePasswordRecoveryTables(),
   ensureStudentInfoColumns(),
   ensureRubricFrameworkTables(),
   ensureStudentReportCommentsTable(),

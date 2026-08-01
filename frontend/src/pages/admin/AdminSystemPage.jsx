@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import authFetch from "../../services/authFetch"
+import API_BASE from "../../apiBase"
 
 export default function AdminSystemPage() {
   const [courses, setCourses] = useState([])
   const [users, setUsers] = useState([])
   const [status, setStatus] = useState("loading")
   const [error, setError] = useState("")
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [recoveryCodes, setRecoveryCodes] = useState([])
+  const [recoveryMessage, setRecoveryMessage] = useState("")
+  const [generatingCodes, setGeneratingCodes] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -42,6 +47,38 @@ export default function AdminSystemPage() {
       mounted = false
     }
   }, [])
+
+  async function generateRecoveryCodes() {
+    if (!currentPassword) {
+      setRecoveryMessage("Enter your current administrator password first.")
+      return
+    }
+
+    const confirmed = window.confirm(
+      "Create a new set of emergency recovery codes? Any older unused codes will stop working."
+    )
+    if (!confirmed) return
+
+    try {
+      setGeneratingCodes(true)
+      setRecoveryMessage("Creating recovery codes...")
+      setRecoveryCodes([])
+      const response = await authFetch("/api/auth/admin-recovery-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: currentPassword }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Could not create recovery codes")
+      setRecoveryCodes(Array.isArray(data.recovery_codes) ? data.recovery_codes : [])
+      setRecoveryMessage("Print or securely record these codes now. They will not be shown again.")
+      setCurrentPassword("")
+    } catch (err) {
+      setRecoveryMessage(err.message || "Could not create recovery codes")
+    } finally {
+      setGeneratingCodes(false)
+    }
+  }
 
   const system = useMemo(() => {
     const roleCounts = users.reduce((counts, user) => {
@@ -166,6 +203,33 @@ export default function AdminSystemPage() {
             ["Regression Rule", "One objective at a time"],
           ]}
         />
+
+        <div style={{ background: "white", border: "1px solid #d7d7d7", borderRadius: "14px", padding: "18px" }}>
+          <h2 style={{ marginTop: 0, fontSize: "20px" }}>Administrator Emergency Recovery</h2>
+          <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
+            Create one-time codes for use only if you cannot log in. Creating a new set invalidates every older code.
+          </p>
+          <label htmlFor="adminCurrentPassword" style={{ display: "block", fontWeight: 800, marginBottom: "6px" }}>
+            Current administrator password
+          </label>
+          <input
+            id="adminCurrentPassword"
+            type="password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            style={{ width: "100%", boxSizing: "border-box", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "8px", marginBottom: "10px" }}
+          />
+          <button type="button" onClick={generateRecoveryCodes} disabled={generatingCodes} style={{ padding: "10px 14px", border: 0, borderRadius: "8px", background: "#1d4ed8", color: "white", fontWeight: 800 }}>
+            {generatingCodes ? "Creating..." : "Generate New Recovery Codes"}
+          </button>
+          {recoveryMessage ? <p style={{ fontWeight: 700 }}>{recoveryMessage}</p> : null}
+          {recoveryCodes.length > 0 ? (
+            <div style={{ marginTop: "12px", padding: "14px", borderRadius: "10px", background: "#fffbeb", border: "1px solid #b45309" }}>
+              {recoveryCodes.map((code) => <div key={code}><code style={{ fontSize: "17px", letterSpacing: "0.06em" }}>{code}</code></div>)}
+              <button type="button" onClick={() => window.print()} style={{ marginTop: "12px", padding: "8px 12px" }}>Print Codes</button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   )
