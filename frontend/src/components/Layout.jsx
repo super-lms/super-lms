@@ -26,6 +26,13 @@ export default function Layout() {
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase()
   const dashboardPath = normalizedRole === "admin" ? "/admin" : "/dashboard"
+  const rtiAppUrl = String(
+    import.meta.env.VITE_RTI_APP_URL ||
+      (import.meta.env.DEV
+        ? "http://localhost:5050"
+        : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
+  ).trim()
+  const canAccessRti = normalizedRole === "teacher" || normalizedRole === "observer"
 
   const isStudentRoute =
     location.pathname.startsWith("/student") &&
@@ -238,6 +245,16 @@ export default function Layout() {
               Reports
             </NavItem>
 
+            {canAccessRti && rtiAppUrl ? (
+              <ExternalNavItem
+                href={rtiAppUrl}
+                style={getNavLinkStyle("__rti_external__")}
+                icon={ClipboardCheck}
+              >
+                RTI / Student Support
+              </ExternalNavItem>
+            ) : null}
+
             <div
               style={{
                 borderTop: "1px solid #e5e7eb",
@@ -410,6 +427,21 @@ function NavItem({ to, style, icon: Icon, children }) {
       <Icon size={18} />
       <span>{children}</span>
     </Link>
+  )
+}
+
+function ExternalNavItem({ href, style, icon: Icon, children }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title={typeof children === "string" ? `${children} (opens in a new tab)` : ""}
+      style={style}
+    >
+      <Icon size={18} />
+      <span>{children}</span>
+    </a>
   )
 }
 
