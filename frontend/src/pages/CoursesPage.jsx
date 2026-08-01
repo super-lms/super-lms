@@ -1200,6 +1200,14 @@ export default function CoursesPage() {
         [courseId]: categoriesWithSubcategories,
       }))
       setActiveCompetencyCourseId(courseId)
+
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => {
+          document
+            .getElementById(`grading-pathways-${courseId}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }, 50)
+      })
     } catch (err) {
       setError(err.message || "Failed to load competencies")
     } finally {
@@ -2986,7 +2994,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${course.id}`)
+                        navigate(`/lessons?courseId=${course.id}&section=create#create-lesson`)
                       }}
                       style={buttonStyle}
                     >
@@ -3045,7 +3053,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${course.id}`)
+                        navigate(`/lessons?courseId=${course.id}&section=create#create-lesson`)
                       }}
                       style={buttonStyle}
                     >
@@ -3281,7 +3289,7 @@ export default function CoursesPage() {
                   ) : null}
 
                   {isCompetenciesOpen ? (
-                    <div style={learningPathBoxStyle}>
+                    <div id={`grading-pathways-${course.id}`} style={learningPathBoxStyle}>
                       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Grading Pathways</h3>
 
                       <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
@@ -3710,6 +3718,19 @@ export default function CoursesPage() {
                                         </div>
 
                                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                                              navigate(
+                                                `/lessons?courseId=${course.id}&section=create&evidenceTierId=${tier.id}&evidenceTierName=${encodeURIComponent(tier.name || "")}#create-lesson`
+                                              )
+                                            }}
+                                            style={primaryButtonStyle}
+                                          >
+                                            + Create Lesson
+                                          </button>
+
                                           <button
                                             type="button"
                                             onClick={() => moveEvidenceTier(course.id, tier.id, "up")}

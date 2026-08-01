@@ -1,17 +1,22 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
 
 function LessonsPage() {
-  const requestedCourseId =
-    new URLSearchParams(window.location.search).get("courseId") || ""
+  const queryParams = new URLSearchParams(window.location.search)
+  const requestedCourseId = queryParams.get("courseId") || ""
+  const requestedSection = queryParams.get("section") || ""
+  const requestedEvidenceTierName = queryParams.get("evidenceTierName") || ""
+  const createLessonRef = useRef(null)
 
   const [lessons, setLessons] = useState([])
   const [courses, setCourses] = useState([])
   const [courseId, setCourseId] = useState(requestedCourseId)
   const [selectedLessonId, setSelectedLessonId] = useState(null)
   const [title, setTitle] = useState("")
-  const [content, setContent] = useState("")
+  const [content, setContent] = useState(
+    requestedEvidenceTierName ? `Evidence focus: ${requestedEvidenceTierName}\n\n` : ""
+  )
   const [selectedFile, setSelectedFile] = useState(null)
   const [message, setMessage] = useState("Loading lessons...")
 
@@ -65,6 +70,24 @@ function LessonsPage() {
     loadLessons()
     loadCourses()
   }, [])
+
+  useEffect(() => {
+    if (requestedSection !== "create" && window.location.hash !== "#create-lesson") {
+      return
+    }
+
+    const scrollToCreateLesson = () => {
+      createLessonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+
+    const frameId = window.requestAnimationFrame(scrollToCreateLesson)
+    const timeoutId = window.setTimeout(scrollToCreateLesson, 150)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [requestedSection])
 
   async function uploadLessonFile(lessonId) {
     if (!selectedFile) {
@@ -749,6 +772,8 @@ function LessonsPage() {
       </section>
 
       <section
+        id="create-lesson"
+        ref={createLessonRef}
         style={{
           background: "#ffffff",
           padding: "24px",
