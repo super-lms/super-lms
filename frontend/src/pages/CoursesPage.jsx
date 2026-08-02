@@ -1766,6 +1766,13 @@ export default function CoursesPage() {
 
       await loadAssignments()
       await Promise.all(nextLearningPaths.map((learningPath) => loadLearningPathItems(learningPath.id)))
+
+      window.setTimeout(() => {
+        const target = document.getElementById(`learning-paths-${courseId}`)
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      }, 250)
     } catch (err) {
       setError(err.message || "Failed to load learning paths")
     } finally {
@@ -3065,6 +3072,23 @@ export default function CoursesPage() {
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        loadLearningPaths(course.id)
+                      }}
+                      disabled={learningPathLoadingCourseId === course.id}
+                      style={buttonStyle}
+                    >
+                      {learningPathLoadingCourseId === course.id
+                        ? "Loading Learning Paths..."
+                        : isLearningPathsOpen
+                          ? "Hide Learning Paths & Resources"
+                          : "Learning Paths & Resources"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
                         loadCompetencies(course.id, { forceOpen: true })
                       }}
                       disabled={competencyLoadingCourseId === course.id}
@@ -3799,7 +3823,7 @@ export default function CoursesPage() {
                   ) : null}
 
                   {isLearningPathsOpen ? (
-                    <div style={learningPathBoxStyle}>
+                    <div id={`learning-paths-${course.id}`} style={learningPathBoxStyle}>
                       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Learning Paths</h3>
 
                       <p style={{ color: "#4b5563", lineHeight: 1.5 }}>
