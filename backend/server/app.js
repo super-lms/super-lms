@@ -1158,6 +1158,11 @@ async function ensureLearningPathItemTables() {
     )
   `);
 
+  await pool.query(`
+    ALTER TABLE learning_paths
+    ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT false
+  `);
+
 }
 
 
@@ -6079,6 +6084,7 @@ app.post("/api/courses/:courseId/save-structure-template", authenticateJWT, requ
 /* LEARNING PATHS API */
 app.get("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
+    await ensureLearningPathItemTables();
     const courseId = Number(req.params.courseId);
 
     if (!courseId) {
