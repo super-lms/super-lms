@@ -2703,11 +2703,10 @@ export default function CoursesPage() {
                     ...courseCardStyle,
                     textAlign: "left",
                     cursor: "pointer",
-                    height: "260px",
+                    minHeight: "300px",
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",
-                    overflow: "hidden",
                   }}
                 >
                   <div>
@@ -2717,10 +2716,7 @@ export default function CoursesPage() {
                         margin: 0,
                         color: "#4b5563",
                         lineHeight: 1.45,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 4,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
+                        overflowWrap: "anywhere",
                       }}
                     >
                       {course.description || "Open this course workspace to manage assignments, students, learning paths, and grading."}
