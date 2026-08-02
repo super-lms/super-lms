@@ -166,6 +166,24 @@ function ObserverPermissionsPanel({
               </small>
             </span>
           </label>
+
+          <label style={radioCardStyle}>
+            <input
+              type="radio"
+              name="observer-type"
+              value="observer"
+              checked={observerDraft.relationship === "observer"}
+              onChange={(event) =>
+                onUpdateDraft("relationship", event.target.value)
+              }
+            />
+            <span>
+              <strong>Observer</strong>
+              <small style={helpTextStyle}>
+                Read-only access for support staff or another designated observer.
+              </small>
+            </span>
+          </label>
         </div>
       </div>
 

@@ -490,7 +490,9 @@ function UsersPage() {
 
     const relationshipLabel = observerDraft.relationship === "chinese_homeroom_teacher"
       ? "Chinese Homeroom Teacher"
-      : "Parent";
+      : observerDraft.relationship === "observer"
+        ? "Observer"
+        : "Parent";
     const observerName = getDisplayName(editingUser, "this observer");
     const confirmed = window.confirm(
       `Assign ${cleanSelectedIds.length} student${cleanSelectedIds.length === 1 ? "" : "s"} to ${observerName} as ${relationshipLabel}? This will replace the observer's currently saved student list.`
@@ -781,6 +783,7 @@ function UsersPage() {
               >
                 <option value="parent">Parent</option>
                 <option value="chinese_homeroom_teacher">Chinese Homeroom Teacher</option>
+                <option value="observer">Observer</option>
               </select>
             </div>
           </div>

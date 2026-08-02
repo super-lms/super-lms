@@ -1830,7 +1830,7 @@ app.post("/api/observers", authenticateJWT, requireRole("admin"), async (req, re
       return res.status(400).json({ error: "Observer email is required" });
     }
 
-    if (!["parent", "chinese_homeroom_teacher"].includes(relationship)) {
+    if (!["parent", "chinese_homeroom_teacher", "observer"].includes(relationship)) {
       return res.status(400).json({ error: "Invalid observer relationship" });
     }
 
@@ -1908,7 +1908,7 @@ app.get("/api/admin/observer-links/:observerId", authenticateJWT, requireRole("a
       [observerId]
     );
 
-    const relationship = linksResult.rows[0]?.relationship || "parent";
+    const relationship = linksResult.rows[0]?.relationship || "observer";
 
     return res.json({
       success: true,
@@ -1938,7 +1938,7 @@ app.post("/api/admin/observer-links/:observerId", authenticateJWT, requireRole("
       return res.status(400).json({ error: "Valid observerId is required" });
     }
 
-    if (!["parent", "chinese_homeroom_teacher"].includes(relationship)) {
+    if (!["parent", "chinese_homeroom_teacher", "observer"].includes(relationship)) {
       return res.status(400).json({ error: "Invalid observer relationship" });
     }
 
@@ -3256,7 +3256,7 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
         COALESCE(
           MAX(CASE WHEN osl.relationship = 'chinese_homeroom_teacher' THEN 'chinese_homeroom_teacher' END),
           MAX(osl.relationship),
-          'parent'
+          'observer'
         ) AS relationship
       FROM users u
       LEFT JOIN observer_student_links osl
@@ -3891,6 +3891,117 @@ app.delete("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin
 
 
 /* GET STUDENT COURSE DASHBOARD V1 */
+app.get(
+  "/api/observers/:observerEmail/students/:studentEmail/courses/:courseId/dashboard",
+  authenticateJWT,
+  requireRole("admin", "observer"),
+  async (req, res) => {
+    try {
+      const observerEmail = String(req.params.observerEmail || "").trim().toLowerCase();
+      const studentEmail = String(req.params.studentEmail || "").trim().toLowerCase();
+      const courseId = Number(req.params.courseId);
+
+      if (!observerEmail || !studentEmail || !courseId) {
+        return res.status(400).json({ error: "Valid observer, student, and course are required" });
+      }
+
+      const linkedStudents = await getObserverStudents(observerEmail);
+      const linkedCourse = linkedStudents.rows.some(
+        (row) =>
+          String(row.student_email || "").trim().toLowerCase() === studentEmail &&
+          Number(row.class_id) === courseId
+      );
+
+      if (!linkedCourse) {
+        return res.status(403).json({ error: "This student course is not linked to this observer" });
+      }
+
+      const [courseResult, assignmentsResult, submissionsResult, lessonsResult] = await Promise.all([
+        pool.query(`SELECT * FROM courses WHERE id = $1 LIMIT 1`, [courseId]),
+        pool.query(
+          `
+          SELECT
+            a.*,
+            cs.name AS subcategory_name,
+            cc.name AS category_name,
+            cc.weight_percent AS category_weight_percent,
+            cs.weight_percent_of_parent
+          FROM assignments a
+          LEFT JOIN LATERAL (
+            SELECT cs_inner.*
+            FROM category_subcategories cs_inner
+            LEFT JOIN course_categories cc_inner ON cc_inner.id = cs_inner.course_category_id
+            WHERE cs_inner.id = a.subcategory_id
+            ORDER BY CASE WHEN cc_inner.course_id = a.class_id THEN 0 ELSE 1 END,
+              cs_inner.course_category_id ASC, cs_inner.id ASC
+            LIMIT 1
+          ) cs ON true
+          LEFT JOIN course_categories cc ON cc.id = cs.course_category_id
+          WHERE a.class_id = $1
+            AND COALESCE(a.source_type, 'assignment') <> 'assessment'
+          ORDER BY COALESCE(a.sort_order, a.id), a.id
+          `,
+          [courseId]
+        ),
+        pool.query(
+          `
+          SELECT s.id, s.assignment_id, s.student_name, s.student_email, s.content,
+            s.score, s.feedback, s.grade, s.rubric_selection,
+            COALESCE(
+              json_agg(
+                json_build_object('id', sa.id, 'file_name', sa.original_name, 'file_path', sa.file_path)
+              ) FILTER (WHERE sa.id IS NOT NULL), '[]'
+            ) AS files
+          FROM submissions s
+          INNER JOIN assignments a ON a.id = s.assignment_id
+          LEFT JOIN submission_attachments sa ON sa.submission_id = s.id
+          WHERE a.class_id = $1 AND LOWER(s.student_email) = $2
+          GROUP BY s.id
+          `,
+          [courseId, studentEmail]
+        ),
+        pool.query(
+          `SELECT id, course_id, title, content, order_index, created_at, updated_at
+           FROM lessons WHERE course_id = $1 ORDER BY order_index ASC, id ASC`,
+          [courseId]
+        ),
+      ]);
+
+      if (courseResult.rows.length === 0) {
+        return res.status(404).json({ error: "Course not found" });
+      }
+
+      const submissionsByAssignmentId = Object.fromEntries(
+        submissionsResult.rows.map((submission) => [String(submission.assignment_id), submission])
+      );
+      const submissionStatesByAssignmentId = {};
+      assignmentsResult.rows.forEach((assignment) => {
+        const submission = submissionsByAssignmentId[String(assignment.id)] || null;
+        const hasSubmittedContent = Boolean(
+          submission &&
+            (String(submission.content || "").trim() ||
+              (Array.isArray(submission.files) && submission.files.length > 0))
+        );
+        submissionStatesByAssignmentId[String(assignment.id)] = {
+          assignment,
+          submission,
+          submission_status: hasSubmittedContent ? "submitted" : "not_submitted",
+        };
+      });
+
+      return res.json({
+        course: courseResult.rows[0],
+        assignments: assignmentsResult.rows,
+        lessons: lessonsResult.rows,
+        submissionStatesByAssignmentId,
+      });
+    } catch (err) {
+      console.error("GET observer student course dashboard failed:", err);
+      return res.status(500).json({ error: "Failed to load observer course view" });
+    }
+  }
+);
+
 app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     const studentEmail = String(req.params.studentEmail || "").trim().toLowerCase();

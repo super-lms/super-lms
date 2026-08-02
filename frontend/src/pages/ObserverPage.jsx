@@ -52,10 +52,16 @@ function InfoLine({ label, value }) {
 const translations = {
   en: {
     observerPortal: "Observer Portal",
+    parentPortal: "Parent Portal",
+    homeroomTeacherPortal: "Homeroom Teacher Portal",
     observerSubtitle: "Review linked students, course progress, teacher feedback, assignments, and learning evidence.",
+    parentSubtitle: "Review your linked student's course progress, teacher feedback, assignments, and learning evidence.",
+    homeroomTeacherSubtitle: "Monitor your homeroom students' course progress, teacher feedback, assignments, and learning evidence.",
     logout: "Logout",
     loadingPortal: "Loading observer portal...",
     observerDashboard: "Observer Dashboard",
+    parentDashboard: "Parent Dashboard",
+    homeroomTeacherDashboard: "Homeroom Teacher Dashboard",
     welcomeBack: "Welcome back",
     linkedStudents: "Linked Students",
     visibleAssignments: "Visible Assignments",
@@ -98,10 +104,16 @@ const translations = {
   },
   zh: {
     observerPortal: "家长 / 班主任观察门户",
+    parentPortal: "家长门户",
+    homeroomTeacherPortal: "班主任门户",
     observerSubtitle: "查看关联学生、课程进度、教师反馈、作业和学习表现证据。",
+    parentSubtitle: "查看您孩子的课程进度、教师反馈、作业和学习表现证据。",
+    homeroomTeacherSubtitle: "查看本班学生的课程进度、教师反馈、作业和学习表现证据。",
     logout: "退出登录",
     loadingPortal: "正在加载观察门户...",
     observerDashboard: "观察者仪表盘",
+    parentDashboard: "家长仪表盘",
+    homeroomTeacherDashboard: "班主任仪表盘",
     welcomeBack: "欢迎回来",
     linkedStudents: "关联学生",
     visibleAssignments: "可查看作业",
@@ -156,6 +168,9 @@ export default function ObserverPage() {
     students: [],
     submissions: [],
   })
+  const [courseDashboard, setCourseDashboard] = useState(null)
+  const [courseDashboardLoading, setCourseDashboardLoading] = useState(false)
+  const [courseDashboardError, setCourseDashboardError] = useState("")
 
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("")
@@ -335,6 +350,23 @@ export default function ObserverPage() {
   const isChineseHomeroomTeacher =
     String(observerData.observer?.relationship || "").trim().toLowerCase() ===
     "chinese_homeroom_teacher"
+  const isParent =
+    String(observerData.observer?.relationship || "").trim().toLowerCase() === "parent"
+  const portalTitle = isChineseHomeroomTeacher
+    ? t.homeroomTeacherPortal
+    : isParent
+      ? t.parentPortal
+      : t.observerPortal
+  const portalSubtitle = isChineseHomeroomTeacher
+    ? t.homeroomTeacherSubtitle
+    : isParent
+      ? t.parentSubtitle
+      : t.observerSubtitle
+  const dashboardTitle = isChineseHomeroomTeacher
+    ? t.homeroomTeacherDashboard
+    : isParent
+      ? t.parentDashboard
+      : t.observerDashboard
 
   const courseSubmissions = useMemo(() => {
     return observerData.submissions.filter((submission) => {
@@ -344,6 +376,50 @@ export default function ObserverPage() {
       )
     })
   }, [observerData.submissions, selectedStudentEmail, selectedCourseId])
+
+  useEffect(() => {
+    async function loadReadOnlyCourseDashboard() {
+      if (viewMode !== "progress" || !user?.email || !selectedStudentEmail || !selectedCourseId) {
+        return
+      }
+
+      try {
+        setCourseDashboardLoading(true)
+        setCourseDashboardError("")
+        setCourseDashboard(null)
+        const response = await authFetch(
+          `/api/observers/${encodeURIComponent(user.email)}/students/${encodeURIComponent(selectedStudentEmail)}/courses/${encodeURIComponent(selectedCourseId)}/dashboard`
+        )
+        const data = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error((data && data.error) || "Failed to load this student course")
+        }
+        setCourseDashboard(data)
+      } catch (err) {
+        setCourseDashboardError(err.message || "Failed to load this student course")
+      } finally {
+        setCourseDashboardLoading(false)
+      }
+    }
+
+    loadReadOnlyCourseDashboard()
+  }, [viewMode, user?.email, selectedStudentEmail, selectedCourseId])
+
+  const readOnlyCourseItems = useMemo(() => {
+    return toArray(courseDashboard?.assignments).map((assignment) => {
+      const state = courseDashboard?.submissionStatesByAssignmentId?.[String(assignment.id)] || {}
+      return { assignment, submission: state.submission || null, submissionStatus: state.submission_status || "not_submitted" }
+    })
+  }, [courseDashboard])
+
+  const readOnlyGradedItems = readOnlyCourseItems.filter(({ submission }) =>
+    submission?.score !== null && submission?.score !== undefined && submission?.score !== ""
+  )
+  const readOnlyMissingItems = readOnlyCourseItems.filter(({ submissionStatus }) => submissionStatus !== "submitted")
+  const courseDashboardReady = !courseDashboardLoading && !courseDashboardError && courseDashboard !== null
+  const readOnlyAverageScore = readOnlyGradedItems.length
+    ? Math.round(readOnlyGradedItems.reduce((sum, item) => sum + Number(item.submission.score || 0), 0) / readOnlyGradedItems.length)
+    : null
 
   const allVisibleSubmissions = observerData.submissions
 
@@ -641,6 +717,8 @@ export default function ObserverPage() {
     setSelectedCourseId(course.class_id)
     setViewMode("progress")
     setSnapshotMessage("")
+    setCourseDashboard(null)
+    setCourseDashboardError("")
   }
 
   function backToDashboard() {
@@ -749,9 +827,9 @@ export default function ObserverPage() {
     <div className="page">
       <div style={topBarStyle}>
         <div>
-          <h1 style={{ marginBottom: "6px" }}>{t.observerPortal}</h1>
+          <h1 style={{ marginBottom: "6px" }}>{portalTitle}</h1>
           <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-            {t.observerSubtitle}
+            {portalSubtitle}
           </p>
         </div>
 
@@ -778,7 +856,7 @@ export default function ObserverPage() {
       {!loading && !error && viewMode === "dashboard" ? (
         <div style={{ display: "grid", gap: "18px" }}>
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>{t.observerDashboard}</h2>
+            <h2 style={sectionTitleStyle}>{dashboardTitle}</h2>
             <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
               {t.welcomeBack}, {observerData.observer?.name || user?.email || "Observer"}.
             </p>
@@ -1094,10 +1172,20 @@ export default function ObserverPage() {
             </p>
 
             <div style={metricGridStyle}>
-              <MetricCard title="Visible Assignments" value={courseSubmissions.length} />
-              <MetricCard title="Missing / Needs Attention" value={missingSubmissions.length} />
-              <MetricCard title="Average Score" value={averageScore === null ? "N/A" : `${averageScore}%`} />
+              <MetricCard title="Visible Assignments" value={courseDashboardReady ? readOnlyCourseItems.length : "—"} />
+              <MetricCard title="Missing / Needs Attention" value={courseDashboardReady ? readOnlyMissingItems.length : "—"} />
+              <MetricCard title="Average Score" value={readOnlyAverageScore === null ? "N/A" : `${readOnlyAverageScore}%`} />
+              <MetricCard title="Lessons" value={toArray(courseDashboard?.lessons).length} />
             </div>
+
+            {courseDashboardLoading ? <p style={{ fontWeight: 800 }}>Loading the full course view…</p> : null}
+            {courseDashboardError ? (
+              <div style={{ ...emptyStateStyle, borderColor: "#fca5a5", background: "#fff7f7" }}>
+                <div style={{ ...emptyStateTitleStyle, color: "#991b1b" }}>Course records could not be loaded.</div>
+                <p style={emptyStateTextStyle}>{courseDashboardError}</p>
+                <p style={emptyStateTextStyle}>Restart the backend server, then reopen this course.</p>
+              </div>
+            ) : null}
           </section>
 
           <section style={sectionStyle}>
@@ -1168,18 +1256,24 @@ export default function ObserverPage() {
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>{t.needsAttention}</h2>
 
-            {missingSubmissions.length === 0 ? (
+            {!courseDashboardReady ? (
+              <div style={emptyStateStyle}>
+                <div style={emptyStateTitleStyle}>Waiting for the student’s course records…</div>
+                <p style={emptyStateTextStyle}>Assignments will appear after the course data finishes loading.</p>
+              </div>
+            ) : readOnlyMissingItems.length === 0 ? (
               <div style={emptyStateStyle}>
               <div style={emptyStateTitleStyle}>No missing or ungraded work found for this course.</div>
               <p style={emptyStateTextStyle}>There are no missing, ungraded, or needs-attention items currently visible for this course.</p>
             </div>
             ) : (
               <div style={{ display: "grid", gap: "10px" }}>
-                {missingSubmissions.map((submission) => (
-                  <Card key={`missing-${submission.id}`}>
-                    <div style={{ fontWeight: 900 }}>{submission.assignment_title || "Assignment"}</div>
-                    <InfoLine label="Status" value="Missing, ungraded, or needs teacher attention" />
-                    <InfoLine label="Feedback" value={submission.feedback || "No feedback yet"} />
+                {readOnlyMissingItems.map(({ assignment, submission }) => (
+                  <Card key={`missing-${assignment.id}`}>
+                    <div style={{ fontWeight: 900 }}>{assignment.title || "Assignment"}</div>
+                    <InfoLine label="Due" value={assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : "No due date"} />
+                    <InfoLine label="Status" value="Not submitted" />
+                    <InfoLine label="Feedback" value={submission?.feedback || "No feedback yet"} />
                   </Card>
                 ))}
               </div>
@@ -1189,35 +1283,41 @@ export default function ObserverPage() {
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>{t.studentWorkSection}</h2>
 
-            {courseSubmissions.length === 0 ? (
+            {!courseDashboardReady ? (
+              <div style={emptyStateStyle}>
+                <div style={emptyStateTitleStyle}>Waiting for the student’s course records…</div>
+                <p style={emptyStateTextStyle}>Assignments, submissions, grades, and feedback will appear after the course data finishes loading.</p>
+              </div>
+            ) : readOnlyCourseItems.length === 0 ? (
               <div style={emptyStateStyle}>
               <div style={emptyStateTitleStyle}>No assignments or submissions found for this course.</div>
               <p style={emptyStateTextStyle}>Assignments and learning evidence will appear here after the teacher publishes work or the student submits learning evidence.</p>
             </div>
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
-                {courseSubmissions.map((submission) => (
-                  <Card key={submission.id}>
+                {readOnlyCourseItems.map(({ assignment, submission, submissionStatus }) => (
+                  <Card key={assignment.id}>
                     <div style={{ fontSize: "1.1rem", fontWeight: 900, marginBottom: "8px" }}>
-                      {submission.assignment_title || "Assignment"}
+                      {assignment.title || "Assignment"}
                     </div>
 
-                    <div style={{ marginTop: "8px", marginBottom: "8px", lineHeight: 1.5 }}>
-                      {submission.content || "No text submission"}
-                    </div>
+                    <InfoLine label="Due" value={assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : "No due date"} />
+                    <InfoLine label="Assessment Pathway" value={assignment.category_name || "Not assigned"} />
+                    <InfoLine label="Evidence Tier" value={assignment.subcategory_name || "Not assigned"} />
+                    <InfoLine label="Submission" value={submissionStatus === "submitted" ? "Submitted" : "Not submitted"} />
 
                     <InfoLine
                       label="Score"
                       value={
-                        submission.score !== null && submission.score !== undefined && submission.score !== ""
+                        submission?.score !== null && submission?.score !== undefined && submission?.score !== ""
                           ? String(submission.score)
                           : "Not graded"
                       }
                     />
-                    <InfoLine label="Grade" value={submission.grade || "Not graded"} />
-                    <InfoLine label="Feedback" value={submission.feedback || "No feedback yet"} />
+                    <InfoLine label="Grade" value={submission?.grade || "Not graded"} />
+                    <InfoLine label="Feedback" value={submission?.feedback || "No feedback yet"} />
 
-                    {toArray(submission.files).length > 0 ? (
+                    {toArray(submission?.files).length > 0 ? (
                       <div style={{ marginTop: "10px" }}>
                         <strong>Attachments:</strong>
                         <div style={{ display: "grid", gap: "6px", marginTop: "6px" }}>
@@ -1243,6 +1343,41 @@ export default function ObserverPage() {
                 ))}
               </div>
             )}
+          </section>
+
+          <section style={sectionStyle}>
+            <h2 style={sectionTitleStyle}>Lessons and Learning Materials</h2>
+            {!courseDashboardReady ? (
+              <div style={emptyStateStyle}>
+                <div style={emptyStateTitleStyle}>Waiting for lessons and learning materials…</div>
+                <p style={emptyStateTextStyle}>Learning materials will appear after the course data finishes loading.</p>
+              </div>
+            ) : toArray(courseDashboard?.lessons).length === 0 ? (
+              <div style={emptyStateStyle}>
+                <div style={emptyStateTitleStyle}>No lessons are currently visible for this course.</div>
+                <p style={emptyStateTextStyle}>Teacher-published lessons and learning materials will appear here.</p>
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {courseDashboard.lessons.map((lesson) => (
+                  <Card key={`lesson-${lesson.id}`}>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 900, marginBottom: "8px" }}>{lesson.title}</div>
+                    <div style={{ color: "#4b5563", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                      {lesson.content || "No lesson description provided."}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section style={sectionStyle}>
+            <h2 style={sectionTitleStyle}>Read-only Course Summary</h2>
+            <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.55 }}>
+              This is the same academic course information available to the student—assignments, due dates,
+              submission status, results, teacher feedback, and lessons. Observer access is view-only; submitting
+              work or changing student records is not available here.
+            </p>
           </section>
         </div>
       ) : null}
