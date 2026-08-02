@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
+import { setWorkspaceMode } from "../services/workspaceMode"
 import {
   LayoutDashboard,
   Users,
@@ -25,18 +26,24 @@ export default function Layout() {
   const [teacherCourses, setTeacherCourses] = useState([])
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase()
-  const dashboardPath = normalizedRole === "admin" ? "/admin" : "/dashboard"
+  const dashboardPath = "/dashboard"
   const rtiAppUrl = String(
     import.meta.env.VITE_RTI_APP_URL ||
       (import.meta.env.DEV
         ? "http://localhost:5050"
         : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
   ).trim()
-  const canAccessRti = normalizedRole === "teacher"
+  const canAccessRti = normalizedRole === "teacher" || normalizedRole === "admin"
 
   const isStudentRoute =
     location.pathname.startsWith("/student") &&
     !location.pathname.startsWith("/student-import")
+
+  useEffect(() => {
+    if (normalizedRole === "admin" && !isStudentRoute) {
+      setWorkspaceMode("teacher")
+    }
+  }, [normalizedRole, isStudentRoute])
 
   useEffect(() => {
     if (isStudentRoute) {
@@ -180,7 +187,7 @@ export default function Layout() {
   }
 
   function getRoleDisplayName() {
-    if (normalizedRole === "admin") return "Admin"
+    if (normalizedRole === "admin") return "Administrator viewing Teacher Workspace"
     if (normalizedRole === "teacher") return "Teacher"
     if (normalizedRole === "student") return "Student"
     if (normalizedRole === "observer") return "Observer"
@@ -208,7 +215,7 @@ export default function Layout() {
         }}
       >
         <h2 style={{ marginTop: 0, marginBottom: "40px", fontSize: "24px" }}>
-          {isStudentRoute ? "Student Portal" : "Teacher / Admin Portal"}
+          {isStudentRoute ? "Student Portal" : "Teacher Portal"}
         </h2>
 
         {!isStudentRoute && (
@@ -286,6 +293,17 @@ export default function Layout() {
                 paddingTop: "12px",
               }}
             />
+
+            {normalizedRole === "admin" ? (
+              <Link
+                to="/admin"
+                style={adminWorkspaceLinkStyle}
+                onClick={() => setWorkspaceMode("admin")}
+              >
+                <LayoutDashboard size={18} />
+                <span>Return to Admin Workspace</span>
+              </Link>
+            ) : null}
 
             <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
               <LogOut size={18} />
@@ -479,4 +497,18 @@ const logoutButtonStyle = {
   alignItems: "center",
   gap: "10px",
   width: "100%",
+}
+
+const adminWorkspaceLinkStyle = {
+  color: "#111827",
+  textDecoration: "none",
+  fontSize: "15px",
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "10px 12px",
+  borderRadius: "10px",
+  border: "1px solid #111827",
+  background: "#f9fafb",
+  fontWeight: 700,
 }

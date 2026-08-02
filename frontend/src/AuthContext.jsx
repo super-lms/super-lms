@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { clearWorkspaceMode, setWorkspaceMode } from "./services/workspaceMode"
 
 const AuthContext = createContext()
 const STORAGE_KEY = "super_lms_user"
@@ -82,6 +83,8 @@ export function AuthProvider({ children }) {
 
     const safeToken = String(tokenValue || "")
 
+    setWorkspaceMode(String(safeUser.role || "").toLowerCase() === "admin" ? "admin" : "teacher")
+
     setUser(safeUser)
     setToken(safeToken)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(safeUser))
@@ -97,6 +100,7 @@ export function AuthProvider({ children }) {
     setUser(null)
     setToken("")
     clearStoredAuth()
+    clearWorkspaceMode()
     window.location.replace("/login")
   }
 

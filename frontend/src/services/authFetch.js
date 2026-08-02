@@ -32,6 +32,14 @@ export async function authFetch(pathOrUrl, options = {}) {
     headers.Authorization = `Bearer ${token}`
   }
 
+  const currentPath = window.location.pathname
+  const isAdministratorWorkspace =
+    currentPath === "/admin" || currentPath.startsWith("/admin/")
+
+  if (!isAdministratorWorkspace && currentPath !== "/login") {
+    headers["X-Super-LMS-Workspace"] = "teacher"
+  }
+
   return fetch(buildApiUrl(pathOrUrl), {
     ...options,
     headers,

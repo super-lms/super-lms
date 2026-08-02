@@ -1,5 +1,7 @@
 import { Link, Outlet, useLocation } from "react-router-dom"
+import { useEffect } from "react"
 import { useAuth } from "../../AuthContext.jsx"
+import { setWorkspaceMode } from "../../services/workspaceMode"
 import {
   LayoutDashboard,
   Users,
@@ -17,6 +19,10 @@ import {
 export default function AdminLayout() {
   const location = useLocation()
   const { user, logout } = useAuth()
+
+  useEffect(() => {
+    setWorkspaceMode("admin")
+  }, [])
 
   function getNavLinkStyle(path) {
     const isActive =
@@ -141,7 +147,11 @@ export default function AdminLayout() {
 
           <div style={sectionDividerStyle} />
 
-          <Link to="/dashboard" style={secondaryLinkStyle}>
+          <Link
+            to="/dashboard"
+            style={secondaryLinkStyle}
+            onClick={() => setWorkspaceMode("teacher")}
+          >
             Teacher Workspace
           </Link>
 

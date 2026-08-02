@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import * as XLSX from "xlsx"
 import { useAuth } from "../AuthContext.jsx"
@@ -150,6 +150,7 @@ export default function CoursesPage() {
   const [teacherCoachOpen, setTeacherCoachOpen] = useState(true)
   const [teacherCoachGuide, setTeacherCoachGuide] = useState("first_course")
   const [teacherCoachStep, setTeacherCoachStep] = useState(0)
+  const openedRequestedSectionRef = useRef("")
 
   useEffect(() => {
     loadCourses()
@@ -198,6 +199,32 @@ export default function CoursesPage() {
 
     window.scrollTo({ top: 0, behavior: "auto" })
   }, [loading, courses.length])
+
+  useEffect(() => {
+    if (loading || courses.length === 0) return
+
+    const params = new URLSearchParams(window.location.search)
+    const requestedCourseId = params.get("courseId")
+    const requestedSection = params.get("open")
+    const requestKey = `${requestedCourseId || ""}:${requestedSection || ""}`
+
+    if (
+      !requestedCourseId ||
+      requestedSection !== "learning-paths" ||
+      openedRequestedSectionRef.current === requestKey
+    ) {
+      return
+    }
+
+    const courseExists = courses.some(
+      (course) => String(course.id) === String(requestedCourseId)
+    )
+
+    if (!courseExists) return
+
+    openedRequestedSectionRef.current = requestKey
+    loadLearningPaths(requestedCourseId, { forceOpen: true })
+  }, [loading, courses])
 
   useEffect(() => {
     function handleCourseBrowserHistory() {

@@ -1,16 +1,30 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import API_BASE from "../../apiBase"
 import authFetch from "../../services/authFetch"
+import { openAdminCourseBuilder } from "../../services/adminCourseBuilder"
 
 export default function AdminCourseLearningPathsPage() {
   const { courseId } = useParams()
+  const navigate = useNavigate()
 
   const [course, setCourse] = useState(null)
   const [learningPaths, setLearningPaths] = useState([])
   const [pathItemsById, setPathItemsById] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [openingBuilder, setOpeningBuilder] = useState(false)
+
+  async function buildLearningPaths() {
+    try {
+      setOpeningBuilder(true)
+      setError("")
+      await openAdminCourseBuilder(courseId, navigate, "learning-paths")
+    } catch (err) {
+      setError(err.message || "Failed to open the learning path builder")
+      setOpeningBuilder(false)
+    }
+  }
 
   useEffect(() => {
     let isCancelled = false
@@ -194,6 +208,15 @@ export default function AdminCourseLearningPathsPage() {
         >
           {courseTitle}
         </p>
+
+        <div style={heroActionsStyle}>
+          <button type="button" onClick={buildLearningPaths} disabled={openingBuilder} style={primaryButtonStyle}>
+            {openingBuilder ? "Opening Builder..." : "Build Learning Paths"}
+          </button>
+          <Link to={`/admin/courses/${encodeURIComponent(String(courseId))}/teacher`} style={secondaryLinkStyle}>
+            Assign or Review Teacher
+          </Link>
+        </div>
       </div>
 
       {loading ? (
@@ -244,7 +267,12 @@ export default function AdminCourseLearningPathsPage() {
 
       {!loading && !error && learningPaths.length === 0 ? (
         <div style={noticeStyle}>
-          No learning paths found for this course.
+          <strong>No learning paths have been created yet.</strong>
+          <div style={{ marginTop: "6px" }}>
+            Select <strong>Build Learning Paths</strong> above to open this course in the full
+            teacher builder and create the first path. You will be added as a co-teacher without
+            replacing another assigned teacher.
+          </div>
         </div>
       ) : null}
 
@@ -325,6 +353,35 @@ const heroStyle = {
   border: "1px solid #d7d7d7",
   borderRadius: "16px",
   padding: "24px",
+}
+
+const heroActionsStyle = {
+  display: "flex",
+  gap: "10px",
+  flexWrap: "wrap",
+  marginTop: "18px",
+}
+
+const primaryButtonStyle = {
+  border: "1px solid #111827",
+  borderRadius: "10px",
+  padding: "12px 16px",
+  background: "#111827",
+  color: "white",
+  fontWeight: 800,
+  cursor: "pointer",
+}
+
+const secondaryLinkStyle = {
+  display: "inline-flex",
+  alignItems: "center",
+  border: "1px solid #9ca3af",
+  borderRadius: "10px",
+  padding: "12px 16px",
+  background: "white",
+  color: "#111827",
+  fontWeight: 800,
+  textDecoration: "none",
 }
 
 const noticeStyle = {

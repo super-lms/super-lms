@@ -1636,6 +1636,20 @@ app.delete("/api/lessons/:lessonId", authenticateJWT, requireRole("admin", "teac
 /* GET COURSES */
 app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
+    const isAdminTeacherWorkspace =
+      String(req.user?.role || "").toLowerCase() === "admin" &&
+      String(req.get("X-Super-LMS-Workspace") || "").toLowerCase() === "teacher";
+    const teacherWorkspaceWhereSql = isAdminTeacherWorkspace
+      ? `WHERE c.teacher_id = $1
+          OR EXISTS (
+            SELECT 1
+            FROM course_teachers workspace_teacher
+            WHERE workspace_teacher.course_id = c.id
+              AND workspace_teacher.teacher_id = $1
+          )`
+      : "";
+    const teacherWorkspaceParams = isAdminTeacherWorkspace ? [Number(req.user.id)] : [];
+
     const userColumnsResult = await pool.query(`
       SELECT column_name
       FROM information_schema.columns
@@ -1691,6 +1705,7 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         ON c.teacher_id = u.id
       LEFT JOIN class_enrollments ce
         ON ce.class_id = c.id
+      ${teacherWorkspaceWhereSql}
       GROUP BY
         c.id,
         c.title,
@@ -1701,7 +1716,7 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         c.created_at,
         u.email${teacherGroupBySql}
       ORDER BY c.id ASC
-    `);
+    `, teacherWorkspaceParams);
 
     return res.json(result.rows);
   } catch (err) {
@@ -1728,14 +1743,20 @@ app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("ad
         u.id AS teacher_user_id,
         CONCAT(u.first_name, ' ', u.last_name) AS teacher_name,
         u.email AS teacher_email,
-        u.role AS teacher_role
+        u.role AS teacher_role,
+        EXISTS (
+          SELECT 1
+          FROM course_teachers viewer_course_teacher
+          WHERE viewer_course_teacher.course_id = c.id
+            AND viewer_course_teacher.teacher_id = $2
+        ) OR c.teacher_id = $2 AS viewer_has_teacher_access
       FROM courses c
       LEFT JOIN users u
         ON u.id = c.teacher_id
       WHERE c.id = $1
       LIMIT 1
       `,
-      [courseId]
+      [courseId, Number(req.user.id)]
     );
 
     if (result.rows.length === 0) {
@@ -1754,10 +1775,85 @@ app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("ad
         email: result.rows[0].teacher_email,
         role: result.rows[0].teacher_role,
       },
+      viewerHasTeacherAccess: Boolean(result.rows[0].viewer_has_teacher_access),
     });
   } catch (err) {
     console.error("GET /api/admin/courses/:courseId/teacher failed:", err);
     return res.status(500).json({ error: "Failed to load course teacher" });
+  }
+});
+
+/* ADD THE SIGNED-IN ADMINISTRATOR TO THE COURSE'S TEACHER WORKSPACE */
+app.put("/api/admin/courses/:courseId/assign-to-me", authenticateJWT, requireRole("admin"), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const courseId = Number(req.params.courseId);
+    const teacherId = Number(req.user?.id);
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    if (!teacherId) {
+      return res.status(400).json({ error: "Signed-in administrator account was not found" });
+    }
+
+    await client.query("BEGIN");
+
+    const courseResult = await client.query(
+      `
+      SELECT id, title, teacher_id
+      FROM courses
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [courseId]
+    );
+
+    if (courseResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    await client.query(
+      `
+      INSERT INTO course_teachers (course_id, teacher_id, role)
+      VALUES ($1, $2, 'co-teacher')
+      ON CONFLICT (course_id, teacher_id) DO UPDATE
+      SET role = EXCLUDED.role
+      `,
+      [courseId, teacherId]
+    );
+
+    const teacherResult = await client.query(
+      `
+      SELECT
+        id,
+        CONCAT(first_name, ' ', last_name) AS name,
+        email,
+        role
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [teacherId]
+    );
+
+    await client.query("COMMIT");
+
+    return res.json({
+      success: true,
+      course: courseResult.rows[0],
+      workspaceTeacher: teacherResult.rows[0] || null,
+      viewerHasTeacherAccess: true,
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PUT /api/admin/courses/:courseId/assign-to-me failed:", err);
+    return res.status(500).json({ error: "Failed to add course to Teacher Workspace" });
+  } finally {
+    client.release();
   }
 });
 
@@ -8009,7 +8105,7 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
         SELECT id
         FROM users
         WHERE LOWER(email) = $1
-          AND LOWER(role) = 'teacher'
+          AND LOWER(role) IN ('teacher', 'admin')
         LIMIT 1
         `,
         [teacherEmail]
@@ -8018,7 +8114,7 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
       if (teacherResult.rows.length === 0) {
         await client.query("ROLLBACK");
         return res.status(400).json({
-          error: "Teacher email must belong to an existing teacher account",
+          error: "Teacher email must belong to an existing teacher or administrator account",
         });
       }
 

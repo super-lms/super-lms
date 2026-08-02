@@ -69,7 +69,7 @@ export default function AdminCoursesPage() {
 
   const teachers = useMemo(() => {
     return users
-      .filter((user) => String(user.role || "").toLowerCase() === "teacher")
+      .filter((user) => ["teacher", "admin"].includes(String(user.role || "").toLowerCase()))
       .filter((teacher) => String(teacher.email || "").trim())
       .sort((a, b) => {
         const aName = String(a.name || a.email || "")

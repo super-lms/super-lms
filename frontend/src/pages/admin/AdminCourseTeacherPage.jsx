@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import authFetch from "../../services/authFetch"
+import { useAuth } from "../../AuthContext"
 
 export default function AdminCourseTeacherPage() {
   const { courseId } = useParams()
+  const { user } = useAuth()
 
   const [course, setCourse] = useState(null)
   const [teacher, setTeacher] = useState(null)
+  const [hasTeacherWorkspaceAccess, setHasTeacherWorkspaceAccess] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [assignStatus, setAssignStatus] = useState("idle")
+  const [assignMessage, setAssignMessage] = useState("")
 
   useEffect(() => {
     let isCancelled = false
@@ -28,12 +33,14 @@ export default function AdminCourseTeacherPage() {
         if (!isCancelled) {
           setCourse(data?.course || null)
           setTeacher(data?.teacher || null)
+          setHasTeacherWorkspaceAccess(Boolean(data?.viewerHasTeacherAccess))
         }
       } catch (err) {
         if (!isCancelled) {
           setError(err.message || "Failed to load course teacher")
           setCourse(null)
           setTeacher(null)
+          setHasTeacherWorkspaceAccess(false)
         }
       } finally {
         if (!isCancelled) {
@@ -51,6 +58,34 @@ export default function AdminCourseTeacherPage() {
 
   const courseTitle = course?.title || `Course ${courseId}`
   const hasTeacher = teacher && (teacher.name || teacher.email)
+  const isAssignedToMe =
+    hasTeacherWorkspaceAccess ||
+    Number(teacher?.id) === Number(user?.id) ||
+    String(teacher?.email || "").toLowerCase() === String(user?.email || "").toLowerCase()
+
+  async function assignToMe() {
+    try {
+      setAssignStatus("saving")
+      setAssignMessage("")
+
+      const response = await authFetch(`/api/admin/courses/${courseId}/assign-to-me`, {
+        method: "PUT",
+      })
+      const data = await response.json()
+
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || "Failed to assign this course")
+      }
+
+      setCourse(data?.course || course)
+      setHasTeacherWorkspaceAccess(Boolean(data?.viewerHasTeacherAccess))
+      setAssignStatus("saved")
+      setAssignMessage("This course is now available in your Teacher Workspace.")
+    } catch (err) {
+      setAssignStatus("error")
+      setAssignMessage(err.message || "Failed to assign this course")
+    }
+  }
 
   return (
     <div>
@@ -75,6 +110,40 @@ export default function AdminCourseTeacherPage() {
       {loading ? <div style={noticeStyle}>Loading teacher...</div> : null}
 
       {error ? <div style={errorStyle}>{error}</div> : null}
+
+      {!loading && !error ? (
+        <div style={assignmentActionStyle}>
+          <div>
+            <div style={{ fontWeight: 800, color: "#111827" }}>Your Teaching Workspace</div>
+            <div style={{ marginTop: "5px", color: "#4b5563", lineHeight: 1.5 }}>
+              Add this course to your Teacher Workspace to manage its learning paths,
+              lessons, assignments, gradebook, and reports. The currently assigned
+              course teacher will remain in place.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={assignToMe}
+            disabled={isAssignedToMe || assignStatus === "saving"}
+            style={{
+              ...assignButtonStyle,
+              opacity: isAssignedToMe || assignStatus === "saving" ? 0.65 : 1,
+              cursor: isAssignedToMe || assignStatus === "saving" ? "default" : "pointer",
+            }}
+          >
+            {isAssignedToMe
+              ? "Assigned to You"
+              : assignStatus === "saving"
+                ? "Assigning..."
+                : "Add to My Teacher Workspace"}
+          </button>
+          {assignMessage ? (
+            <div style={assignStatus === "error" ? actionErrorStyle : actionSuccessStyle}>
+              {assignMessage}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {!loading && !error ? (
         hasTeacher ? (
@@ -182,4 +251,43 @@ const noteStyle = {
   background: "#f9fafb",
   color: "#4b5563",
   lineHeight: 1.5,
+}
+
+const assignmentActionStyle = {
+  marginTop: "20px",
+  background: "white",
+  border: "1px solid #d7d7d7",
+  borderRadius: "16px",
+  padding: "20px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "16px",
+  flexWrap: "wrap",
+}
+
+const assignButtonStyle = {
+  border: "1px solid #111827",
+  borderRadius: "10px",
+  background: "#111827",
+  color: "white",
+  padding: "11px 16px",
+  fontWeight: 800,
+}
+
+const actionSuccessStyle = {
+  flexBasis: "100%",
+  border: "1px solid #86b995",
+  borderRadius: "10px",
+  background: "#f0fdf4",
+  color: "#166534",
+  padding: "11px 13px",
+  fontWeight: 700,
+}
+
+const actionErrorStyle = {
+  ...actionSuccessStyle,
+  border: "1px solid #d1a1a1",
+  background: "#fff8f8",
+  color: "#7f1d1d",
 }
