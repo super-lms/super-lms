@@ -1163,6 +1163,16 @@ async function ensureLearningPathItemTables() {
     ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT false
   `);
 
+  await pool.query(`
+    ALTER TABLE learning_paths
+    ADD COLUMN IF NOT EXISTS grading_category_id INTEGER REFERENCES course_categories(id) ON DELETE CASCADE
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS learning_paths_grading_category_unique
+    ON learning_paths (grading_category_id)
+  `);
+
 }
 
 
@@ -6110,6 +6120,7 @@ app.get("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("a
       SELECT
         id,
         course_id,
+        grading_category_id,
         title,
         description,
         sort_order,
@@ -6134,6 +6145,71 @@ app.get("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("a
 return res.status(500).json({ error: err.message });
   }
 });
+
+app.post(
+  "/api/courses/:courseId/categories/:categoryId/learning-path",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  async (req, res) => {
+    try {
+      await ensureLearningPathItemTables();
+      const courseId = Number(req.params.courseId);
+      const categoryId = Number(req.params.categoryId);
+
+      if (!courseId || !categoryId) {
+        return res.status(400).json({ error: "Valid courseId and categoryId are required" });
+      }
+
+      const categoryResult = await pool.query(
+        `
+        SELECT id, course_id, name, sort_order
+        FROM course_categories
+        WHERE id = $1 AND course_id = $2
+        LIMIT 1
+        `,
+        [categoryId, courseId]
+      );
+
+      if (categoryResult.rows.length === 0) {
+        return res.status(404).json({ error: "Grading Pathway not found" });
+      }
+
+      const category = categoryResult.rows[0];
+      const result = await pool.query(
+        `
+        INSERT INTO learning_paths (
+          course_id,
+          grading_category_id,
+          title,
+          description,
+          sort_order,
+          is_published,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, false, NOW(), NOW())
+        ON CONFLICT (grading_category_id)
+        DO UPDATE SET
+          title = EXCLUDED.title,
+          updated_at = NOW()
+        RETURNING *
+        `,
+        [
+          courseId,
+          categoryId,
+          category.name,
+          "Learning resources and activities for this Grading Pathway.",
+          Number(category.sort_order || 1),
+        ]
+      );
+
+      return res.json({ success: true, learning_path: result.rows[0] });
+    } catch (err) {
+      console.error("POST category Learning Path failed:", err);
+      return res.status(500).json({ error: "Failed to prepare Grading Pathway resources" });
+    }
+  }
+);
 
 app.post("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {

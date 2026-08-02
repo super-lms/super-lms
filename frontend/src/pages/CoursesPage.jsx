@@ -130,6 +130,7 @@ export default function CoursesPage() {
   const [learningPathItemsByPathId, setLearningPathItemsByPathId] = useState({})
   const [loadingItemsPathId, setLoadingItemsPathId] = useState(null)
   const [creatingItemKey, setCreatingItemKey] = useState(null)
+  const [creatingCategoryContentKey, setCreatingCategoryContentKey] = useState(null)
   const [editingItemId, setEditingItemId] = useState(null)
   const [editItemDraftById, setEditItemDraftById] = useState({})
   const [savingItemId, setSavingItemId] = useState(null)
@@ -2003,6 +2004,46 @@ export default function CoursesPage() {
     }
   }
 
+  async function createCategoryLearningPathItem(course, category, itemType) {
+    const key = `${category.id}-${itemType}`
+
+    try {
+      setCreatingCategoryContentKey(key)
+      setMessage("")
+      setError("")
+
+      const res = await authFetch(
+        `${API_BASE}/api/courses/${course.id}/categories/${category.id}/learning-path`,
+        { method: "POST" }
+      )
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to prepare Grading Pathway resources")
+      }
+
+      const learningPath = data.learning_path
+      await loadLearningPaths(course.id, { forceOpen: true })
+
+      if (itemType === "lesson") {
+        await createLearningPathLesson(course, learningPath)
+      } else if (itemType === "assignment") {
+        await createLearningPathAssignment(course, learningPath)
+      } else {
+        await createLearningPathItem(course.id, learningPath, itemType)
+      }
+
+      window.setTimeout(() => {
+        const target = document.getElementById(`learning-path-${learningPath.id}`)
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 250)
+    } catch (err) {
+      setError(err.message || "Failed to add Grading Pathway content")
+    } finally {
+      setCreatingCategoryContentKey(null)
+    }
+  }
+
 
 
   async function createLearningPathLesson(course, learningPath) {
@@ -3616,6 +3657,33 @@ export default function CoursesPage() {
 
                               </div>
 
+                              <div style={itemBuilderStyle}>
+                                <div style={{ fontWeight: 900, marginBottom: "8px" }}>
+                                  Add Learning Content & Resources
+                                </div>
+                                <div style={{ color: "#4b5563", lineHeight: 1.5, marginBottom: "10px" }}>
+                                  Add teaching materials directly to this existing Grading Pathway.
+                                </div>
+                                <div style={itemButtonRowStyle}>
+                                  {["lesson", "assignment", "resource", "video", "quiz"].map((itemType) => {
+                                    const label = getLearningPathItemLabel(itemType)
+                                    const key = `${category.id}-${itemType}`
+
+                                    return (
+                                      <button
+                                        key={itemType}
+                                        type="button"
+                                        onClick={() => createCategoryLearningPathItem(course, category, itemType)}
+                                        disabled={creatingCategoryContentKey === key}
+                                        style={buttonStyle}
+                                      >
+                                        {creatingCategoryContentKey === key ? "Adding..." : `+ Add ${label}`}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
 
                               <div style={{
                                 border: "1px solid #d7dce5",
@@ -3933,7 +4001,7 @@ export default function CoursesPage() {
                             const pathItems = learningPathItemsByPathId[pathItem.id] || []
 
                             return (
-                              <div key={pathItem.id} style={learningPathCardStyle}>
+                              <div key={pathItem.id} id={`learning-path-${pathItem.id}`} style={learningPathCardStyle}>
                                 <div style={{ flex: "1 1 320px" }}>
                                   <div style={{ fontWeight: 900, marginBottom: "4px" }}>{pathItem.title}</div>
 
