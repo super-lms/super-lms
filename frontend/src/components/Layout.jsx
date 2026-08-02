@@ -32,7 +32,7 @@ export default function Layout() {
         ? "http://localhost:5050"
         : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
   ).trim()
-  const canAccessRti = normalizedRole === "teacher" || normalizedRole === "observer"
+  const canAccessRti = normalizedRole === "teacher"
 
   const isStudentRoute =
     location.pathname.startsWith("/student") &&

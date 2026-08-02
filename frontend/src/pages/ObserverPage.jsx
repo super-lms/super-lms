@@ -74,6 +74,9 @@ const translations = {
     manageHomeroom: "Manage My Homeroom",
     manageHomeroomHelp: "Select homeroom students from the official grade roster.",
     openHomeroom: "Open Homeroom →",
+    rtiStudentSupport: "RTI / Student Support",
+    rtiStudentSupportHelp: "Open the intervention and student-support workspace.",
+    openRti: "Open RTI →",
     recentActivity: "Recent Activity",
     noRecentActivity: "No recent student work or feedback is visible yet.",
     course: "Course",
@@ -117,6 +120,9 @@ const translations = {
     manageHomeroom: "管理我的班级",
     manageHomeroomHelp: "从官方年级名单中选择本班学生。",
     openHomeroom: "打开班级管理 →",
+    rtiStudentSupport: "RTI / 学生支持",
+    rtiStudentSupportHelp: "打开干预与学生支持工作区。",
+    openRti: "打开 RTI →",
     recentActivity: "最近活动",
     noRecentActivity: "目前还没有可查看的学生作业或反馈。",
     course: "课程",
@@ -156,6 +162,12 @@ export default function ObserverPage() {
   const [viewMode, setViewMode] = useState("dashboard")
   const [language, setLanguage] = useState("en")
   const t = translations[language] || translations.en
+  const rtiAppUrl = String(
+    import.meta.env.VITE_RTI_APP_URL ||
+      (import.meta.env.DEV
+        ? "http://localhost:5050"
+        : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
+  ).trim()
 
   const [homeroomRoster, setHomeroomRoster] = useState([])
   const [homeroomSearch, setHomeroomSearch] = useState("")
@@ -169,6 +181,10 @@ export default function ObserverPage() {
   function handleLogout() {
     logout()
     navigate("/login", { replace: true })
+  }
+
+  function openRtiStudentSupport() {
+    window.open(rtiAppUrl, "_blank", "noopener,noreferrer")
   }
 
   useEffect(() => {
@@ -803,13 +819,23 @@ export default function ObserverPage() {
               </Card>
 
               {observerData.observer?.relationship === "chinese_homeroom_teacher" ? (
-                <Card onClick={viewManageHomeroom}>
-                  <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.manageHomeroom}</div>
-                  <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                    {t.manageHomeroomHelp}
-                  </div>
-                  <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openHomeroom}</div>
-                </Card>
+                <>
+                  <Card onClick={openRtiStudentSupport}>
+                    <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.rtiStudentSupport}</div>
+                    <div style={{ marginTop: "8px", color: "#4b5563" }}>
+                      {t.rtiStudentSupportHelp}
+                    </div>
+                    <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openRti}</div>
+                  </Card>
+
+                  <Card onClick={viewManageHomeroom}>
+                    <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.manageHomeroom}</div>
+                    <div style={{ marginTop: "8px", color: "#4b5563" }}>
+                      {t.manageHomeroomHelp}
+                    </div>
+                    <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openHomeroom}</div>
+                  </Card>
+                </>
               ) : null}
             </div>
           </section>
