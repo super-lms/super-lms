@@ -1254,6 +1254,29 @@ async function ensureAssignmentSectionTables() {
   `).catch(() => {});
 }
 
+async function ensureAssignmentResourceTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assignment_resources (
+      id SERIAL PRIMARY KEY,
+      assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+      resource_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      resource_url TEXT NOT NULL,
+      original_name TEXT DEFAULT '',
+      stored_name TEXT DEFAULT '',
+      file_path TEXT DEFAULT '',
+      mime_type TEXT DEFAULT '',
+      size_bytes INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS assignment_resources_assignment_id_idx
+    ON assignment_resources (assignment_id)
+  `);
+}
+
 function rawPercentToCompetencyLevel(earnedPoints, maxPoints) {
   const earned = Number(earnedPoints);
   const max = Number(maxPoints);
@@ -3950,6 +3973,89 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
   } catch (err) {
     console.error("PUT /api/assignments/:assignmentId failed:", err);
     return res.status(500).json({ error: "Failed to update assignment" });
+  }
+});
+
+app.get("/api/assignments/:assignmentId/resources", authenticateJWT, async (req, res) => {
+  try {
+    const assignmentId = Number(req.params.assignmentId);
+    if (!assignmentId) return res.status(400).json({ error: "Valid assignmentId is required" });
+
+    await ensureAssignmentResourceTables();
+    const result = await pool.query(
+      `SELECT * FROM assignment_resources WHERE assignment_id = $1 ORDER BY created_at ASC, id ASC`,
+      [assignmentId]
+    );
+    return res.json({ resources: result.rows });
+  } catch (err) {
+    console.error("GET assignment resources failed:", err);
+    return res.status(500).json({ error: "Failed to load assignment resources" });
+  }
+});
+
+app.post("/api/assignments/:assignmentId/resources", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const assignmentId = Number(req.params.assignmentId);
+    const resourceType = String(req.body.resource_type || "link").trim().toLowerCase();
+    const title = String(req.body.title || "").trim();
+    const resourceUrl = String(req.body.resource_url || "").trim();
+    if (!assignmentId) return res.status(400).json({ error: "Valid assignmentId is required" });
+    if (!["link", "video"].includes(resourceType)) return res.status(400).json({ error: "Resource type must be link or video" });
+    if (!title || !resourceUrl) return res.status(400).json({ error: "A title and URL are required" });
+    try {
+      const parsedUrl = new URL(resourceUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new Error("invalid");
+    } catch {
+      return res.status(400).json({ error: "Enter a valid http or https URL" });
+    }
+
+    await ensureAssignmentResourceTables();
+    const result = await pool.query(
+      `INSERT INTO assignment_resources (assignment_id, resource_type, title, resource_url)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [assignmentId, resourceType, title, resourceUrl]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("POST assignment resource failed:", err);
+    return res.status(500).json({ error: "Failed to add assignment resource" });
+  }
+});
+
+app.post("/api/assignments/:assignmentId/resources/file", authenticateJWT, requireRole("admin", "teacher"), upload.single("attachment"), async (req, res) => {
+  try {
+    const assignmentId = Number(req.params.assignmentId);
+    if (!assignmentId || !req.file) return res.status(400).json({ error: "Choose a file to upload" });
+    const title = String(req.body.title || req.file.originalname || "Assignment file").trim();
+    await ensureAssignmentResourceTables();
+    const result = await pool.query(
+      `INSERT INTO assignment_resources
+       (assignment_id, resource_type, title, resource_url, original_name, stored_name, file_path, mime_type, size_bytes)
+       VALUES ($1, 'file', $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [assignmentId, title, `/uploads/${req.file.filename}`, req.file.originalname, req.file.filename, req.file.path, req.file.mimetype, req.file.size]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    console.error("POST assignment resource file failed:", err);
+    return res.status(500).json({ error: "Failed to upload assignment file" });
+  }
+});
+
+app.delete("/api/assignments/:assignmentId/resources/:resourceId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    await ensureAssignmentResourceTables();
+    const result = await pool.query(
+      `DELETE FROM assignment_resources WHERE id = $1 AND assignment_id = $2 RETURNING *`,
+      [Number(req.params.resourceId), Number(req.params.assignmentId)]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Resource not found" });
+    const resource = result.rows[0];
+    if (resource.resource_type === "file" && resource.file_path) fs.unlink(resource.file_path, () => {});
+    return res.json({ success: true, deleted: resource });
+  } catch (err) {
+    console.error("DELETE assignment resource failed:", err);
+    return res.status(500).json({ error: "Failed to delete assignment resource" });
   }
 });
 
@@ -10648,6 +10754,7 @@ Promise.all([
   ensureStudentReportCommentsTable(),
   ensureAttendanceTables(),
   ensureAssignmentSectionTables(),
+  ensureAssignmentResourceTables(),
   ensureLearningPathItemTables(),
   ensureAssessmentTables(),
 ])

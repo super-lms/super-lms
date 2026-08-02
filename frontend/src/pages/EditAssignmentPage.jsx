@@ -99,6 +99,14 @@ export default function EditAssignmentPage() {
   const [assignmentSections, setAssignmentSections] = useState([]);
   const [sectionSaving, setSectionSaving] = useState(false);
   const [sectionSaveMessage, setSectionSaveMessage] = useState("");
+  const [assignmentResources, setAssignmentResources] = useState([]);
+  const [resourceType, setResourceType] = useState("link");
+  const [resourceTitle, setResourceTitle] = useState("");
+  const [resourceUrl, setResourceUrl] = useState("");
+  const [resourceFile, setResourceFile] = useState(null);
+  const [resourceSaving, setResourceSaving] = useState(false);
+  const [resourceMessage, setResourceMessage] = useState("");
+  const [resourceError, setResourceError] = useState("");
 
   const selectedCategory = useMemo(() => {
     return (
@@ -225,6 +233,7 @@ export default function EditAssignmentPage() {
       await loadKduRubric();
       await loadFullKduRubric();
       await loadAssignmentSections();
+      await loadAssignmentResources();
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to load assignment");
@@ -448,6 +457,55 @@ export default function EditAssignmentPage() {
       setError(err.message || "Failed to load assignment sections");
       setAssignmentSections([]);
     }
+  }
+
+  async function loadAssignmentResources() {
+    const res = await authFetch(`/api/assignments/${assignmentId}/resources`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load assignment resources");
+    setAssignmentResources(Array.isArray(data.resources) ? data.resources : []);
+  }
+
+  async function addAssignmentResource() {
+    try {
+      setResourceSaving(true);
+      setResourceError("");
+      setResourceMessage("");
+      let res;
+      if (resourceType === "file") {
+        if (!resourceFile) throw new Error("Choose a file to upload");
+        const formData = new FormData();
+        formData.append("attachment", resourceFile);
+        formData.append("title", resourceTitle || resourceFile.name);
+        res = await authFetch(`/api/assignments/${assignmentId}/resources/file`, { method: "POST", body: formData });
+      } else {
+        res = await authFetch(`/api/assignments/${assignmentId}/resources`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resource_type: resourceType, title: resourceTitle, resource_url: resourceUrl }),
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add resource");
+      setResourceTitle("");
+      setResourceUrl("");
+      setResourceFile(null);
+      setResourceMessage("Resource added successfully.");
+      await loadAssignmentResources();
+    } catch (err) {
+      setResourceError(err.message || "Failed to add resource");
+    } finally {
+      setResourceSaving(false);
+    }
+  }
+
+  async function deleteAssignmentResource(resourceId) {
+    if (!window.confirm("Remove this resource from the assignment?")) return;
+    const res = await authFetch(`/api/assignments/${assignmentId}/resources/${resourceId}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) return setResourceError(data.error || "Failed to remove resource");
+    setResourceMessage("Resource removed.");
+    await loadAssignmentResources();
   }
 
   function updateAssignmentSection(index, field, value) {
@@ -1230,6 +1288,38 @@ export default function EditAssignmentPage() {
               </div>
             </div>
           </WorkflowStep>
+
+          <div style={{ border: "1px solid #d7dce5", borderRadius: "14px", padding: "18px", background: "#fff" }}>
+            <h2 style={{ marginTop: 0 }}>Assignment Resources</h2>
+            <p style={{ color: "#4b5563" }}>Add files, website links, or videos students can use with this assignment.</p>
+            <div style={{ display: "grid", gap: "12px" }}>
+              <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} style={inputStyle}>
+                <option value="link">Website link</option>
+                <option value="video">Video link</option>
+                <option value="file">File upload</option>
+              </select>
+              <input value={resourceTitle} onChange={(e) => setResourceTitle(e.target.value)} placeholder="Resource title" style={inputStyle} />
+              {resourceType === "file" ? (
+                <input type="file" onChange={(e) => setResourceFile(e.target.files?.[0] || null)} style={inputStyle} />
+              ) : (
+                <input value={resourceUrl} onChange={(e) => setResourceUrl(e.target.value)} placeholder="https://..." style={inputStyle} />
+              )}
+              <EditAssignmentActionButton type="button" onClick={addAssignmentResource} disabled={resourceSaving}>
+                {resourceSaving ? "Adding..." : "+ Add Resource"}
+              </EditAssignmentActionButton>
+              {resourceError ? <div style={{ color: "#b91c1c" }}>{resourceError}</div> : null}
+              {resourceMessage ? <div style={{ color: "#166534" }}>{resourceMessage}</div> : null}
+              <div style={{ display: "grid", gap: "8px" }}>
+                {assignmentResources.length ? assignmentResources.map((resource) => {
+                  const href = resource.resource_url?.startsWith("/") ? `${API_BASE}${resource.resource_url}` : resource.resource_url;
+                  return <div key={resource.id} style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between", padding: "12px", border: "1px solid #e5e7eb", borderRadius: "10px" }}>
+                    <a href={href} target="_blank" rel="noreferrer"><strong>{resource.title}</strong> ({resource.resource_type})</a>
+                    <EditAssignmentActionButton type="button" onClick={() => deleteAssignmentResource(resource.id)} quiet>Remove</EditAssignmentActionButton>
+                  </div>;
+                }) : <div style={{ color: "#6b7280" }}>No resources attached yet.</div>}
+              </div>
+            </div>
+          </div>
 
           <WorkflowStep number="2" title="Assessment Group">
             <p style={{ color: "#4b5563", lineHeight: 1.5 }}>

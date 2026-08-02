@@ -201,6 +201,8 @@ function SubmissionEditor({
   deletingAttachmentId = "",
   onAttachmentFileChange,
   onDeleteAttachment,
+  resources = [],
+  resourcesLoading = false,
 }) {
   const submissionStatusLabel = formatSubmissionStatus(submissionState?.submission_status || "not_submitted")
   const existingFeedback = submissionState?.submission?.feedback || ""
@@ -232,6 +234,28 @@ function SubmissionEditor({
       {assignment?.description ? (
         <div style={{ marginBottom: "16px", color: "#4b5563", lineHeight: 1.5 }}>
           <strong>Assignment Details:</strong> {assignment.description}
+        </div>
+      ) : null}
+
+      {resourcesLoading ? (
+        <NoticeBox>Loading assignment resources...</NoticeBox>
+      ) : resources.length ? (
+        <div style={{ marginBottom: "18px", border: "1px solid #d7dce5", borderRadius: "12px", padding: "14px", background: "#f8fafc" }}>
+          <div style={{ fontWeight: 800, marginBottom: "10px" }}>Learning Resources</div>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {resources.map((resource) => {
+              const href = resource.resource_url?.startsWith("/")
+                ? `${API_BASE}${resource.resource_url}`
+                : resource.resource_url
+
+              return (
+                <a key={resource.id} href={href} target="_blank" rel="noreferrer" style={{ color: "#111827", fontWeight: 700 }}>
+                  {resource.title || resource.original_name || "Open resource"}
+                  {resource.resource_type ? ` (${resource.resource_type})` : ""}
+                </a>
+              )
+            })}
+          </div>
         </div>
       ) : null}
 
@@ -451,6 +475,8 @@ export default function StudentDashboardPage() {
   const [submissionSaveMessage, setSubmissionSaveMessage] = useState("")
   const [submissionHasUnsavedChanges, setSubmissionHasUnsavedChanges] = useState(false)
   const [submissionAttachmentsByAssignmentId, setSubmissionAttachmentsByAssignmentId] = useState({})
+  const [assignmentResourcesByAssignmentId, setAssignmentResourcesByAssignmentId] = useState({})
+  const [assignmentResourceLoadingId, setAssignmentResourceLoadingId] = useState("")
   const [attachmentLoadingId, setAttachmentLoadingId] = useState("")
   const [attachmentUploadingId, setAttachmentUploadingId] = useState("")
   const [courseProgressLoading, setCourseProgressLoading] = useState(false)
@@ -551,6 +577,10 @@ export default function StudentDashboardPage() {
 
   const selectedSubmissionAttachments = selectedSubmissionAssignmentId
     ? submissionAttachmentsByAssignmentId[String(selectedSubmissionAssignmentId)] || []
+    : []
+
+  const selectedAssignmentResources = selectedSubmissionAssignmentId
+    ? assignmentResourcesByAssignmentId[String(selectedSubmissionAssignmentId)] || []
     : []
 
   const latestResultAssignment = useMemo(() => {
@@ -749,13 +779,41 @@ export default function StudentDashboardPage() {
       setSubmissionDraftText(data?.submission?.content || "")
       setSubmissionHasUnsavedChanges(false)
       setSubmissionErrorText("")
-      await loadSubmissionAttachments(assignmentId, studentEmail)
+      await Promise.all([
+        loadSubmissionAttachments(assignmentId, studentEmail),
+        loadAssignmentResources(assignmentId),
+      ])
     } catch (err) {
       console.error("Error loading student submission:", err)
       setSubmissionErrorText("Failed to load submission details.")
       setSubmissionDraftText("")
     } finally {
       setSubmissionLoadingId("")
+    }
+  }
+
+  async function loadAssignmentResources(assignmentId) {
+    try {
+      setAssignmentResourceLoadingId(String(assignmentId))
+      const response = await authFetch(`/api/assignments/${assignmentId}/resources`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load assignment resources.")
+      }
+
+      setAssignmentResourcesByAssignmentId((current) => ({
+        ...current,
+        [String(assignmentId)]: Array.isArray(data.resources) ? data.resources : [],
+      }))
+    } catch (err) {
+      console.error("Error loading assignment resources:", err)
+      setAssignmentResourcesByAssignmentId((current) => ({
+        ...current,
+        [String(assignmentId)]: [],
+      }))
+    } finally {
+      setAssignmentResourceLoadingId("")
     }
   }
 
@@ -1236,6 +1294,8 @@ export default function StudentDashboardPage() {
               deletingAttachmentId={deletingAttachmentId}
               onAttachmentFileChange={handleAttachmentFileChange}
               onDeleteAttachment={handleDeleteAttachment}
+              resources={selectedAssignmentResources}
+              resourcesLoading={String(assignmentResourceLoadingId) === String(selectedSubmissionAssignmentId)}
             />
           </section>
         ) : null}
