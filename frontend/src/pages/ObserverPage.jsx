@@ -49,6 +49,18 @@ function InfoLine({ label, value }) {
   )
 }
 
+function formatPercent(value, digits = 1) {
+  if (value === null || value === undefined || value === "") return "N/A"
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue) ? `${numericValue.toFixed(digits)}%` : "N/A"
+}
+
+function formatKdu(value) {
+  if (value === null || value === undefined || value === "") return "—"
+  const numericValue = Number(value)
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "—"
+}
+
 const translations = {
   en: {
     observerPortal: "Observer Portal",
@@ -420,6 +432,15 @@ export default function ObserverPage() {
   const readOnlyAverageScore = readOnlyGradedItems.length
     ? Math.round(readOnlyGradedItems.reduce((sum, item) => sum + Number(item.submission.score || 0), 0) / readOnlyGradedItems.length)
     : null
+  const readOnlyGradebook = courseDashboard?.gradebook || null
+  const readOnlyCurrentStanding = readOnlyGradebook?.current_percent ?? readOnlyAverageScore
+
+  function openReadOnlyGradebook() {
+    document.getElementById("observer-student-gradebook")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    })
+  }
 
   const allVisibleSubmissions = observerData.submissions
 
@@ -1174,8 +1195,14 @@ export default function ObserverPage() {
             <div style={metricGridStyle}>
               <MetricCard title="Visible Assignments" value={courseDashboardReady ? readOnlyCourseItems.length : "—"} />
               <MetricCard title="Missing / Needs Attention" value={courseDashboardReady ? readOnlyMissingItems.length : "—"} />
-              <MetricCard title="Average Score" value={readOnlyAverageScore === null ? "N/A" : `${readOnlyAverageScore}%`} />
+              <MetricCard title="Current Standing" value={readOnlyCurrentStanding === null ? "N/A" : formatPercent(readOnlyCurrentStanding)} />
               <MetricCard title="Lessons" value={toArray(courseDashboard?.lessons).length} />
+            </div>
+
+            <div style={{ ...buttonRowStyle, marginTop: "16px" }}>
+              <button type="button" onClick={openReadOnlyGradebook} style={actionButtonStyle}>
+                Open Read-only Gradebook
+              </button>
             </div>
 
             {courseDashboardLoading ? <p style={{ fontWeight: 800 }}>Loading the full course view…</p> : null}
@@ -1186,6 +1213,78 @@ export default function ObserverPage() {
                 <p style={emptyStateTextStyle}>Restart the backend server, then reopen this course.</p>
               </div>
             ) : null}
+          </section>
+
+          <section id="observer-student-gradebook" style={{ ...sectionStyle, scrollMarginTop: "20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+              <div>
+                <h2 style={sectionTitleStyle}>Read-only Student Gradebook</h2>
+                <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
+                  This is the student’s official course-grade view. Homeroom teachers, parents, and observers can
+                  review it, but only the BC course teacher can enter or change marks.
+                </p>
+              </div>
+              <button type="button" onClick={() => window.print()} style={backButtonStyle}>
+                Print Gradebook
+              </button>
+            </div>
+
+            {!courseDashboardReady ? (
+              <div style={emptyStateStyle}>
+                <div style={emptyStateTitleStyle}>Waiting for gradebook records…</div>
+                <p style={emptyStateTextStyle}>The weighted course results will appear when loading is complete.</p>
+              </div>
+            ) : (
+              <>
+                <div style={metricGridStyle}>
+                  <MetricCard title="Current Standing" value={readOnlyGradebook?.current_percent == null ? "N/A" : formatPercent(readOnlyGradebook.current_percent)} />
+                  <MetricCard title="Proficiency" value={readOnlyGradebook?.proficiency || "Not available"} />
+                  <MetricCard title="Graded Weight" value={formatPercent(readOnlyGradebook?.graded_weight_percent || 0)} />
+                  <MetricCard title="Earned Course Points" value={formatPercent(readOnlyGradebook?.earned_course_points || 0)} />
+                </div>
+
+                <div style={{ marginTop: "18px" }}>
+                  <h3 style={{ margin: "0 0 10px", fontSize: "1.15rem" }}>KDU Evidence Snapshot</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+                    {[
+                      ["KNOW", readOnlyGradebook?.kdu_summary?.KNOW],
+                      ["DO", readOnlyGradebook?.kdu_summary?.DO],
+                      ["UNDERSTAND", readOnlyGradebook?.kdu_summary?.UNDERSTAND],
+                    ].map(([label, value]) => (
+                      <Card key={label}>
+                        <div style={{ fontWeight: 900 }}>{label}</div>
+                        <div style={{ marginTop: "6px", fontSize: "1.5rem", fontWeight: 900 }}>{formatKdu(value)}</div>
+                        <div style={{ marginTop: "4px", color: "#4b5563" }}>Average evidence level out of 6</div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: "20px" }}>
+                  <h3 style={{ margin: "0 0 10px", fontSize: "1.15rem" }}>Grading Pathways and Evidence Tiers</h3>
+                  {toArray(readOnlyGradebook?.group_breakdown).length === 0 ? (
+                    <div style={emptyStateStyle}>
+                      <div style={emptyStateTitleStyle}>No grading pathways are available for this course.</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: "10px" }}>
+                      {readOnlyGradebook.group_breakdown.map((group) => (
+                        <Card key={`gradebook-group-${group.subcategory_id}`}>
+                          <div style={{ fontWeight: 900, fontSize: "1.05rem" }}>{group.category_name}</div>
+                          <div style={{ marginTop: "4px", color: "#4b5563", fontWeight: 700 }}>{group.subcategory_name}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: "8px", marginTop: "12px" }}>
+                            <InfoLine label="Course Weight" value={formatPercent(group.course_weight_percent)} />
+                            <InfoLine label="Graded Assignments" value={`${group.graded_assignment_count} of ${group.assignment_count}`} />
+                            <InfoLine label="Tier Average" value={group.average_score == null ? "Not graded" : formatPercent(group.average_score)} />
+                            <InfoLine label="Course Contribution" value={formatPercent(group.earned_course_points)} />
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </section>
 
           <section style={sectionStyle}>

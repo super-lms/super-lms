@@ -3916,16 +3916,18 @@ app.get(
         return res.status(403).json({ error: "This student course is not linked to this observer" });
       }
 
-      const [courseResult, assignmentsResult, submissionsResult, lessonsResult] = await Promise.all([
+      const [courseResult, assignmentsResult, submissionsResult, lessonsResult, groupsResult] = await Promise.all([
         pool.query(`SELECT * FROM courses WHERE id = $1 LIMIT 1`, [courseId]),
         pool.query(
           `
           SELECT
             a.*,
+            cc.id AS category_id,
             cs.name AS subcategory_name,
             cc.name AS category_name,
             cc.weight_percent AS category_weight_percent,
-            cs.weight_percent_of_parent
+            cs.weight_percent_of_parent,
+            ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS course_weight_percent
           FROM assignments a
           LEFT JOIN LATERAL (
             SELECT cs_inner.*
@@ -3965,6 +3967,23 @@ app.get(
            FROM lessons WHERE course_id = $1 ORDER BY order_index ASC, id ASC`,
           [courseId]
         ),
+        pool.query(
+          `
+          SELECT
+            cc.id AS category_id,
+            cc.name AS category_name,
+            cc.weight_percent AS category_weight_percent,
+            cs.id AS subcategory_id,
+            cs.name AS subcategory_name,
+            cs.weight_percent_of_parent,
+            ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS course_weight_percent
+          FROM course_categories cc
+          INNER JOIN category_subcategories cs ON cs.course_category_id = cc.id
+          WHERE cc.course_id = $1
+          ORDER BY cc.sort_order, cc.id, cs.sort_order, cs.id
+          `,
+          [courseId]
+        ),
       ]);
 
       if (courseResult.rows.length === 0) {
@@ -3989,11 +4008,120 @@ app.get(
         };
       });
 
+      const parseRubricSelection = (value) => {
+        if (!value) return {};
+        if (typeof value === "object") return value;
+        try {
+          return JSON.parse(value);
+        } catch {
+          return {};
+        }
+      };
+
+      const assignmentScores = assignmentsResult.rows.map((assignment) => {
+        const submission = submissionsByAssignmentId[String(assignment.id)] || null;
+        const scoreValue = submission?.score;
+        const score = scoreValue === null || scoreValue === undefined || scoreValue === ""
+          ? null
+          : Number(scoreValue);
+        return {
+          assignment_id: assignment.id,
+          assignment_title: assignment.title,
+          due_date: assignment.due_date,
+          category_id: assignment.category_id,
+          category_name: assignment.category_name,
+          subcategory_id: assignment.subcategory_id,
+          subcategory_name: assignment.subcategory_name,
+          course_weight_percent: Number(assignment.course_weight_percent || 0),
+          score: Number.isFinite(score) ? score : null,
+          grade: submission?.grade || null,
+          feedback: submission?.feedback || "",
+          rubric_selection: parseRubricSelection(submission?.rubric_selection),
+          submission_status: submissionStatesByAssignmentId[String(assignment.id)]?.submission_status || "not_submitted",
+        };
+      });
+
+      const scoresByGroup = new Map();
+      assignmentScores.forEach((item) => {
+        if (!item.subcategory_id || item.score === null) return;
+        const key = String(item.subcategory_id);
+        if (!scoresByGroup.has(key)) scoresByGroup.set(key, []);
+        scoresByGroup.get(key).push(item.score);
+      });
+
+      let earnedCoursePoints = 0;
+      let gradedWeightPercent = 0;
+      const groupBreakdown = groupsResult.rows.map((group) => {
+        const scores = scoresByGroup.get(String(group.subcategory_id)) || [];
+        const averageScore = scores.length
+          ? scores.reduce((sum, score) => sum + Number(score || 0), 0) / scores.length
+          : null;
+        const courseWeightPercent = Number(group.course_weight_percent || 0);
+        const contribution = averageScore === null ? 0 : (averageScore * courseWeightPercent) / 100;
+        if (averageScore !== null) {
+          earnedCoursePoints += contribution;
+          gradedWeightPercent += courseWeightPercent;
+        }
+        return {
+          ...group,
+          category_weight_percent: Number(group.category_weight_percent || 0),
+          weight_percent_of_parent: Number(group.weight_percent_of_parent || 0),
+          course_weight_percent: courseWeightPercent,
+          assignment_count: assignmentScores.filter(
+            (item) => String(item.subcategory_id || "") === String(group.subcategory_id)
+          ).length,
+          graded_assignment_count: scores.length,
+          average_score: averageScore === null ? null : Number(averageScore.toFixed(2)),
+          earned_course_points: Number(contribution.toFixed(2)),
+        };
+      });
+
+      const kduBuckets = { KNOW: [], DO: [], UNDERSTAND: [] };
+      assignmentScores.forEach((item) => {
+        const rubric = item.rubric_selection || {};
+        const values = {
+          KNOW: rubric.KNOW ?? rubric.knowScore,
+          DO: rubric.DO ?? rubric.doScore,
+          UNDERSTAND: rubric.UNDERSTAND ?? rubric.understandScore,
+        };
+        Object.entries(values).forEach(([bucket, value]) => {
+          const numericValue = Number(value);
+          if (Number.isFinite(numericValue) && numericValue > 0) kduBuckets[bucket].push(numericValue);
+        });
+      });
+      const kduSummary = Object.fromEntries(
+        Object.entries(kduBuckets).map(([bucket, values]) => [
+          bucket,
+          values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,
+        ])
+      );
+      const currentPercent = gradedWeightPercent > 0
+        ? (earnedCoursePoints / gradedWeightPercent) * 100
+        : null;
+      const proficiency = currentPercent === null
+        ? null
+        : currentPercent >= 86
+          ? "Extending"
+          : currentPercent >= 73
+            ? "Proficient"
+            : currentPercent >= 60
+              ? "Developing"
+              : "Emerging";
+
       return res.json({
         course: courseResult.rows[0],
         assignments: assignmentsResult.rows,
         lessons: lessonsResult.rows,
         submissionStatesByAssignmentId,
+        gradebook: {
+          assignment_scores: assignmentScores,
+          group_breakdown: groupBreakdown,
+          earned_course_points: Number(earnedCoursePoints.toFixed(2)),
+          graded_weight_percent: Number(gradedWeightPercent.toFixed(2)),
+          current_percent: currentPercent === null ? null : Number(currentPercent.toFixed(2)),
+          proficiency,
+          kdu_summary: kduSummary,
+        },
       });
     } catch (err) {
       console.error("GET observer student course dashboard failed:", err);
