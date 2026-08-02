@@ -6667,6 +6667,60 @@ app.post("/api/learning-paths/:learningPathId/items", authenticateJWT, requireRo
 
 
 
+app.post(
+  "/api/learning-path-items/:itemId/attachment",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  upload.single("attachment"),
+  async (req, res) => {
+    try {
+      await ensureLearningPathItemTables();
+      const itemId = Number(req.params.itemId);
+
+      if (!itemId) {
+        if (req.file?.path) fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: "Valid itemId is required" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "Resource file is required" });
+      }
+
+      const resourceUrl = `/uploads/${req.file.filename}`;
+      const result = await pool.query(
+        `
+        UPDATE learning_path_items
+        SET resource_url = $1,
+            updated_at = NOW()
+        WHERE id = $2
+        RETURNING *
+        `,
+        [resourceUrl, itemId]
+      );
+
+      if (result.rows.length === 0) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: "Learning path item not found" });
+      }
+
+      return res.json({
+        success: true,
+        item: result.rows[0],
+        attachment: {
+          original_name: req.file.originalname || req.file.filename,
+          resource_url: resourceUrl,
+          mime_type: req.file.mimetype || "",
+          size_bytes: Number(req.file.size || 0),
+        },
+      });
+    } catch (err) {
+      if (req.file?.path) fs.unlink(req.file.path, () => {});
+      console.error("POST /api/learning-path-items/:itemId/attachment failed:", err);
+      return res.status(500).json({ error: "Failed to upload Learning Path resource" });
+    }
+  }
+);
+
 app.post("/api/learning-paths/:learningPathId/create-lesson", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
 

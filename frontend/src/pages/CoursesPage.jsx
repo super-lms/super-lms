@@ -42,6 +42,16 @@ function getLearningPathItemLabel(type) {
   return "Item"
 }
 
+function getLearningPathResourceHref(resourceUrl) {
+  const cleanUrl = String(resourceUrl || "").trim()
+
+  if (!cleanUrl) return ""
+  if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) return cleanUrl
+  if (cleanUrl.startsWith("/uploads/")) return `${API_BASE}${cleanUrl}`
+
+  return cleanUrl
+}
+
 export default function CoursesPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -125,6 +135,7 @@ export default function CoursesPage() {
   const [savingItemId, setSavingItemId] = useState(null)
   const [deletingItemId, setDeletingItemId] = useState(null)
   const [movingLearningPathItemKey, setMovingLearningPathItemKey] = useState(null)
+  const [uploadingResourceItemId, setUploadingResourceItemId] = useState(null)
 
   const [allAssignments, setAllAssignments] = useState([])
   const [assignmentsLoading, setAssignmentsLoading] = useState(false)
@@ -1981,6 +1992,10 @@ export default function CoursesPage() {
 
       setMessage(`${label} added to ${learningPath.title}.`)
       await loadLearningPathItems(learningPath.id)
+
+      if (itemType === "resource" && data.item) {
+        startEditingLearningPathItem(data.item)
+      }
     } catch (err) {
       setError(err.message || "Failed to create Learning Path item")
     } finally {
@@ -2250,6 +2265,36 @@ export default function CoursesPage() {
       setError(err.message || "Failed to save Learning Path item")
     } finally {
       setSavingItemId(null)
+    }
+  }
+
+  async function uploadLearningPathResource(learningPathId, item, file) {
+    if (!file) return
+
+    const formData = new FormData()
+    formData.append("attachment", file)
+
+    try {
+      setUploadingResourceItemId(item.id)
+      setMessage("")
+      setError("")
+
+      const res = await authFetch(`${API_BASE}/api/learning-path-items/${item.id}/attachment`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || "Failed to upload resource file")
+
+      const resourceUrl = data.item?.resource_url || data.attachment?.resource_url || ""
+      updateItemDraft(item.id, "resource_url", resourceUrl)
+      setMessage(`Resource uploaded: ${data.attachment?.original_name || file.name}`)
+      await loadLearningPathItems(learningPathId)
+    } catch (err) {
+      setError(err.message || "Failed to upload resource file")
+    } finally {
+      setUploadingResourceItemId(null)
     }
   }
 
@@ -4015,6 +4060,29 @@ export default function CoursesPage() {
                                                     />
                                                   </div>
 
+                                                  {String(itemType || "").toLowerCase() === "resource" ? (
+                                                    <div>
+                                                      <label style={labelStyle}>Upload Resource File</label>
+                                                      <input
+                                                        type="file"
+                                                        onChange={(event) =>
+                                                          uploadLearningPathResource(
+                                                            pathItem.id,
+                                                            item,
+                                                            event.target.files?.[0]
+                                                          )
+                                                        }
+                                                        disabled={uploadingResourceItemId === item.id}
+                                                        style={inputStyle}
+                                                      />
+                                                      <div style={{ color: "#4b5563", marginTop: "6px", lineHeight: 1.5 }}>
+                                                        {uploadingResourceItemId === item.id
+                                                          ? "Uploading resource..."
+                                                          : "Upload one file up to 10 MB, or paste a Resource URL above."}
+                                                      </div>
+                                                    </div>
+                                                  ) : null}
+
                                                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                                                     <button
                                                       type="button"
@@ -4085,7 +4153,7 @@ export default function CoursesPage() {
                                                   ) : null}
 
                                                   {item.resource_url ? (
-                                                    <a href={item.resource_url} target="_blank" rel="noreferrer" style={resourceLinkStyle}>
+                                                    <a href={getLearningPathResourceHref(item.resource_url)} target="_blank" rel="noreferrer" style={resourceLinkStyle}>
                                                       Open Resource
                                                     </a>
                                                   ) : null}
