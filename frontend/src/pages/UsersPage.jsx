@@ -30,10 +30,12 @@ const emptyObserverDraft = {
 
 const userTabs = [
   { key: "all", label: "All" },
-  { key: "teacher", label: "Teachers" },
-  { key: "student", label: "Students" },
   { key: "admin", label: "Administrators" },
-  { key: "observer", label: "Observers" },
+  { key: "teacher", label: "BC Teachers" },
+  { key: "chinese_homeroom_teacher", label: "Chinese Homeroom Teachers" },
+  { key: "parent", label: "Parents" },
+  { key: "observer", label: "Staff Observers" },
+  { key: "student", label: "Students" },
 ];
 
 function getDisplayName(user, fallback = "Unnamed user") {
@@ -52,9 +54,39 @@ function getUserRole(user) {
   return String(user?.role || "").trim().toLowerCase();
 }
 
-function isObserverUser(user) {
+function getObserverRelationship(user) {
+  const relationship = String(
+    user?.observer_relationship || user?.relationship || ""
+  ).trim().toLowerCase();
+
+  if (["parent", "chinese_homeroom_teacher", "observer"].includes(relationship)) {
+    return relationship;
+  }
+
+  return getUserRole(user) === "parent" ? "parent" : "observer";
+}
+
+function getUserTypeKey(user) {
   const role = getUserRole(user);
-  return role === "observer" || role === "parent";
+  if (["admin", "teacher", "student"].includes(role)) return role;
+  if (["observer", "parent"].includes(role)) return getObserverRelationship(user);
+  return role || "unknown";
+}
+
+function getUserTypeLabel(user) {
+  const labels = {
+    admin: "Administrator",
+    teacher: "BC Teacher",
+    student: "Student",
+    chinese_homeroom_teacher: "Chinese Homeroom Teacher",
+    parent: "Parent",
+    observer: "Staff Observer",
+  };
+  return labels[getUserTypeKey(user)] || "Not recorded";
+}
+
+function isObserverUser(user) {
+  return ["observer", "parent", "chinese_homeroom_teacher"].includes(getUserTypeKey(user));
 }
 
 function normalizeId(value) {
@@ -291,8 +323,8 @@ function UsersPage() {
       }
 
       setObserverForm(emptyObserverForm);
-      setObserverMessage("Observer added successfully. Link student access in the edit panel.");
-      setActiveTab("observer");
+      setObserverMessage("Read-only account added successfully. Link student access in the edit panel.");
+      setActiveTab(cleanObserver.relationship);
       await loadUsers();
 
       if (data?.observer?.id) {
@@ -318,8 +350,12 @@ function UsersPage() {
     return users.filter((user) => getUserRole(user) === "admin");
   }, [users]);
 
-  const observers = useMemo(() => {
-    return users.filter((user) => isObserverUser(user));
+  const userTypeCounts = useMemo(() => {
+    return users.reduce((counts, user) => {
+      const type = getUserTypeKey(user);
+      counts[type] = (counts[type] || 0) + 1;
+      return counts;
+    }, {});
   }, [users]);
 
   const filteredUsers = useMemo(() => {
@@ -328,11 +364,7 @@ function UsersPage() {
     const tabFilteredUsers = (() => {
       if (activeTab === "all") return users;
 
-      if (activeTab === "observer") {
-        return users.filter((user) => isObserverUser(user));
-      }
-
-      return users.filter((user) => getUserRole(user) === activeTab);
+      return users.filter((user) => getUserTypeKey(user) === activeTab);
     })();
 
     if (!cleanSearch) return tabFilteredUsers;
@@ -342,6 +374,8 @@ function UsersPage() {
         getDisplayName(user),
         user.email,
         user.role,
+        getUserTypeLabel(user),
+        user.observer_relationship,
         getUserStatus(user),
       ]
         .join(" ")
@@ -491,9 +525,9 @@ function UsersPage() {
     const relationshipLabel = observerDraft.relationship === "chinese_homeroom_teacher"
       ? "Chinese Homeroom Teacher"
       : observerDraft.relationship === "observer"
-        ? "Observer"
+        ? "Staff Observer"
         : "Parent";
-    const observerName = getDisplayName(editingUser, "this observer");
+    const observerName = getDisplayName(editingUser, "this account");
     const confirmed = window.confirm(
       `Assign ${cleanSelectedIds.length} student${cleanSelectedIds.length === 1 ? "" : "s"} to ${observerName} as ${relationshipLabel}? This will replace the observer's currently saved student list.`
     );
@@ -546,7 +580,7 @@ function UsersPage() {
           <div>
             <h2>Users</h2>
             <p className="section-subtitle">
-              Manage teacher accounts and review current users, including observer accounts for parents and Chinese Homeroom Teachers.
+              Manage administrators, BC Teachers, Chinese Homeroom Teachers, parents, staff observers, and students.
             </p>
           </div>
         </div>
@@ -556,16 +590,22 @@ function UsersPage() {
             <strong>Total Users:</strong> {users.length}
           </div>
           <div className="summary-card">
-            <strong>Teachers:</strong> {teachers.length}
+            <strong>Administrators:</strong> {userTypeCounts.admin || 0}
           </div>
           <div className="summary-card">
-            <strong>Students:</strong> {students.length}
+            <strong>BC Teachers:</strong> {userTypeCounts.teacher || 0}
           </div>
           <div className="summary-card">
-            <strong>Admins:</strong> {admins.length}
+            <strong>Chinese Homeroom Teachers:</strong> {userTypeCounts.chinese_homeroom_teacher || 0}
           </div>
           <div className="summary-card">
-            <strong>Observers:</strong> {observers.length}
+            <strong>Parents:</strong> {userTypeCounts.parent || 0}
+          </div>
+          <div className="summary-card">
+            <strong>Staff Observers:</strong> {userTypeCounts.observer || 0}
+          </div>
+          <div className="summary-card">
+            <strong>Students:</strong> {userTypeCounts.student || 0}
           </div>
         </div>
 
@@ -575,9 +615,9 @@ function UsersPage() {
       <section className="panel">
         <div className="section-header">
           <div>
-            <h3>Add Teacher Manually</h3>
+            <h3>Add BC Teacher Manually</h3>
             <p className="section-subtitle">
-              Create a teacher account or promote an existing user to teacher.
+              Create a BC Teacher account or promote an existing user to BC Teacher.
             </p>
           </div>
         </div>
@@ -617,7 +657,7 @@ function UsersPage() {
 
           <div>
             <button type="submit" className="primary-btn" disabled={savingTeacher}>
-              {savingTeacher ? "Adding Teacher..." : "Add Teacher"}
+              {savingTeacher ? "Adding BC Teacher..." : "Add BC Teacher"}
             </button>
           </div>
 
@@ -731,9 +771,9 @@ function UsersPage() {
       <section className="panel">
         <div className="section-header">
           <div>
-            <h3>Add Observer Manually</h3>
+            <h3>Add Read-only Account Manually</h3>
             <p className="section-subtitle">
-              Create a parent or Chinese Homeroom Teacher observer account, then link student access in the edit panel.
+              Create a Parent, Chinese Homeroom Teacher, or Staff Observer account, then link student access in the edit panel.
             </p>
           </div>
         </div>
@@ -742,7 +782,7 @@ function UsersPage() {
           <div className="form-grid">
             <div className="form-field">
               <label htmlFor="observer-name" className="form-label">
-                Observer Name
+                Account Name
               </label>
               <input
                 id="observer-name"
@@ -757,7 +797,7 @@ function UsersPage() {
 
             <div className="form-field">
               <label htmlFor="observer-email" className="form-label">
-                Observer Email
+                Account Email
               </label>
               <input
                 id="observer-email"
@@ -772,7 +812,7 @@ function UsersPage() {
 
             <div className="form-field">
               <label htmlFor="observer-relationship" className="form-label">
-                Observer Type
+                Account Type
               </label>
               <select
                 id="observer-relationship"
@@ -783,14 +823,14 @@ function UsersPage() {
               >
                 <option value="parent">Parent</option>
                 <option value="chinese_homeroom_teacher">Chinese Homeroom Teacher</option>
-                <option value="observer">Observer</option>
+                <option value="observer">Staff Observer</option>
               </select>
             </div>
           </div>
 
           <div>
             <button type="submit" className="primary-btn" disabled={savingObserver}>
-              {savingObserver ? "Adding Observer..." : "Add Observer"}
+              {savingObserver ? "Adding Account..." : "Add Read-only Account"}
             </button>
           </div>
 
@@ -804,7 +844,7 @@ function UsersPage() {
           <div>
             <h3>User Directory</h3>
             <p className="section-subtitle">
-              Use the filters to review teachers, students, administrators, and observers from one table.
+              Use the filters to review every account by its clearly defined school role.
             </p>
           </div>
         </div>
@@ -846,7 +886,7 @@ function UsersPage() {
               <tr>
                 <th>User</th>
                 <th>Email</th>
-                <th>Role</th>
+                <th>Account Type</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -861,7 +901,7 @@ function UsersPage() {
                   <tr key={user.id}>
                     <td>{getDisplayName(user)}</td>
                     <td>{user.email || "No email"}</td>
-                    <td>{user.role || "Not recorded"}</td>
+                    <td>{getUserTypeLabel(user)}</td>
                     <td>{getUserStatus(user)}</td>
                     <td>
                       <button

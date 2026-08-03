@@ -51,6 +51,7 @@ app.use("/api/users", adminUserRoutes);
 async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS observer_relationship TEXT`);
 }
 
 async function ensureStudentReportCommentsTable() {
@@ -1958,17 +1959,18 @@ app.post("/api/observers", authenticateJWT, requireRole("admin"), async (req, re
 
     const insertedResult = await pool.query(
       `
-      INSERT INTO users (name, first_name, last_name, email, role, password_hash)
-      VALUES ($1, $2, $3, $4, 'observer', 'OBSERVER_PENDING_PASSWORD')
+      INSERT INTO users (name, first_name, last_name, email, role, observer_relationship, password_hash)
+      VALUES ($1, $2, $3, $4, 'observer', $5, 'OBSERVER_PENDING_PASSWORD')
       ON CONFLICT (email) DO UPDATE
       SET name = EXCLUDED.name,
           first_name = EXCLUDED.first_name,
           last_name = EXCLUDED.last_name,
           role = 'observer',
+          observer_relationship = EXCLUDED.observer_relationship,
           password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)
-      RETURNING id, name, first_name, last_name, email, role
+      RETURNING id, name, first_name, last_name, email, role, observer_relationship
       `,
-      [name, firstName, lastName, email]
+      [name, firstName, lastName, email, relationship]
     );
 
     return res.status(201).json({
@@ -8326,6 +8328,7 @@ app.get("/api/users", authenticateJWT, requireRole("admin"), async (req, res) =>
         u.name,
         u.email,
         u.role,
+        u.observer_relationship,
         u.parent_email,
         u.student_id,
         u.created_at,
