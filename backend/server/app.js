@@ -8284,7 +8284,7 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
   }
 });
 
-app.delete("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+app.delete("/api/courses/:courseId", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);
 

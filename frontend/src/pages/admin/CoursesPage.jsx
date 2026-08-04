@@ -32,6 +32,8 @@ export default function AdminCoursesPage() {
   const [newCourseType, setNewCourseType] = useState("custom_competency")
   const [createStatus, setCreateStatus] = useState("idle")
   const [createError, setCreateError] = useState("")
+  const [deletingCourseId, setDeletingCourseId] = useState(null)
+  const [deleteError, setDeleteError] = useState("")
 
   async function loadSchoolData() {
     try {
@@ -170,6 +172,43 @@ export default function AdminCoursesPage() {
     } catch (err) {
       setCreateError(err.message || "Failed to create course")
       setCreateStatus("error")
+    }
+  }
+
+  async function deleteCourse(course) {
+    const courseId = course?.id
+    const courseTitle = String(course?.title || "Untitled Course")
+
+    if (!courseId || deletingCourseId) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete \"${courseTitle}\"?\n\nThis permanently removes the course and cannot be undone.`
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      setDeletingCourseId(courseId)
+      setDeleteError("")
+
+      const response = await authFetch(`/api/courses/${encodeURIComponent(courseId)}`, {
+        method: "DELETE",
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete course")
+      }
+
+      await loadSchoolData()
+    } catch (err) {
+      setDeleteError(err.message || "Failed to delete course")
+    } finally {
+      setDeletingCourseId(null)
     }
   }
 
@@ -396,6 +435,23 @@ export default function AdminCoursesPage() {
         </div>
       )}
 
+      {deleteError && (
+        <div
+          role="alert"
+          style={{
+            background: "#fef2f2",
+            border: "1px solid #b91c1c",
+            borderRadius: "14px",
+            padding: "14px 18px",
+            marginBottom: "18px",
+            color: "#7f1d1d",
+            fontWeight: 700,
+          }}
+        >
+          {deleteError}
+        </div>
+      )}
+
       {status === "ready" && groupedCourses.length === 0 && (
         <div
           style={{
@@ -431,21 +487,13 @@ export default function AdminCoursesPage() {
               }}
             >
               {group.courses.map((course) => (
-                <button
+                <div
                   key={course.id}
-                  type="button"
-                  onClick={() =>
-                    navigate(`/admin/courses/${encodeURIComponent(course.id)}`, {
-                      state: { course },
-                    })
-                  }
                   style={{
-                    textAlign: "left",
                     background: "white",
                     border: "1px solid #d7d7d7",
                     borderRadius: "14px",
                     padding: "18px",
-                    cursor: "pointer",
                   }}
                 >
                   <div
@@ -477,7 +525,54 @@ export default function AdminCoursesPage() {
                   >
                     {Number(course.student_count || 0)} students
                   </div>
-                </button>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      marginTop: "16px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(`/admin/courses/${encodeURIComponent(course.id)}`, {
+                          state: { course },
+                        })
+                      }
+                      style={{
+                        border: "1px solid #111827",
+                        borderRadius: "9px",
+                        background: "#111827",
+                        color: "white",
+                        padding: "9px 13px",
+                        fontWeight: 800,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Open Course
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteCourse(course)}
+                      disabled={deletingCourseId === course.id}
+                      style={{
+                        border: "1px solid #b91c1c",
+                        borderRadius: "9px",
+                        background: "white",
+                        color: "#b91c1c",
+                        padding: "9px 13px",
+                        fontWeight: 800,
+                        cursor:
+                          deletingCourseId === course.id ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {deletingCourseId === course.id ? "Deleting..." : "Delete Course"}
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           </section>
