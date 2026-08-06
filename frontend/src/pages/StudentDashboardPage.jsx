@@ -484,6 +484,16 @@ export default function StudentDashboardPage() {
   const [attachmentSuccessText, setAttachmentSuccessText] = useState("")
   const [attachmentSuccessByAssignmentId, setAttachmentSuccessByAssignmentId] = useState({})
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("")
+  const [safeReportOpen, setSafeReportOpen] = useState(false)
+  const [safeReportCategory, setSafeReportCategory] = useState("")
+  const [safeReportDescription, setSafeReportDescription] = useState("")
+  const [safeReportLocation, setSafeReportLocation] = useState("")
+  const [safeReportPeopleInvolved, setSafeReportPeopleInvolved] = useState("")
+  const [safeReportAttachment, setSafeReportAttachment] = useState(null)
+  const [safeReportSubmitting, setSafeReportSubmitting] = useState(false)
+  const [safeReportMessage, setSafeReportMessage] = useState("")
+  const [safeReportError, setSafeReportError] = useState("")
+
 
   const filteredLessons = useMemo(() => {
     if (!selectedCourseId) return []
@@ -1017,6 +1027,60 @@ export default function StudentDashboardPage() {
     })
   }
 
+  async function handleSafeReportSubmit(event) {
+    event.preventDefault()
+    setSafeReportError("")
+    setSafeReportMessage("")
+
+    if (!safeReportCategory) {
+      setSafeReportError("Please select a category.")
+      return
+    }
+
+    if (!safeReportDescription.trim()) {
+      setSafeReportError("Please describe what happened.")
+      return
+    }
+
+    const formData = new FormData()
+    formData.append("category", safeReportCategory)
+    formData.append("description", safeReportDescription.trim())
+    formData.append("location", safeReportLocation.trim())
+    formData.append("people_involved", safeReportPeopleInvolved.trim())
+
+    if (safeReportAttachment) {
+      formData.append("attachment", safeReportAttachment)
+    }
+
+    try {
+      setSafeReportSubmitting(true)
+
+      const response = await authFetch("/api/safe-reports", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not submit the report.")
+      }
+
+      setSafeReportCategory("")
+      setSafeReportDescription("")
+      setSafeReportLocation("")
+      setSafeReportPeopleInvolved("")
+      setSafeReportAttachment(null)
+      setSafeReportMessage(
+        `Your report was submitted successfully. Report #${data.report?.id || ""}`
+      )
+    } catch (error) {
+      setSafeReportError(error.message || "Could not submit the report.")
+    } finally {
+      setSafeReportSubmitting(false)
+    }
+  }
+
   function handleLogout() {
     logout()
     navigate("/login")
@@ -1173,6 +1237,149 @@ export default function StudentDashboardPage() {
               <div>{user?.role || "student"}</div>
             </DetailCard>
           </div>
+        </section>
+
+        <section
+          className="panel"
+          style={{
+            border: "2px solid #b91c1c",
+            background: "#fff7f7",
+          }}
+        >
+          <SectionHeader
+            title="Safe Report"
+            subtitle="Report a safety concern, bullying, harassment, threatening behaviour, or another situation where you or someone else may need help."
+            action={
+              <ActionButton
+                onClick={() => {
+                  setSafeReportOpen((current) => !current)
+                  setSafeReportError("")
+                  setSafeReportMessage("")
+                }}
+              >
+                {safeReportOpen ? "Close Safe Report" : "Make a Safe Report"}
+              </ActionButton>
+            }
+          />
+
+          {safeReportOpen ? (
+            <form onSubmit={handleSafeReportSubmit}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gap: "14px",
+                  marginBottom: "14px",
+                }}
+              >
+                <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <strong>What is this about?</strong>
+                  <select
+                    value={safeReportCategory}
+                    onChange={(event) => setSafeReportCategory(event.target.value)}
+                    required
+                    style={{ padding: "10px", borderRadius: "8px", border: "1px solid #9ca3af" }}
+                  >
+                    <option value="">Select a category</option>
+                    <option value="Bullying">Bullying</option>
+                    <option value="Harassment">Harassment</option>
+                    <option value="Threat or Violence">Threat or Violence</option>
+                    <option value="Safety Concern">Safety Concern</option>
+                    <option value="Online or Social Media">Online or Social Media</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+
+                <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <strong>Where did it happen?</strong>
+                  <input
+                    type="text"
+                    value={safeReportLocation}
+                    onChange={(event) => setSafeReportLocation(event.target.value)}
+                    placeholder="Optional"
+                    style={{ padding: "10px", borderRadius: "8px", border: "1px solid #9ca3af" }}
+                  />
+                </label>
+              </div>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  marginBottom: "14px",
+                }}
+              >
+                <strong>Tell us what happened</strong>
+                <textarea
+                  value={safeReportDescription}
+                  onChange={(event) => setSafeReportDescription(event.target.value)}
+                  rows={6}
+                  required
+                  placeholder="Describe what happened and anything you think the school should know."
+                  style={{
+                    padding: "10px",
+                    borderRadius: "8px",
+                    border: "1px solid #9ca3af",
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  marginBottom: "14px",
+                }}
+              >
+                <strong>People involved</strong>
+                <input
+                  type="text"
+                  value={safeReportPeopleInvolved}
+                  onChange={(event) => setSafeReportPeopleInvolved(event.target.value)}
+                  placeholder="Optional — names or descriptions"
+                  style={{ padding: "10px", borderRadius: "8px", border: "1px solid #9ca3af" }}
+                />
+              </label>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  marginBottom: "14px",
+                }}
+              >
+                <strong>Attach evidence</strong>
+                <input
+                  type="file"
+                  onChange={(event) => setSafeReportAttachment(event.target.files?.[0] || null)}
+                />
+                <span style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+                  Optional. You may attach a screenshot, photo, document, or other relevant file.
+                </span>
+              </label>
+
+              {safeReportError ? (
+                <div style={{ marginBottom: "14px" }}>
+                  <NoticeBox type="error">{safeReportError}</NoticeBox>
+                </div>
+              ) : null}
+
+              {safeReportMessage ? (
+                <div style={{ marginBottom: "14px" }}>
+                  <NoticeBox>{safeReportMessage}</NoticeBox>
+                </div>
+              ) : null}
+
+              <ActionButton type="submit" disabled={safeReportSubmitting}>
+                {safeReportSubmitting ? "Submitting..." : "Submit Safe Report"}
+              </ActionButton>
+            </form>
+          ) : null}
         </section>
 
         <section

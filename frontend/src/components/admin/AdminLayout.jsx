@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom"
 import { useEffect } from "react"
 import { useAuth } from "../../AuthContext.jsx"
 import { setWorkspaceMode } from "../../services/workspaceMode"
+import { openRtiStudentSupport } from "../../services/openRti"
 import {
   LayoutDashboard,
   Users,
@@ -14,6 +15,7 @@ import {
   Settings,
   LogOut,
   School,
+  ClipboardCheck,
 } from "lucide-react"
 
 export default function AdminLayout() {
@@ -23,6 +25,14 @@ export default function AdminLayout() {
   useEffect(() => {
     setWorkspaceMode("admin")
   }, [])
+
+  async function handleOpenRti() {
+    try {
+      await openRtiStudentSupport()
+    } catch (error) {
+      window.alert(error.message)
+    }
+  }
 
   function getNavLinkStyle(path) {
     const isActive =
@@ -132,9 +142,21 @@ export default function AdminLayout() {
           <NavItem to="/admin/reports" style={getNavLinkStyle("/admin/reports")} icon={FileText}>
             Reports
           </NavItem>
+          <NavItem to="/admin/safe-reports" style={getNavLinkStyle("/admin/safe-reports")} icon={FileText}>
+            Safe Reports
+          </NavItem>
           <NavItem to="/admin/analytics" style={getNavLinkStyle("/admin/analytics")} icon={BarChart3}>
             Analytics
           </NavItem>
+          <button
+            type="button"
+            onClick={handleOpenRti}
+            style={{ ...getNavLinkStyle("/rti"), width: "100%", cursor: "pointer", fontFamily: "inherit" }}
+            title="Open RTI / Student Support"
+          >
+            <ClipboardCheck size={18} />
+            <span>RTI / Student Support</span>
+          </button>
 
           <div style={sectionDividerStyle} />
 

@@ -45,6 +45,7 @@ import AdminStudentsPage from "./pages/admin/AdminStudentsPage.jsx";
 import AdminGradebooksPage from "./pages/admin/AdminGradebooksPage.jsx";
 import AdminReportsPage from "./pages/admin/AdminReportsPage.jsx";
 import AdminAnalyticsPage from "./pages/admin/AdminAnalyticsPage.jsx";
+import AdminSafeReportsPage from "./pages/admin/AdminSafeReportsPage.jsx";
 import AdminSchoolSettingsPage from "./pages/admin/AdminSchoolSettingsPage.jsx";
 import AdminSystemPage from "./pages/admin/AdminSystemPage.jsx";
 
@@ -144,6 +145,7 @@ function App() {
         <Route path="/admin/students" element={<AdminStudentsPage />} />
         <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
+        <Route path="/admin/safe-reports" element={<AdminSafeReportsPage />} />
         <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
         <Route path="/admin/settings" element={<AdminSchoolSettingsPage />} />
         <Route path="/admin/system" element={<AdminSystemPage />} />
