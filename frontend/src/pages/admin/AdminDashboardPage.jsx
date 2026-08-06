@@ -20,6 +20,7 @@ export default function AdminDashboardPage() {
         <AdminCard title="Students" value="Master directory" onClick={() => navigate("/admin/students")} />
         <AdminCard title="Gradebooks" value="Cross-course" onClick={() => navigate("/admin/gradebooks")} />
         <AdminCard title="Reports" value="School reporting" onClick={() => navigate("/admin/reports")} />
+        <AdminCard title="Safe Reports" value="Student safety review" onClick={() => navigate("/admin/safe-reports")} />
         <AdminCard title="Analytics" value="Pilot readiness" onClick={() => navigate("/admin/analytics")} />
       </div>
     </div>

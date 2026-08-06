@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const cors = require("cors");
 const pool = require("./db");
 const multer = require("multer");
@@ -22,6 +23,21 @@ const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, Text
 
 const app = express();
 const port = 3000;
+const RTI_APP_URL = String(
+  process.env.RTI_APP_URL ||
+    (process.env.NODE_ENV === "production"
+      ? "https://repository-name-cbc-rti-paper-trail-production.up.railway.app"
+      : "http://localhost:5050")
+).trim();
+
+function getRtiSsoSecret() {
+  return String(
+    process.env.RTI_SSO_SECRET ||
+      (process.env.NODE_ENV === "production"
+        ? ""
+        : "super-lms-rti-local-development-secret")
+  );
+}
 
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
@@ -64,6 +80,29 @@ async function ensureStudentReportCommentsTable() {
       com2 TEXT DEFAULT '',
       updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE (class_id, student_user_id)
+    )
+  `);
+}
+async function ensureSafeReportTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS safe_reports (
+      id SERIAL PRIMARY KEY,
+      student_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      student_name TEXT DEFAULT '',
+      student_email TEXT DEFAULT '',
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      location TEXT DEFAULT '',
+      people_involved TEXT DEFAULT '',
+      attachment_original_name TEXT DEFAULT '',
+      attachment_stored_name TEXT DEFAULT '',
+      attachment_path TEXT DEFAULT '',
+      attachment_mime_type TEXT DEFAULT '',
+      attachment_size_bytes INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'New',
+      admin_notes TEXT DEFAULT '',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
 }
@@ -1658,6 +1697,58 @@ app.delete("/api/lessons/:lessonId", authenticateJWT, requireRole("admin", "teac
 });
 
 /* GET COURSES */
+app.get("/api/rti/sso", authenticateJWT, async (req, res) => {
+  try {
+    const secret = getRtiSsoSecret();
+    if (!secret) {
+      return res.status(503).json({ error: "RTI single sign-on is not configured." });
+    }
+
+    const result = await pool.query(
+      `SELECT id, name, email, role, observer_relationship
+       FROM users
+       WHERE id = $1
+       LIMIT 1`,
+      [req.user.id]
+    );
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: "User not found." });
+
+    const isAdmin = user.role === "admin";
+    const isTeacher = user.role === "teacher";
+    const isHomeroomTeacher =
+      user.role === "observer" && user.observer_relationship === "chinese_homeroom_teacher";
+    if (!isAdmin && !isTeacher && !isHomeroomTeacher) {
+      return res.status(403).json({ error: "RTI access is limited to administrators and teachers." });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: "super-lms",
+      aud: "cbc-rti",
+      sub: String(user.id),
+      email: user.email,
+      name: user.name,
+      role: isAdmin ? "Admin" : "Teacher",
+      staffType: isAdmin
+        ? "administrator"
+        : isTeacher
+          ? "bc_teacher"
+          : "chinese_homeroom_teacher",
+      iat: now,
+      exp: now + 60,
+    };
+    const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const signature = crypto.createHmac("sha256", secret).update(body).digest("base64url");
+    const url = new URL(RTI_APP_URL);
+    url.searchParams.set("sso", `${body}.${signature}`);
+    return res.json({ url: url.toString() });
+  } catch (error) {
+    console.error("RTI SSO error:", error);
+    return res.status(500).json({ error: "Unable to open RTI / Student Support." });
+  }
+});
+
 app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     const isAdminTeacherWorkspace =
@@ -10750,11 +10841,155 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
 });
 
 
+/* SAFE REPORT API */
+app.post(
+  "/api/safe-reports",
+  authenticateJWT,
+  requireRole("student"),
+  upload.single("attachment"),
+  async (req, res) => {
+    try {
+      await ensureSafeReportTables();
+
+      const studentUserId = Number(req.user?.id);
+      const studentEmail = String(req.user?.email || "").trim();
+      const category = String(req.body?.category || "").trim();
+      const description = String(req.body?.description || "").trim();
+      const location = String(req.body?.location || "").trim();
+      const peopleInvolved = String(req.body?.people_involved || "").trim();
+
+      if (!studentUserId) {
+        return res.status(400).json({ error: "Student user ID is required" });
+      }
+
+      if (!category) {
+        return res.status(400).json({ error: "Category is required" });
+      }
+
+      if (!description) {
+        return res.status(400).json({ error: "Description is required" });
+      }
+
+      const userResult = await pool.query(
+        `
+        SELECT id, email, first_name, last_name
+        FROM users
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [studentUserId]
+      );
+
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({ error: "Student account not found" });
+      }
+
+      const student = userResult.rows[0];
+      const studentName = [student.first_name, student.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      const result = await pool.query(
+        `
+        INSERT INTO safe_reports (
+          student_user_id,
+          student_name,
+          student_email,
+          category,
+          description,
+          location,
+          people_involved,
+          attachment_original_name,
+          attachment_stored_name,
+          attachment_path,
+          attachment_mime_type,
+          attachment_size_bytes
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id, category, status, created_at
+        `,
+        [
+          studentUserId,
+          studentName,
+          student.email || studentEmail,
+          category,
+          description,
+          location,
+          peopleInvolved,
+          req.file?.originalname || "",
+          req.file?.filename || "",
+          req.file ? `/uploads/${req.file.filename}` : "",
+          req.file?.mimetype || "",
+          Number(req.file?.size || 0),
+        ]
+      );
+
+      return res.status(201).json({
+        success: true,
+        report: result.rows[0],
+      });
+    } catch (err) {
+      console.error("POST /api/safe-reports failed:", err);
+      return res.status(500).json({
+        error: err.message || "Failed to submit safe report",
+      });
+    }
+  }
+);
+
+/* ADMIN SAFE REPORTS API */
+app.get(
+  "/api/admin/safe-reports",
+  authenticateJWT,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      await ensureSafeReportTables();
+
+      const result = await pool.query(
+        `
+        SELECT
+          id,
+          student_user_id,
+          student_name,
+          student_email,
+          category,
+          description,
+          location,
+          people_involved,
+          attachment_original_name,
+          attachment_path,
+          attachment_mime_type,
+          attachment_size_bytes,
+          status,
+          admin_notes,
+          created_at,
+          updated_at
+        FROM safe_reports
+        ORDER BY created_at DESC, id DESC
+        `
+      );
+
+      return res.json({
+        success: true,
+        reports: result.rows,
+      });
+    } catch (err) {
+      console.error("GET /api/admin/safe-reports failed:", err);
+      return res.status(500).json({
+        error: "Failed to load safe reports",
+      });
+    }
+  }
+);
+
 Promise.all([
   ensurePasswordRecoveryTables(),
   ensureStudentInfoColumns(),
   ensureRubricFrameworkTables(),
   ensureStudentReportCommentsTable(),
+  ensureSafeReportTables(),
   ensureAttendanceTables(),
   ensureAssignmentSectionTables(),
   ensureAssignmentResourceTables(),
