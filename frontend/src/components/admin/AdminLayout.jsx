@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom"
 import { useEffect } from "react"
 import { useAuth } from "../../AuthContext.jsx"
 import { setWorkspaceMode } from "../../services/workspaceMode"
-import { openRtiStudentSupport } from "../../services/openRti"
+import { openRtiStudentSupport } from "../../services/openRti.js"
 import {
   LayoutDashboard,
   Users,
