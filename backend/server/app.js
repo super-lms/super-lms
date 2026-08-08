@@ -8276,6 +8276,52 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
 
 /* DELETE COURSE */
 
+/* UPDATE COURSE TITLE AND OVERVIEW */
+app.put("/api/courses/:courseId/overview", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    const title = String(req.body.title || "").trim();
+    const description = String(req.body.description || "").trim();
+
+    if (!courseId) {
+      return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    if (!title) {
+      return res.status(400).json({ error: "Course title is required" });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE courses
+      SET title = $1,
+          description = $2
+      WHERE id = $3
+      RETURNING id, title, description, teacher_id
+      `,
+      [title, description, courseId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const persistedResult = await pool.query(
+      `
+      SELECT id, title, description, teacher_id
+      FROM courses
+      WHERE id = $1
+      `,
+      [courseId]
+    );
+
+    return res.json(persistedResult.rows[0]);
+  } catch (err) {
+    console.error("PUT /api/courses/:courseId/overview failed:", err);
+    return res.status(500).json({ error: "Failed to update course overview" });
+  }
+});
+
 /* UPDATE COURSE */
 app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();

@@ -1430,9 +1430,6 @@ export default function CoursesPage() {
   async function saveCourse(courseId) {
     const cleanTitle = String(editCourseTitle || "").trim()
     const cleanDescription = String(editCourseDescription || "").trim()
-    const cleanTeacherEmail = String(editCourseTeacherEmail || "").trim().toLowerCase()
-    const cleanCourseType = String(editCourseType || "custom_competency").trim()
-
     if (!cleanTitle) {
       setError("Course title is required.")
       setMessage("")
@@ -1444,14 +1441,12 @@ export default function CoursesPage() {
       setError("")
       setMessage("")
 
-      const res = await authFetch(`${API_BASE}/api/courses/${courseId}`, {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/overview`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: cleanTitle,
           description: cleanDescription,
-          teacher_email: cleanTeacherEmail,
-          course_type: cleanCourseType,
         }),
       })
 
@@ -1459,6 +1454,10 @@ export default function CoursesPage() {
 
       if (!res.ok) {
         throw new Error(data.error || "Failed to update course")
+      }
+
+      if (String(data.description || "") !== cleanDescription) {
+        throw new Error("The course overview was not confirmed by the database. Please try again.")
       }
 
       setMessage(`Course updated: ${data.title || cleanTitle}`)
@@ -2848,35 +2847,18 @@ export default function CoursesPage() {
                         </div>
 
                         <div>
-                          <label style={labelStyle}>Description</label>
+                          <label style={labelStyle}>Course Overview</label>
                           <textarea
                             value={editCourseDescription}
                             onChange={(event) => setEditCourseDescription(event.target.value)}
-                            rows="3"
-                            style={textareaStyle}
-                          />
-                        </div>
-
-                        <div>
-                          <label style={labelStyle}>Course Type</label>
-                          <select
-                            value={editCourseType}
-                            onChange={(event) => setEditCourseType(event.target.value)}
-                            style={inputStyle}
-                          >
-                            <option value="english_11_template">English 11 Competency Template</option>
-                            <option value="english_12_template">English 12 Competency Template</option>
-                            <option value="custom_competency">Start Blank / Custom Course</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label style={labelStyle}>Teacher Email</label>
-                          <input
-                            value={editCourseTeacherEmail}
-                            onChange={(event) => setEditCourseTeacherEmail(event.target.value)}
-                            placeholder="Optional. Example: teacher@school.ca"
-                            style={inputStyle}
+                            rows="10"
+                            placeholder="Enter the full course overview, learning goals, major topics, expectations, or other information students should know."
+                            style={{
+                              ...textareaStyle,
+                              minHeight: "240px",
+                              maxHeight: "320px",
+                              overflowY: "auto",
+                            }}
                           />
                         </div>
 
@@ -2906,9 +2888,24 @@ export default function CoursesPage() {
                     <div style={{ order: -2 }}>
                       <h2 style={{ marginTop: 0, marginBottom: "8px" }}>{courseName}</h2>
 
-                      {course.description ? (
-                        <div style={{ marginBottom: "10px", color: "#4b5563", lineHeight: 1.5 }}>{course.description}</div>
-                      ) : null}
+                      <div style={{ marginBottom: "10px" }}>
+                        <div style={{ fontWeight: 800, marginBottom: "6px" }}>Course Overview</div>
+                        <div
+                          style={{
+                            maxHeight: "240px",
+                            overflowY: "auto",
+                            whiteSpace: "pre-wrap",
+                            color: "#4b5563",
+                            lineHeight: 1.5,
+                            border: "1px solid #d7dce5",
+                            borderRadius: "10px",
+                            padding: "12px",
+                            background: "#ffffff",
+                          }}
+                        >
+                          {course.description || "No course overview has been added yet."}
+                        </div>
+                      </div>
 
                       <div style={{ marginBottom: "14px", color: "#4b5563" }}>Course ID: {course.id}</div>
                     </div>
@@ -3073,6 +3070,14 @@ export default function CoursesPage() {
                       marginBottom: "14px",
                     }}
                   >
+                    <button
+                      type="button"
+                      onClick={() => beginEditCourse(course)}
+                      style={buttonStyle}
+                    >
+                      Edit Course
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
