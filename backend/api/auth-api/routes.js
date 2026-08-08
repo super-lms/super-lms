@@ -14,6 +14,7 @@ const RESET_CODE_EXPIRES_MINUTES = 30;
 const RECOVERY_CODE_COUNT = 8;
 const RESET_CODE_REQUIRED_PASSWORD = "PASSWORD_RESET_CODE_REQUIRED";
 const recoveryAttempts = new Map();
+let loginAnalyticsTableReady;
 
 const PLACEHOLDER_PASSWORDS = new Set([
   "TEMP_PASSWORD_NEEDS_RESET",
@@ -59,6 +60,34 @@ async function ensurePasswordRecoveryTables() {
   `);
 }
 
+async function ensureLoginAnalyticsTable() {
+  if (!loginAnalyticsTableReady) {
+    loginAnalyticsTableReady = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS login_events (
+          id BIGSERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          user_name TEXT NOT NULL DEFAULT '',
+          user_email TEXT NOT NULL DEFAULT '',
+          role TEXT NOT NULL DEFAULT '',
+          observer_relationship TEXT NOT NULL DEFAULT '',
+          logged_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS login_events_logged_in_at_idx
+        ON login_events (logged_in_at DESC)
+      `);
+    })().catch((error) => {
+      loginAnalyticsTableReady = undefined;
+      throw error;
+    });
+  }
+
+  return loginAnalyticsTableReady;
+}
+
 function hashRecoveryValue(value) {
   return crypto
     .createHmac("sha256", JWT_SECRET)
@@ -94,6 +123,7 @@ function buildSafeUser(user) {
     last_name: user.last_name,
     email: user.email,
     role: user.role,
+    observer_relationship: user.observer_relationship || "",
     must_change_password: Boolean(user.must_change_password),
   };
 }
@@ -127,6 +157,7 @@ router.post("/login", async (req, res) => {
         last_name,
         email,
         role,
+        COALESCE(observer_relationship, '') AS observer_relationship,
         password_hash,
         COALESCE(must_change_password, false) AS must_change_password
       FROM users
@@ -189,6 +220,31 @@ router.post("/login", async (req, res) => {
       }
     );
 
+    try {
+      await ensureLoginAnalyticsTable();
+      await pool.query(
+        `
+        INSERT INTO login_events (
+          user_id,
+          user_name,
+          user_email,
+          role,
+          observer_relationship
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [
+          user.id,
+          String(user.name || user.email || "").trim(),
+          String(user.email || "").trim().toLowerCase(),
+          String(user.role || "").trim().toLowerCase(),
+          String(user.observer_relationship || "").trim().toLowerCase(),
+        ]
+      );
+    } catch (analyticsError) {
+      console.error("Unable to record successful login:", analyticsError);
+    }
+
     return res.json({
       success: true,
       user: buildSafeUser(user),
@@ -204,6 +260,63 @@ router.post("/login", async (req, res) => {
     });
   }
 });
+
+// ADMIN LOGIN ANALYTICS
+router.get(
+  "/admin/login-analytics",
+  authenticateJWT,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      await ensureLoginAnalyticsTable();
+
+      const result = await pool.query(`
+        SELECT
+          user_id,
+          MAX(user_name) AS name,
+          user_email AS email,
+          CASE
+            WHEN LOWER(role) = 'parent' OR LOWER(observer_relationship) = 'parent'
+              THEN 'parent'
+            WHEN LOWER(role) = 'observer'
+              AND LOWER(observer_relationship) = 'chinese_homeroom_teacher'
+              THEN 'chinese_homeroom_teacher'
+            WHEN LOWER(role) = 'teacher'
+              THEN 'bc_teacher'
+            ELSE 'other'
+          END AS category,
+          COUNT(*)::INTEGER AS login_count,
+          MAX(logged_in_at) AS last_login
+        FROM login_events
+        GROUP BY user_id, user_email, category
+        ORDER BY last_login DESC
+      `);
+
+      const people = result.rows.filter((row) => row.category !== "other");
+      const categories = ["parent", "chinese_homeroom_teacher", "bc_teacher"];
+      const summary = Object.fromEntries(
+        categories.map((category) => {
+          const categoryPeople = people.filter((person) => person.category === category);
+          return [
+            category,
+            {
+              unique_users: categoryPeople.length,
+              total_logins: categoryPeople.reduce(
+                (total, person) => total + Number(person.login_count || 0),
+                0
+              ),
+            },
+          ];
+        })
+      );
+
+      return res.json({ summary, people });
+    } catch (error) {
+      console.error("GET /api/auth/admin/login-analytics failed:", error);
+      return res.status(500).json({ error: "Failed to load login analytics" });
+    }
+  }
+);
 
 // SET UP FIRST PASSWORD FOR PLACEHOLDER ACCOUNTS
 router.post("/setup-password", async (req, res) => {
