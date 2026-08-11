@@ -41,6 +41,12 @@ function getRtiSsoSecret() {
 
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
+app.use("/api", (req, res, next) => {
+  res.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  next();
+});
 
 const uploadDir = process.env.RAILWAY_VOLUME_MOUNT_PATH
   ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH)
