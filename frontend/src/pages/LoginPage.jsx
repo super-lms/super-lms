@@ -80,13 +80,22 @@ export default function LoginPage() {
       resetMessages()
       setLoading(true)
 
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email: cleanEmail, password }),
-      })
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 15000)
+
+      let response
+      try {
+        response = await fetch(`${API_BASE}/api/auth/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email: cleanEmail, password }),
+          signal: controller.signal,
+        })
+      } finally {
+        window.clearTimeout(timeoutId)
+      }
 
       const data = await response.json().catch(() => ({}))
 
@@ -114,7 +123,11 @@ export default function LoginPage() {
 
       handleSuccessfulLogin(data.user, data.token || "")
     } catch (err) {
-      setError(err.message || "Login failed")
+      setError(
+        err.name === "AbortError"
+          ? "Login is taking too long. Please try again."
+          : err.message || "Login failed"
+      )
     } finally {
       setLoading(false)
     }

@@ -15,6 +15,7 @@ const RECOVERY_CODE_COUNT = 8;
 const RESET_CODE_REQUIRED_PASSWORD = "PASSWORD_RESET_CODE_REQUIRED";
 const recoveryAttempts = new Map();
 let loginAnalyticsTableReady;
+let loginAnalyticsPausedUntil = 0;
 
 const PLACEHOLDER_PASSWORDS = new Set([
   "TEMP_PASSWORD_NEEDS_RESET",
@@ -86,6 +87,44 @@ async function ensureLoginAnalyticsTable() {
   }
 
   return loginAnalyticsTableReady;
+}
+
+function recordSuccessfulLogin(user) {
+  if (Date.now() < loginAnalyticsPausedUntil) {
+    return;
+  }
+
+  const analyticsWrite = (async () => {
+    await ensureLoginAnalyticsTable();
+    await pool.query(
+      `
+      INSERT INTO login_events (
+        user_id,
+        user_name,
+        user_email,
+        role,
+        observer_relationship
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        user.id,
+        String(user.name || user.email || "").trim(),
+        String(user.email || "").trim().toLowerCase(),
+        String(user.role || "").trim().toLowerCase(),
+        String(user.observer_relationship || "").trim().toLowerCase(),
+      ]
+    );
+  })();
+
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Login analytics timed out")), 3000);
+  });
+
+  Promise.race([analyticsWrite, timeout]).catch((analyticsError) => {
+    loginAnalyticsPausedUntil = Date.now() + 5 * 60 * 1000;
+    console.error("Unable to record successful login:", analyticsError);
+  });
 }
 
 function hashRecoveryValue(value) {
@@ -220,30 +259,7 @@ router.post("/login", async (req, res) => {
       }
     );
 
-    try {
-      await ensureLoginAnalyticsTable();
-      await pool.query(
-        `
-        INSERT INTO login_events (
-          user_id,
-          user_name,
-          user_email,
-          role,
-          observer_relationship
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        `,
-        [
-          user.id,
-          String(user.name || user.email || "").trim(),
-          String(user.email || "").trim().toLowerCase(),
-          String(user.role || "").trim().toLowerCase(),
-          String(user.observer_relationship || "").trim().toLowerCase(),
-        ]
-      );
-    } catch (analyticsError) {
-      console.error("Unable to record successful login:", analyticsError);
-    }
+    recordSuccessfulLogin(user);
 
     return res.json({
       success: true,
