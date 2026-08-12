@@ -60,6 +60,57 @@ const upload = multer({
   },
 });
 
+app.get("/uploads/:storedName", async (req, res, next) => {
+  try {
+    const storedName = path.basename(String(req.params.storedName || ""));
+
+    if (!storedName) {
+      return next();
+    }
+
+    const attachmentResult = await pool.query(
+      `
+      SELECT original_name, mime_type
+      FROM submission_attachments
+      WHERE stored_name = $1
+      ORDER BY id DESC
+      LIMIT 1
+      `,
+      [storedName]
+    );
+
+    if (attachmentResult.rows.length === 0) {
+      return next();
+    }
+
+    const filePath = path.join(uploadDir, storedName);
+
+    if (!fs.existsSync(filePath)) {
+      return next();
+    }
+
+    const attachment = attachmentResult.rows[0];
+    const originalName = String(attachment.original_name || storedName)
+      .replace(/[\r\n"]/g, "_");
+    const originalExtension = path.extname(originalName).replace(/[^a-zA-Z0-9.]/g, "");
+    const asciiFallbackName = `student-upload${originalExtension}`;
+    const encodedOriginalName = encodeURIComponent(originalName)
+      .replace(/['()]/g, escape)
+      .replace(/\*/g, "%2A");
+    const mimeType = String(attachment.mime_type || "application/octet-stream");
+
+    res.type(mimeType);
+    res.set(
+      "Content-Disposition",
+      `inline; filename="${asciiFallbackName}"; filename*=UTF-8''${encodedOriginalName}`
+    );
+    res.set("Cache-Control", "private, no-cache");
+    return res.sendFile(filePath);
+  } catch (err) {
+    console.error("GET /uploads/:storedName failed:", err);
+    return next();
+  }
+});
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);

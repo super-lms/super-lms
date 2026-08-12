@@ -135,7 +135,11 @@ function hashRecoveryValue(value) {
 }
 
 function generateRecoveryCode() {
-  const value = crypto.randomBytes(9).toString("base64url").toUpperCase();
+  const alphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  const value = Array.from(
+    { length: 12 },
+    () => alphabet[crypto.randomInt(alphabet.length)]
+  ).join("");
   return `${value.slice(0, 4)}-${value.slice(4, 8)}-${value.slice(8, 12)}`;
 }
 
