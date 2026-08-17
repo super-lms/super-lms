@@ -8,6 +8,7 @@ function LessonsPage() {
   const requestedSection = queryParams.get("section") || ""
   const requestedEvidenceTierName = queryParams.get("evidenceTierName") || ""
   const createLessonRef = useRef(null)
+  const lessonCreatedTimerRef = useRef(null)
 
   const [lessons, setLessons] = useState([])
   const [courses, setCourses] = useState([])
@@ -19,6 +20,7 @@ function LessonsPage() {
   )
   const [selectedFile, setSelectedFile] = useState(null)
   const [message, setMessage] = useState("Loading lessons...")
+  const [lessonCreatedMessage, setLessonCreatedMessage] = useState("")
 
   async function loadLessons() {
     try {
@@ -69,7 +71,25 @@ function LessonsPage() {
   useEffect(() => {
     loadLessons()
     loadCourses()
+
+    return () => {
+      if (lessonCreatedTimerRef.current) {
+        window.clearTimeout(lessonCreatedTimerRef.current)
+      }
+    }
   }, [])
+
+  function showLessonCreatedMessage() {
+    if (lessonCreatedTimerRef.current) {
+      window.clearTimeout(lessonCreatedTimerRef.current)
+    }
+
+    setLessonCreatedMessage("Lesson created successfully")
+    lessonCreatedTimerRef.current = window.setTimeout(() => {
+      setLessonCreatedMessage("")
+      lessonCreatedTimerRef.current = null
+    }, 4000)
+  }
 
   useEffect(() => {
     if (requestedSection !== "create" && window.location.hash !== "#create-lesson") {
@@ -159,8 +179,8 @@ function LessonsPage() {
         fileInput.value = ""
       }
 
-      setMessage("Lesson created successfully")
       await loadLessons()
+      showLessonCreatedMessage()
     } catch (error) {
       console.error(error)
       setMessage(
@@ -876,9 +896,20 @@ function LessonsPage() {
             </p>
           </div>
 
-          <button type="submit" style={primaryButtonStyle}>
-            Create Lesson
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+            <button type="submit" style={primaryButtonStyle}>
+              Create Lesson
+            </button>
+            {lessonCreatedMessage ? (
+              <span
+                role="status"
+                aria-live="polite"
+                style={{ color: "#166534", fontSize: "18px", fontWeight: 800 }}
+              >
+                Lesson created successfully
+              </span>
+            ) : null}
+          </div>
         </form>
       </section>
     </div>

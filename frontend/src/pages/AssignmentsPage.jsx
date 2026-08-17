@@ -237,6 +237,7 @@ export default function AssignmentsPage() {
   const importSectionRef = useRef(null)
   const currentSectionRef = useRef(null)
   const pendingSectionScrollRef = useRef("")
+  const assignmentCreatedTimerRef = useRef(null)
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase()
   const isTeacherLikeRole = normalizedRole === "teacher" || normalizedRole === "admin"
@@ -258,6 +259,7 @@ export default function AssignmentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
+  const [assignmentCreatedMessage, setAssignmentCreatedMessage] = useState("")
 
   const [categories, setCategories] = useState([])
   const [subcategoriesByCategory, setSubcategoriesByCategory] = useState({})
@@ -615,7 +617,25 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     loadPage()
+
+    return () => {
+      if (assignmentCreatedTimerRef.current) {
+        window.clearTimeout(assignmentCreatedTimerRef.current)
+      }
+    }
   }, [isTeacherLikeRole, user?.email, user?.id])
+
+  function showAssignmentCreatedMessage() {
+    if (assignmentCreatedTimerRef.current) {
+      window.clearTimeout(assignmentCreatedTimerRef.current)
+    }
+
+    setAssignmentCreatedMessage("Assignment created successfully")
+    assignmentCreatedTimerRef.current = window.setTimeout(() => {
+      setAssignmentCreatedMessage("")
+      assignmentCreatedTimerRef.current = null
+    }, 4000)
+  }
 
   useEffect(() => {
     if (!requestedClassId) return
@@ -760,7 +780,9 @@ export default function AssignmentsPage() {
             data.calculated_weight
           )}.`
         )
-        return loadAssignments()
+        return loadAssignments().then(() => {
+          showAssignmentCreatedMessage()
+        })
       })
       .catch((err) => {
         setError(err.message || "Failed to create assignment")
@@ -1706,6 +1728,15 @@ export default function AssignmentsPage() {
                             <ActionButton quiet onClick={resetTeacherFormState}>
                               Reset Form
                             </ActionButton>
+                            {assignmentCreatedMessage ? (
+                              <span
+                                role="status"
+                                aria-live="polite"
+                                style={{ alignSelf: "center", color: "#166534", fontSize: "18px", fontWeight: 800 }}
+                              >
+                                Assignment created successfully
+                              </span>
+                            ) : null}
                           </div>
                         </div>
 
