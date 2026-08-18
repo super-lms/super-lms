@@ -5066,6 +5066,130 @@ app.post(
   }
 );
 
+/* TEACHER IMPORT OF ASSIGNMENT FILES DOWNLOADED FROM DINGTALK */
+app.post(
+  "/api/assignments/:assignmentId/teacher-dingtalk-import",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  upload.array("attachments", 100),
+  async (req, res) => {
+    const uploadedFiles = Array.isArray(req.files) ? req.files : [];
+
+    try {
+      await ensureSubmissionAttachmentsTable();
+      const assignmentId = Number(req.params.assignmentId);
+      let mappings = [];
+
+      try {
+        mappings = JSON.parse(String(req.body.mappings || "[]"));
+      } catch (_err) {
+        throw new Error("Valid file-to-student mappings are required");
+      }
+
+      if (!assignmentId) throw new Error("Valid assignmentId is required");
+      if (uploadedFiles.length === 0) throw new Error("At least one DingTalk file is required");
+      if (!Array.isArray(mappings) || mappings.length !== uploadedFiles.length) {
+        throw new Error("Every DingTalk file must be matched to one student");
+      }
+
+      const assignmentResult = await pool.query(
+        `SELECT id, teacher_id, class_id, title FROM assignments WHERE id = $1 LIMIT 1`,
+        [assignmentId]
+      );
+      if (assignmentResult.rows.length === 0) throw new Error("Assignment not found");
+
+      const assignment = assignmentResult.rows[0];
+      const requesterId = Number(req.user?.id || 0);
+      const requesterRole = String(req.user?.role || "").toLowerCase();
+      if (requesterRole !== "admin" && Number(assignment.teacher_id || 0) !== requesterId) {
+        return res.status(403).json({ error: "This assignment is not assigned to the signed-in teacher" });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const imported = [];
+
+        for (let fileIndex = 0; fileIndex < uploadedFiles.length; fileIndex += 1) {
+          const file = uploadedFiles[fileIndex];
+          const mapping = mappings.find((item) => Number(item.fileIndex) === fileIndex) || {};
+          const studentEmail = String(mapping.studentEmail || "").trim().toLowerCase();
+          if (!studentEmail) throw new Error(`Student match is missing for ${file.originalname || `file ${fileIndex + 1}`}`);
+
+          const studentResult = await client.query(
+            `
+            SELECT u.id, COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.name, u.email) AS student_name
+            FROM users u
+            JOIN class_enrollments ce ON ce.student_user_id = u.id
+            WHERE LOWER(u.email) = $1 AND u.role = 'student' AND ce.class_id = $2
+            LIMIT 1
+            `,
+            [studentEmail, assignment.class_id]
+          );
+          if (studentResult.rows.length === 0) throw new Error(`${studentEmail} is not enrolled in this assignment's class`);
+
+          const student = studentResult.rows[0];
+          const submissionResult = await client.query(
+            `SELECT id FROM submissions WHERE assignment_id = $1 AND LOWER(student_email) = $2 LIMIT 1`,
+            [assignmentId, studentEmail]
+          );
+          let submissionId = submissionResult.rows[0]?.id || null;
+          const storedName = file.filename;
+          const originalName = file.originalname || storedName;
+          const filePath = `/uploads/${storedName}`;
+
+          if (!submissionId) {
+            const insertedSubmission = await client.query(
+              `
+              INSERT INTO submissions (
+                assignment_id, student_id, teacher_id, course_id, assignment_title,
+                original_file_name, stored_file_name, file_path, student_name,
+                student_email, content, score, feedback, grade, rubric_selection
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '', NULL, '', NULL, NULL)
+              RETURNING id
+              `,
+              [assignmentId, student.id, assignment.teacher_id, assignment.class_id,
+                assignment.title || "Untitled Assignment", originalName, storedName,
+                filePath, student.student_name || studentEmail, studentEmail]
+            );
+            submissionId = insertedSubmission.rows[0].id;
+          }
+
+          const attachmentResult = await client.query(
+            `
+            INSERT INTO submission_attachments (
+              submission_id, assignment_id, student_email, original_name,
+              stored_name, file_path, mime_type, size_bytes
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, submission_id, assignment_id, student_email, original_name,
+              stored_name, file_path, mime_type, size_bytes, created_at
+            `,
+            [submissionId, assignmentId, studentEmail, originalName, storedName,
+              filePath, file.mimetype || "", Number(file.size || 0)]
+          );
+          imported.push(attachmentResult.rows[0]);
+        }
+
+        await client.query("COMMIT");
+        return res.json({ success: true, importedCount: imported.length, attachments: imported });
+      } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      uploadedFiles.forEach((file) => {
+        if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      });
+      console.error("POST /api/assignments/:assignmentId/teacher-dingtalk-import failed:", err);
+      return res.status(400).json({ error: err.message || "Failed to import DingTalk submissions" });
+    }
+  }
+);
+
 /* DELETE STUDENT ATTACHMENT */
 app.delete("/api/student-attachments/:attachmentId", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {

@@ -235,6 +235,7 @@ export default function AssignmentsPage() {
   const rosterSectionRef = useRef(null)
   const createSectionRef = useRef(null)
   const importSectionRef = useRef(null)
+  const dingtalkSectionRef = useRef(null)
   const currentSectionRef = useRef(null)
   const pendingSectionScrollRef = useRef("")
   const assignmentCreatedTimerRef = useRef(null)
@@ -269,6 +270,12 @@ export default function AssignmentsPage() {
   const [csvImportText, setCsvImportText] = useState("")
   const [csvImportResult, setCsvImportResult] = useState(null)
   const [csvImportLoading, setCsvImportLoading] = useState(false)
+  const [dingtalkFormUrl, setDingtalkFormUrl] = useState("")
+  const [dingtalkAssignmentId, setDingtalkAssignmentId] = useState("")
+  const [dingtalkFiles, setDingtalkFiles] = useState([])
+  const [dingtalkStudentByFile, setDingtalkStudentByFile] = useState({})
+  const [dingtalkImportLoading, setDingtalkImportLoading] = useState(false)
+  const [dingtalkImportResult, setDingtalkImportResult] = useState(null)
 
   const [editingAssignmentId, setEditingAssignmentId] = useState("")
   const [editTitle, setEditTitle] = useState("")
@@ -382,6 +389,7 @@ export default function AssignmentsPage() {
     if (sectionName === "roster") return rosterSectionRef
     if (sectionName === "create") return createSectionRef
     if (sectionName === "import") return importSectionRef
+    if (sectionName === "dingtalk") return dingtalkSectionRef
     if (sectionName === "current") return currentSectionRef
     return workspaceContentRef
   }
@@ -554,7 +562,7 @@ export default function AssignmentsPage() {
           selectedClassId && visibleClasses.some((classItem) => String(classItem.id) === String(selectedClassId))
 
         if (requestedClassExists && String(selectedClassId) !== String(requestedClassId)) {
-          const validRequestedSection = ["roster", "create", "import", "current"].includes(String(requestedSection || ""))
+          const validRequestedSection = ["roster", "create", "import", "dingtalk", "current"].includes(String(requestedSection || ""))
             ? String(requestedSection)
             : "current"
 
@@ -581,7 +589,7 @@ export default function AssignmentsPage() {
           const firstClassId = requestedClassExists
             ? String(requestedClassId)
             : String(visibleClasses[0].id)
-          const validRequestedSection = ["roster", "create", "import", "current"].includes(String(requestedSection || ""))
+          const validRequestedSection = ["roster", "create", "import", "dingtalk", "current"].includes(String(requestedSection || ""))
             ? String(requestedSection)
             : requestedClassExists
               ? "current"
@@ -644,7 +652,7 @@ export default function AssignmentsPage() {
 
     if (!requestedClassExists) return
 
-    const validRequestedSection = ["roster", "create", "import", "current"].includes(String(requestedSection || ""))
+    const validRequestedSection = ["roster", "create", "import", "dingtalk", "current"].includes(String(requestedSection || ""))
       ? String(requestedSection)
       : "current"
 
@@ -838,6 +846,59 @@ export default function AssignmentsPage() {
       .finally(() => {
         setCsvImportLoading(false)
       })
+  }
+
+  function selectDingtalkFiles(event) {
+    setDingtalkFiles(Array.from(event.target.files || []))
+    setDingtalkStudentByFile({})
+    setDingtalkImportResult(null)
+  }
+
+  async function importDingtalkSubmissions() {
+    if (!dingtalkAssignmentId) {
+      setError("Select the Super-LMS assignment for these DingTalk files.")
+      return
+    }
+    if (dingtalkFiles.length === 0) {
+      setError("Choose at least one assignment file downloaded from DingTalk.")
+      return
+    }
+
+    const mappings = dingtalkFiles.map((file, fileIndex) => ({
+      fileIndex,
+      studentEmail: String(dingtalkStudentByFile[fileIndex] || "").trim().toLowerCase(),
+      originalName: file.name,
+    }))
+    if (mappings.some((mapping) => !mapping.studentEmail)) {
+      setError("Match every DingTalk file to a student before importing.")
+      return
+    }
+
+    const formData = new FormData()
+    dingtalkFiles.forEach((file) => formData.append("attachments", file))
+    formData.append("mappings", JSON.stringify(mappings))
+    setDingtalkImportLoading(true)
+    setDingtalkImportResult(null)
+    setError("")
+    setMessage("")
+
+    try {
+      const response = await authFetch(`/api/assignments/${dingtalkAssignmentId}/teacher-dingtalk-import`, {
+        method: "POST",
+        body: formData,
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Failed to import DingTalk submissions")
+      setDingtalkImportResult(data)
+      setMessage(`DingTalk import complete: ${data.importedCount || 0} file(s) loaded into Super-LMS.`)
+      setDingtalkFiles([])
+      setDingtalkStudentByFile({})
+      await loadAssignments()
+    } catch (err) {
+      setError(err.message || "Failed to import DingTalk submissions")
+    } finally {
+      setDingtalkImportLoading(false)
+    }
   }
 
   function beginEditAssignment(assignment) {
@@ -1430,6 +1491,9 @@ export default function AssignmentsPage() {
                 <button type="button" style={teacherSectionButtonStyle("import")} onClick={() => openTeacherSection("import")} disabled={!selectedClassId}>
                   Assignment CSV Import
                 </button>
+                <button type="button" style={teacherSectionButtonStyle("dingtalk")} onClick={() => openTeacherSection("dingtalk")} disabled={!selectedClassId}>
+                  DingTalk Upload
+                </button>
                 <button type="button" style={teacherSectionButtonStyle("current")} onClick={() => openTeacherSection("current")} disabled={!selectedClassId}>
                   Current Assignments
                 </button>
@@ -1783,6 +1847,56 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                     {csvImportResult ? (
                       <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(csvImportResult, null, 2)}</pre>
                     ) : null}
+                  </DetailCard>
+                </div>
+              ) : null}
+
+              {selectedClassId && teacherSection === "dingtalk" ? (
+                <div ref={dingtalkSectionRef}>
+                  <DetailCard title="DingTalk Assignment Upload">
+                    <div style={{ display: "grid", gap: "18px" }}>
+                      <NoticeBox>
+                        Open the assignment form in DingTalk, download the submitted files, then load them here individually or as one batch. This works through the current teacher VPN connection.
+                      </NoticeBox>
+                      <InputBlock label="DingTalk Assignment Form Link">
+                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                          <input type="url" value={dingtalkFormUrl} onChange={(event) => setDingtalkFormUrl(event.target.value)} placeholder="Paste the DingTalk form link" style={{ flex: "1 1 420px" }} />
+                          <ActionButton quiet disabled={!dingtalkFormUrl.trim()} onClick={() => window.open(dingtalkFormUrl.trim(), "_blank", "noopener,noreferrer")}>Open DingTalk</ActionButton>
+                        </div>
+                      </InputBlock>
+                      <InputBlock label="Super-LMS Assignment">
+                        <select value={dingtalkAssignmentId} onChange={(event) => setDingtalkAssignmentId(event.target.value)}>
+                          <option value="">Select assignment</option>
+                          {teacherAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{assignment.title}</option>)}
+                        </select>
+                      </InputBlock>
+                      <InputBlock label="Downloaded DingTalk Files">
+                        <input type="file" multiple onChange={selectDingtalkFiles} />
+                      </InputBlock>
+                      {dingtalkFiles.length > 0 ? (
+                        <div style={{ display: "grid", gap: "10px" }}>
+                          {dingtalkFiles.map((file, fileIndex) => (
+                            <div key={`${file.name}-${fileIndex}`} style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) minmax(260px, 1fr)", gap: "12px", alignItems: "center", border: "1px solid #e5e7eb", borderRadius: "10px", padding: "12px" }}>
+                              <div style={{ overflowWrap: "anywhere" }}><strong>{file.name}</strong></div>
+                              <select value={dingtalkStudentByFile[fileIndex] || ""} onChange={(event) => setDingtalkStudentByFile((current) => ({ ...current, [fileIndex]: event.target.value }))}>
+                                <option value="">Match to student</option>
+                                {classStudents.map((student) => {
+                                  const email = student.email || student.student_email || ""
+                                  const name = student.name || student.student_name || [student.first_name, student.last_name].filter(Boolean).join(" ") || email
+                                  return <option key={`${student.id || email}-${fileIndex}`} value={email}>{name} — {email}</option>
+                                })}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div>
+                        <ActionButton onClick={importDingtalkSubmissions} disabled={dingtalkImportLoading || dingtalkFiles.length === 0}>
+                          {dingtalkImportLoading ? "Importing..." : dingtalkFiles.length > 1 ? `Batch Import ${dingtalkFiles.length} Files` : "Import One File"}
+                        </ActionButton>
+                      </div>
+                      {dingtalkImportResult ? <NoticeBox>{dingtalkImportResult.importedCount || 0} file(s) imported successfully.</NoticeBox> : null}
+                    </div>
                   </DetailCard>
                 </div>
               ) : null}
