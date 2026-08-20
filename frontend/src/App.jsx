@@ -14,6 +14,7 @@ import CoursesPage from "./pages/CoursesPage.jsx";
 import CourseAssignmentsPage from "./pages/CourseAssignmentsPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import EditAssignmentPage from "./pages/EditAssignmentPage.jsx";
+import EmergencyAssignmentImportPage from "./pages/EmergencyAssignmentImportPage.jsx";
 import GradebookPage from "./pages/GradebookPage.jsx";
 import HomeformAssignmentPage from "./pages/HomeformAssignmentPage.jsx";
 import LessonsPage from "./pages/LessonsPage.jsx";
@@ -121,6 +122,7 @@ function App() {
         <Route path="/course-assignments/:courseId" element={<CourseAssignmentsPage />} />
         <Route path="/lessons" element={<LessonsPage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
+        <Route path="/import-emergency-assignment" element={<EmergencyAssignmentImportPage />} />
         <Route path="/assessments" element={<AssessmentsPage />} />
         <Route path="/question-banks" element={<QuestionBanksPage />} />
         <Route path="/gradebook" element={<GradebookPage />} />
@@ -149,6 +151,7 @@ function App() {
         <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
         <Route path="/admin/settings" element={<AdminSchoolSettingsPage />} />
         <Route path="/admin/system" element={<AdminSystemPage />} />
+        <Route path="/admin/import-emergency-assignment" element={<EmergencyAssignmentImportPage />} />
         <Route path="/admin/courses/:courseName" element={<AdminCourseWorkspacePage />} />
         <Route path="/admin/courses/:courseName/assignments" element={<CourseAssignmentsPage />} />
         <Route path="/admin/courses/:courseId/learning-paths" element={<AdminCourseLearningPathsPage />} />
