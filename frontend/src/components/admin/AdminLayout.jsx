@@ -16,6 +16,7 @@ import {
   LogOut,
   School,
   ClipboardCheck,
+  Upload,
 } from "lucide-react"
 
 export default function AdminLayout() {
@@ -65,6 +66,7 @@ export default function AdminLayout() {
     if (location.pathname === "/admin/analytics") return "Analytics"
     if (location.pathname === "/admin/settings") return "School Settings"
     if (location.pathname === "/admin/system") return "System Administration"
+    if (location.pathname === "/admin/import-emergency-assignment") return "Import from Emergency Assignment"
 
     return "Administrator Workspace"
   }
@@ -141,6 +143,9 @@ export default function AdminLayout() {
           </NavItem>
           <NavItem to="/admin/reports" style={getNavLinkStyle("/admin/reports")} icon={FileText}>
             Reports
+          </NavItem>
+          <NavItem to="/admin/import-emergency-assignment" style={getNavLinkStyle("/admin/import-emergency-assignment")} icon={Upload}>
+            Import from Emergency Assignment
           </NavItem>
           <NavItem to="/admin/safe-reports" style={getNavLinkStyle("/admin/safe-reports")} icon={FileText}>
             Safe Reports
