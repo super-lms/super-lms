@@ -140,6 +140,7 @@ export default function Layout() {
     if (location.pathname === "/courses") return "Courses"
     if (location.pathname === "/lessons") return "Lessons"
     if (location.pathname === "/assignments") return "Assignments"
+    if (location.pathname === "/import-emergency-assignment") return "Import from Emergency Assignment"
     if (location.pathname === "/assessments") return "Assessments"
     if (location.pathname === "/question-banks") return "Question Banks"
     if (location.pathname.startsWith("/assignments/") && location.pathname.endsWith("/edit")) {
@@ -238,6 +239,9 @@ export default function Layout() {
             </NavItem>
             <NavItem to="/assignments" style={getNavLinkStyle("/assignments")} icon={ClipboardList}>
               Assignments
+            </NavItem>
+            <NavItem to="/import-emergency-assignment" style={getNavLinkStyle("/import-emergency-assignment")} icon={Upload}>
+              Import from Emergency Assignment
             </NavItem>
             <NavItem to="/assessments" style={getNavLinkStyle("/assessments")} icon={ClipboardCheck}>
               Assessments
