@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
@@ -35,6 +35,19 @@ export default function LoginPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const resetEmail = params.get("reset_email")
+    const resetCode = params.get("reset_code")
+    if (resetEmail && resetCode) {
+      setEmail(resetEmail)
+      setRecoveryCode(resetCode)
+      setMode("password-reset")
+      setMessage("Email verified. Choose your new password.")
+      window.history.replaceState({}, "", "/login")
+    }
+  }, [])
 
   function resetMessages() {
     setError("")
@@ -237,6 +250,30 @@ export default function LoginPage() {
     }
   }
 
+  async function handleEmailPasswordReset() {
+    const cleanEmail = String(email || "").trim().toLowerCase()
+    if (!cleanEmail) {
+      setError("Enter your school email first")
+      return
+    }
+    try {
+      resetMessages()
+      setLoading(true)
+      const response = await fetch(`${API_BASE}/api/auth/request-password-reset-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Could not send reset email")
+      setMessage(data.message || "Check your email for a password reset link.")
+    } catch (err) {
+      setError(err.message || "Could not send reset email")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div
       style={{
@@ -417,6 +454,9 @@ export default function LoginPage() {
 
               <button type="button" onClick={() => { setMode("password-reset"); resetMessages() }} style={secondaryButtonStyle}>
                 I Have a Reset Code
+              </button>
+              <button type="button" disabled={loading} onClick={handleEmailPasswordReset} style={{ ...secondaryButtonStyle, marginTop: "8px" }}>
+                Email Me a Password Reset Link
               </button>
               <button type="button" onClick={() => { setMode("admin-recovery"); resetMessages() }} style={{ ...secondaryButtonStyle, marginTop: "8px" }}>
                 Administrator Emergency Recovery
