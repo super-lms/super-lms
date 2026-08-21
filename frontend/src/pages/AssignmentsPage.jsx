@@ -1494,6 +1494,13 @@ export default function AssignmentsPage() {
                 <button type="button" style={teacherSectionButtonStyle("dingtalk")} onClick={() => openTeacherSection("dingtalk")} disabled={!selectedClassId}>
                   DingTalk Upload
                 </button>
+                <button
+                  type="button"
+                  style={teacherSectionButtonStyle("emergency")}
+                  onClick={() => navigate("/import-emergency-assignment")}
+                >
+                  Import from Emergency Assignment
+                </button>
                 <button type="button" style={teacherSectionButtonStyle("current")} onClick={() => openTeacherSection("current")} disabled={!selectedClassId}>
                   Current Assignments
                 </button>
