@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+const nodemailer = require("nodemailer");
 const { authenticateJWT, requireRole } = require("../../middleware/auth");
 const router = express.Router();
 const pool = require("../../server/db");
@@ -142,6 +143,78 @@ function generateRecoveryCode() {
   ).join("");
   return `${value.slice(0, 4)}-${value.slice(4, 8)}-${value.slice(8, 12)}`;
 }
+
+function createMailTransport() {
+  const port = Number(process.env.SMTP_PORT || 465);
+  return nodemailer.createTransport({
+    host: String(process.env.SMTP_HOST || "smtp.gmail.com").trim(),
+    port,
+    secure: port === 465,
+    auth: {
+      user: String(process.env.SMTP_USER || "").trim(),
+      pass: String(process.env.SMTP_PASS || "").replace(/\s+/g, ""),
+    },
+  });
+}
+
+// EMAIL A SINGLE-USE PASSWORD RESET LINK WITHOUT REVEALING WHETHER AN ACCOUNT EXISTS
+router.post("/request-password-reset-email", async (req, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const genericResponse = {
+    success: true,
+    message: "If that school email has an account, a password reset link has been sent.",
+  };
+
+  try {
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ success: false, error: "A valid school email is required" });
+    }
+    if (isRateLimited(req, `email-reset:${email}`)) {
+      return res.status(429).json({ success: false, error: "Please wait 15 minutes before requesting another reset email." });
+    }
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      return res.status(503).json({ success: false, error: "Email password recovery is not configured yet." });
+    }
+
+    await ensurePasswordRecoveryTables();
+    const userResult = await pool.query(
+      `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+      [email]
+    );
+    if (!userResult.rows.length) return res.json(genericResponse);
+
+    const resetCode = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRES_MINUTES * 60 * 1000);
+    await pool.query(
+      `UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
+      [userResult.rows[0].id]
+    );
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [userResult.rows[0].id, hashRecoveryValue(resetCode), expiresAt]
+    );
+
+    const frontendBase = String(
+      process.env.PASSWORD_RESET_URL_BASE || "https://pretty-nourishment-production-7d3b.up.railway.app/login"
+    ).trim();
+    const resetUrl = new URL(frontendBase);
+    resetUrl.searchParams.set("reset_email", email);
+    resetUrl.searchParams.set("reset_code", resetCode);
+
+    await createMailTransport().sendMail({
+      from: String(process.env.SMTP_FROM || process.env.SMTP_USER).trim(),
+      to: email,
+      subject: "SUPER LMS password reset",
+      text: `Use this single-use link within ${RESET_CODE_EXPIRES_MINUTES} minutes to reset your SUPER LMS password: ${resetUrl.toString()}`,
+      html: `<p>Use the button below within ${RESET_CODE_EXPIRES_MINUTES} minutes to reset your SUPER LMS password.</p><p><a href="${resetUrl.toString()}">Reset my SUPER LMS password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+    });
+
+    return res.json(genericResponse);
+  } catch (error) {
+    console.error("POST /api/auth/request-password-reset-email failed:", error);
+    return res.status(500).json({ success: false, error: "Could not send the password reset email." });
+  }
+});
 
 function isRateLimited(req, email) {
   const key = `${req.ip || "unknown"}:${email}`;
