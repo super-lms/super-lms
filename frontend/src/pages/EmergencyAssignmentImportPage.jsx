@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
 
@@ -6,6 +6,7 @@ export default function EmergencyAssignmentImportPage() {
   const { user } = useAuth()
   const [sourceCourses, setSourceCourses] = useState([])
   const [targetCourses, setTargetCourses] = useState([])
+  const [sourceTeacherEmail, setSourceTeacherEmail] = useState("")
   const [sourceCourseId, setSourceCourseId] = useState("")
   const [targetCourseId, setTargetCourseId] = useState("")
   const [preview, setPreview] = useState([])
@@ -18,6 +19,24 @@ export default function EmergencyAssignmentImportPage() {
       authFetch(`/api/teachers/${user.id}/dashboard`).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d.courses || [] }),
     ]).then(([source, target]) => { setSourceCourses(source); setTargetCourses(target) }).catch((error) => setMessage(error.message || "Could not load classes."))
   }, [user.id])
+
+  const sourceTeachers = useMemo(() => {
+    const teachers = new Map()
+    sourceCourses.forEach((course) => {
+      const email = String(course.teacher_email || "").trim().toLowerCase()
+      if (email && !teachers.has(email)) teachers.set(email, course.teacher_name || email)
+    })
+    return Array.from(teachers, ([email, name]) => ({ email, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [sourceCourses])
+
+  const teacherCourses = useMemo(() => sourceCourses.filter((course) =>
+    String(course.teacher_email || "").trim().toLowerCase() === sourceTeacherEmail
+  ), [sourceCourses, sourceTeacherEmail])
+
+  useEffect(() => {
+    if (sourceTeachers.length === 1) setSourceTeacherEmail(sourceTeachers[0].email)
+  }, [sourceTeachers])
 
   async function previewImport() {
     if (!sourceCourseId) return setMessage("Choose an Emergency Assignment class first.")
@@ -50,11 +69,16 @@ export default function EmergencyAssignmentImportPage() {
   return <div style={{ maxWidth: 900, margin: "0 auto" }}>
     <div style={box}>
       <h1>Import from Emergency Assignment</h1>
-      <p>Choose the Emergency Assignment class, preview its submissions, then choose the SUPER LMS class that should receive them. The connection runs securely between the two servers.</p>
+      <p>Choose the Emergency Assignment teacher and class, preview its submissions, then choose the SUPER LMS class that should receive them. The connection runs securely between the two servers.</p>
+      <label>Emergency Assignment teacher</label>
+      <select style={field} value={sourceTeacherEmail} onChange={(e) => { setSourceTeacherEmail(e.target.value); setSourceCourseId(""); setPreview([]) }}>
+        <option value="">Choose teacher</option>
+        {sourceTeachers.map((teacher) => <option key={teacher.email} value={teacher.email}>{teacher.name}</option>)}
+      </select>
       <label>Emergency Assignment class</label>
-      <select style={field} value={sourceCourseId} onChange={(e) => { setSourceCourseId(e.target.value); setPreview([]) }}>
-        <option value="">Choose source class</option>
-        {sourceCourses.map((course) => <option key={course.id} value={course.id}>{course.teacher_name} — {course.course_name} ({course.submission_count})</option>)}
+      <select style={field} value={sourceCourseId} disabled={!sourceTeacherEmail} onChange={(e) => { setSourceCourseId(e.target.value); setPreview([]) }}>
+        <option value="">{sourceTeacherEmail ? "Choose class" : "Choose a teacher first"}</option>
+        {teacherCourses.map((course) => <option key={course.id} value={course.id}>{course.course_name} ({course.submission_count} submission{course.submission_count === 1 ? "" : "s"})</option>)}
       </select>
       <button style={button} disabled={busy} onClick={previewImport}>{busy ? "Working..." : "Preview submissions"}</button>
     </div>
