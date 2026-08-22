@@ -75,6 +75,7 @@ router.get("/courses/:courseId/dingtalk", authenticateJWT, requireRole("admin", 
     const webhookUrl = setting ? open(setting.webhook_url) : "";
     return res.json({ configured: Boolean(setting), hasSecret: Boolean(setting?.signing_secret), webhookHint: setting ? `••••${webhookUrl.slice(-8)}` : "", updatedAt: setting?.updated_at || null });
   } catch (error) {
+    console.error("Load DingTalk settings failed:", error);
     return res.status(400).json({ error: error.message || "Could not load DingTalk settings." });
   }
 });
@@ -90,6 +91,7 @@ router.put("/courses/:courseId/dingtalk", authenticateJWT, requireRole("admin", 
     await pool.query(`INSERT INTO dingtalk_class_settings (course_id, webhook_url, signing_secret, updated_by, updated_at) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (course_id) DO UPDATE SET webhook_url=EXCLUDED.webhook_url, signing_secret=EXCLUDED.signing_secret, updated_by=EXCLUDED.updated_by, updated_at=NOW()`, [course.id, seal(webhookUrl), signingSecret ? seal(signingSecret) : "", req.user.id]);
     return res.json({ success: true, configured: true, hasSecret: Boolean(signingSecret) });
   } catch (error) {
+    console.error("Save DingTalk settings failed:", error);
     return res.status(400).json({ error: error.message || "Could not save DingTalk settings." });
   }
 });
