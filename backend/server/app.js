@@ -11238,7 +11238,7 @@ Promise.all([
 
       const claimed = await pool.query(`
         INSERT INTO maintenance_actions (action_key)
-        VALUES ('remove-empty-numbered-test-courses-2026-08-22')
+        VALUES ('remove-empty-numbered-test-courses-2026-08-22-v2')
         ON CONFLICT (action_key) DO NOTHING
         RETURNING action_key
       `);
@@ -11247,7 +11247,6 @@ Promise.all([
         const removed = await pool.query(`
           DELETE FROM courses c
           WHERE c.title ~ '^Course [0-9]+$'
-            AND c.id = SUBSTRING(c.title FROM '[0-9]+$')::integer
             AND NOT EXISTS (
               SELECT 1 FROM class_enrollments ce WHERE ce.class_id = c.id
             )
@@ -11260,7 +11259,7 @@ Promise.all([
         await pool.query(
           `UPDATE maintenance_actions SET details = $2::jsonb WHERE action_key = $1`,
           [
-            "remove-empty-numbered-test-courses-2026-08-22",
+            "remove-empty-numbered-test-courses-2026-08-22-v2",
             JSON.stringify({ removed: removed.rows }),
           ]
         );
