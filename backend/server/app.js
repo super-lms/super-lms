@@ -11225,54 +11225,6 @@ Promise.all([
   ensureLearningPathItemTables(),
   ensureAssessmentTables(),
 ])
-  .then(async () => {
-    await pool.query("BEGIN");
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS maintenance_actions (
-          action_key TEXT PRIMARY KEY,
-          executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          details JSONB NOT NULL DEFAULT '{}'::jsonb
-        )
-      `);
-
-      const claimed = await pool.query(`
-        INSERT INTO maintenance_actions (action_key)
-        VALUES ('remove-empty-numbered-test-courses-2026-08-22-v3')
-        ON CONFLICT (action_key) DO NOTHING
-        RETURNING action_key
-      `);
-
-      if (claimed.rowCount > 0) {
-        const removed = await pool.query(`
-          DELETE FROM courses c
-          WHERE NULLIF(TRIM(COALESCE(c.title, '')), '') IS NULL
-            AND NULLIF(TRIM(COALESCE(c.description, '')), '') IS NULL
-            AND NOT EXISTS (
-              SELECT 1 FROM class_enrollments ce WHERE ce.class_id = c.id
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM assignments a WHERE a.class_id = c.id
-            )
-          RETURNING c.id, c.title
-        `);
-
-        await pool.query(
-          `UPDATE maintenance_actions SET details = $2::jsonb WHERE action_key = $1`,
-          [
-            "remove-empty-numbered-test-courses-2026-08-22-v3",
-            JSON.stringify({ removed: removed.rows }),
-          ]
-        );
-        console.log(`Removed ${removed.rowCount} empty numbered test courses.`);
-      }
-
-      await pool.query("COMMIT");
-    } catch (error) {
-      await pool.query("ROLLBACK");
-      throw error;
-    }
-  })
   .then(() => {
     app.listen(port, () => {
       console.log("Super LMS backend running on port 3000");
