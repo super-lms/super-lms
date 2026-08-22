@@ -10,6 +10,7 @@ export default function EmergencyAssignmentImportPage() {
   const [sourceCourseId, setSourceCourseId] = useState("")
   const [targetCourseId, setTargetCourseId] = useState("")
   const [preview, setPreview] = useState([])
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState([])
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
 
@@ -45,17 +46,20 @@ export default function EmergencyAssignmentImportPage() {
       const response = await authFetch(`/api/emergency-assignment/courses/${sourceCourseId}/submissions`)
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
-      setPreview(data.submissions || [])
-      setMessage(`${(data.submissions || []).length} submission(s) ready to review.`)
+      const submissions = data.submissions || []
+      setPreview(submissions)
+      setSelectedSubmissionIds(submissions.map((item) => Number(item.id)))
+      setMessage(`${submissions.length} submission(s) ready to review.`)
     } catch (error) { setMessage(error.message || "Preview failed.") } finally { setBusy(false) }
   }
 
   async function runImport() {
     if (!sourceCourseId || !targetCourseId) return setMessage("Choose both the source and destination classes.")
-    if (!window.confirm("Import these submissions into SUPER LMS? Existing imports will be skipped.")) return
+    if (!selectedSubmissionIds.length) return setMessage("Choose at least one submission to import.")
+    if (!window.confirm(`Import ${selectedSubmissionIds.length} selected submission(s) into SUPER LMS? Existing imports will be skipped.`)) return
     setBusy(true); setMessage("")
     try {
-      const response = await authFetch("/api/emergency-assignment/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceCourseId, targetCourseId }) })
+      const response = await authFetch("/api/emergency-assignment/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceCourseId, targetCourseId, submissionIds: selectedSubmissionIds }) })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
       setMessage(`Import complete: ${data.imported} added, ${data.skipped} already imported or skipped.`)
@@ -71,27 +75,39 @@ export default function EmergencyAssignmentImportPage() {
       <h1>Import from Emergency Assignment</h1>
       <p>Choose the Emergency Assignment teacher and class, preview its submissions, then choose the SUPER LMS class that should receive them. The connection runs securely between the two servers.</p>
       <label>Emergency Assignment teacher</label>
-      <select style={field} value={sourceTeacherEmail} onChange={(e) => { setSourceTeacherEmail(e.target.value); setSourceCourseId(""); setPreview([]) }}>
+      <select style={field} value={sourceTeacherEmail} onChange={(e) => { setSourceTeacherEmail(e.target.value); setSourceCourseId(""); setPreview([]); setSelectedSubmissionIds([]) }}>
         <option value="">Choose teacher</option>
         {sourceTeachers.map((teacher) => <option key={teacher.email} value={teacher.email}>{teacher.name}</option>)}
       </select>
       <label>Emergency Assignment class</label>
-      <select style={field} value={sourceCourseId} disabled={!sourceTeacherEmail} onChange={(e) => { setSourceCourseId(e.target.value); setPreview([]) }}>
+      <select style={field} value={sourceCourseId} disabled={!sourceTeacherEmail} onChange={(e) => { setSourceCourseId(e.target.value); setPreview([]); setSelectedSubmissionIds([]) }}>
         <option value="">{sourceTeacherEmail ? "Choose class" : "Choose a teacher first"}</option>
         {teacherCourses.map((course) => <option key={course.id} value={course.id}>{course.course_name} ({course.submission_count} submission{course.submission_count === 1 ? "" : "s"})</option>)}
       </select>
       <button style={button} disabled={busy} onClick={previewImport}>{busy ? "Working..." : "Preview submissions"}</button>
     </div>
     {preview.length > 0 && <div style={box}>
-      <h2>Ready to import ({preview.length})</h2>
-      {preview.slice(0, 20).map((item) => <p key={item.id}><strong>{item.assignment_title}</strong> — {item.student_name} — {item.original_file_name}</p>)}
-      {preview.length > 20 && <p>And {preview.length - 20} more…</p>}
+      <h2>Choose submissions ({selectedSubmissionIds.length} of {preview.length} selected)</h2>
+      <div style={{ marginBottom: 12 }}>
+        <button type="button" style={button} disabled={busy || selectedSubmissionIds.length === preview.length} onClick={() => setSelectedSubmissionIds(preview.map((item) => Number(item.id)))}>Select all</button>
+        <button type="button" style={button} disabled={busy || selectedSubmissionIds.length === 0} onClick={() => setSelectedSubmissionIds([])}>Clear all</button>
+      </div>
+      <div style={{ border: "1px solid #ddd", borderRadius: 8, maxHeight: 420, overflowY: "auto", marginBottom: 18 }}>
+        {preview.map((item) => {
+          const itemId = Number(item.id)
+          const checked = selectedSubmissionIds.includes(itemId)
+          return <label key={item.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: 12, borderBottom: "1px solid #eee", cursor: "pointer" }}>
+            <input type="checkbox" checked={checked} onChange={() => setSelectedSubmissionIds((current) => checked ? current.filter((id) => id !== itemId) : [...current, itemId])} />
+            <span><strong>{item.assignment_title}</strong><br />{item.student_name} — {item.original_file_name}</span>
+          </label>
+        })}
+      </div>
       <label>Destination SUPER LMS class</label>
       <select style={field} value={targetCourseId} onChange={(e) => setTargetCourseId(e.target.value)}>
         <option value="">Choose destination class</option>
         {targetCourses.map((course) => <option key={course.id} value={course.id}>{course.title || course.course_name}</option>)}
       </select>
-      <button style={button} disabled={busy} onClick={runImport}>{busy ? "Importing..." : "Import from Emergency Assignment"}</button>
+      <button style={button} disabled={busy || selectedSubmissionIds.length === 0} onClick={runImport}>{busy ? "Importing..." : `Import ${selectedSubmissionIds.length} selected submission${selectedSubmissionIds.length === 1 ? "" : "s"}`}</button>
     </div>}
     {message && <div style={box}>{message}</div>}
   </div>
