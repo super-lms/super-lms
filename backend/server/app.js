@@ -16,6 +16,7 @@ const rubricRepositoryRoutes = require("./routes/rubricRepositoryRoutes");
 const questionBankRoutes = require("./routes/questionBankRoutes");
 const assessmentImportRoutes = require("./routes/assessmentImportRoutes");
 const emergencyAssignmentImportRoutes = require("./routes/emergencyAssignmentImportRoutes");
+const dingtalkRoutes = require("./routes/dingtalkRoutes");
 const {
   router: assessmentRoutes,
   ensureAssessmentTables,
@@ -122,6 +123,7 @@ app.use("/api", questionBankRoutes);
 app.use("/api", assessmentImportRoutes);
 app.use("/api", assessmentRoutes);
 app.use("/api", emergencyAssignmentImportRoutes);
+app.use("/api", dingtalkRoutes);
 app.use("/api/users", adminUserRoutes);
 async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);
