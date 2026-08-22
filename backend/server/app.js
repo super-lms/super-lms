@@ -11252,7 +11252,7 @@ Promise.all([
               SELECT 1 FROM class_enrollments ce WHERE ce.class_id = c.id
             )
             AND NOT EXISTS (
-              SELECT 1 FROM assignments a WHERE a.course_id = c.id
+              SELECT 1 FROM assignments a WHERE a.class_id = c.id
             )
           RETURNING c.id, c.title
         `);
