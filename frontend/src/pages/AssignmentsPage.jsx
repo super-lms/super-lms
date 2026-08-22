@@ -283,6 +283,7 @@ export default function AssignmentsPage() {
   const [dingtalkSendAssignmentId, setDingtalkSendAssignmentId] = useState("")
   const [dingtalkSettingsSaving, setDingtalkSettingsSaving] = useState(false)
   const [dingtalkSending, setDingtalkSending] = useState(false)
+  const [dingtalkConnectionError, setDingtalkConnectionError] = useState("")
 
   const [editingAssignmentId, setEditingAssignmentId] = useState("")
   const [editTitle, setEditTitle] = useState("")
@@ -442,6 +443,7 @@ export default function AssignmentsPage() {
     setDingtalkWebhookUrl("")
     setDingtalkSigningSecret("")
     setDingtalkSendAssignmentId("")
+    setDingtalkConnectionError("")
     if (!classId) return
     const response = await authFetch(`/api/courses/${classId}/dingtalk`)
     const data = await response.json().catch(() => ({}))
@@ -458,6 +460,7 @@ export default function AssignmentsPage() {
     setDingtalkSettingsSaving(true)
     setError("")
     setMessage("")
+    setDingtalkConnectionError("")
     try {
       const response = await authFetch(`/api/courses/${selectedClassId}/dingtalk`, {
         method: "PUT",
@@ -472,7 +475,9 @@ export default function AssignmentsPage() {
       setDingtalkSigningSecret("")
       setMessage("This class is now connected to its DingTalk group.")
     } catch (err) {
-      setError(err.message || "Could not save DingTalk settings")
+      const errorMessage = err.message || "Could not save DingTalk settings"
+      setError(errorMessage)
+      setDingtalkConnectionError(errorMessage)
     } finally {
       setDingtalkSettingsSaving(false)
     }
@@ -1940,6 +1945,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                       ) : (
                         <NoticeBox>Not connected yet. In the DingTalk class group, add a Custom Robot and paste its webhook below.</NoticeBox>
                       )}
+                      {dingtalkConnectionError ? <NoticeBox type="error">Connection failed: {dingtalkConnectionError}</NoticeBox> : null}
                       <InputBlock label={dingtalkConfigured ? "Replace DingTalk Webhook (optional)" : "DingTalk Group Bot Webhook"}>
                         <input type="password" value={dingtalkWebhookUrl} onChange={(event) => setDingtalkWebhookUrl(event.target.value)} placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
                       </InputBlock>
