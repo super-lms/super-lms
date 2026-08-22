@@ -276,6 +276,13 @@ export default function AssignmentsPage() {
   const [dingtalkStudentByFile, setDingtalkStudentByFile] = useState({})
   const [dingtalkImportLoading, setDingtalkImportLoading] = useState(false)
   const [dingtalkImportResult, setDingtalkImportResult] = useState(null)
+  const [dingtalkWebhookUrl, setDingtalkWebhookUrl] = useState("")
+  const [dingtalkSigningSecret, setDingtalkSigningSecret] = useState("")
+  const [dingtalkConfigured, setDingtalkConfigured] = useState(false)
+  const [dingtalkWebhookHint, setDingtalkWebhookHint] = useState("")
+  const [dingtalkSendAssignmentId, setDingtalkSendAssignmentId] = useState("")
+  const [dingtalkSettingsSaving, setDingtalkSettingsSaving] = useState(false)
+  const [dingtalkSending, setDingtalkSending] = useState(false)
 
   const [editingAssignmentId, setEditingAssignmentId] = useState("")
   const [editTitle, setEditTitle] = useState("")
@@ -429,6 +436,70 @@ export default function AssignmentsPage() {
       })
   }
 
+  async function loadDingtalkSettings(classId) {
+    setDingtalkConfigured(false)
+    setDingtalkWebhookHint("")
+    setDingtalkWebhookUrl("")
+    setDingtalkSigningSecret("")
+    setDingtalkSendAssignmentId("")
+    if (!classId) return
+    const response = await authFetch(`/api/courses/${classId}/dingtalk`)
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || "Could not load DingTalk settings")
+    setDingtalkConfigured(Boolean(data.configured))
+    setDingtalkWebhookHint(data.webhookHint || "")
+  }
+
+  async function saveDingtalkSettings() {
+    if (!selectedClassId || !dingtalkWebhookUrl.trim()) {
+      setError("Paste the DingTalk group bot webhook first.")
+      return
+    }
+    setDingtalkSettingsSaving(true)
+    setError("")
+    setMessage("")
+    try {
+      const response = await authFetch(`/api/courses/${selectedClassId}/dingtalk`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webhookUrl: dingtalkWebhookUrl.trim(), signingSecret: dingtalkSigningSecret.trim() }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Could not save DingTalk settings")
+      setDingtalkConfigured(true)
+      setDingtalkWebhookHint(`••••${dingtalkWebhookUrl.trim().slice(-8)}`)
+      setDingtalkWebhookUrl("")
+      setDingtalkSigningSecret("")
+      setMessage("This class is now connected to its DingTalk group.")
+    } catch (err) {
+      setError(err.message || "Could not save DingTalk settings")
+    } finally {
+      setDingtalkSettingsSaving(false)
+    }
+  }
+
+  async function sendAssignmentToDingtalk() {
+    if (!dingtalkSendAssignmentId) {
+      setError("Choose the assignment to send.")
+      return
+    }
+    const assignment = teacherAssignments.find((item) => String(item.id) === String(dingtalkSendAssignmentId))
+    if (!window.confirm(`Send “${assignment?.title || "this assignment"}” to the DingTalk class group?`)) return
+    setDingtalkSending(true)
+    setError("")
+    setMessage("")
+    try {
+      const response = await authFetch(`/api/assignments/${dingtalkSendAssignmentId}/send-to-dingtalk`, { method: "POST" })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Could not send to DingTalk")
+      setMessage(data.message || "Assignment sent to DingTalk.")
+    } catch (err) {
+      setError(err.message || "Could not send to DingTalk")
+    } finally {
+      setDingtalkSending(false)
+    }
+  }
+
   function loadStudentSubmissions() {
     if (!user?.email) {
       setStudentSubmissions([])
@@ -569,7 +640,7 @@ export default function AssignmentsPage() {
           setSelectedClassId(String(requestedClassId))
           setTeacherSection(validRequestedSection)
           pendingSectionScrollRef.current = validRequestedSection
-          return Promise.all([loadCategoriesForClass(String(requestedClassId)), loadClassStudents(String(requestedClassId))])
+          return Promise.all([loadCategoriesForClass(String(requestedClassId)), loadClassStudents(String(requestedClassId)), loadDingtalkSettings(String(requestedClassId))])
         }
 
         if (selectedClassId && !selectedStillExists) {
@@ -598,7 +669,7 @@ export default function AssignmentsPage() {
           setSelectedClassId(firstClassId)
           setTeacherSection(validRequestedSection)
           pendingSectionScrollRef.current = validRequestedSection
-          return Promise.all([loadCategoriesForClass(firstClassId), loadClassStudents(firstClassId)])
+          return Promise.all([loadCategoriesForClass(firstClassId), loadClassStudents(firstClassId), loadDingtalkSettings(firstClassId)])
         }
 
         return undefined
@@ -660,6 +731,7 @@ export default function AssignmentsPage() {
       setSelectedClassId(String(requestedClassId))
       loadCategoriesForClass(String(requestedClassId))
       loadClassStudents(String(requestedClassId))
+      loadDingtalkSettings(String(requestedClassId))
     }
 
     setTeacherSection(validRequestedSection)
@@ -738,7 +810,7 @@ export default function AssignmentsPage() {
     setDeleteTargetAssignment(null)
     pendingSectionScrollRef.current = ""
 
-    Promise.all([loadCategoriesForClass(nextClassId), loadClassStudents(nextClassId)]).catch((err) => {
+    Promise.all([loadCategoriesForClass(nextClassId), loadClassStudents(nextClassId), loadDingtalkSettings(nextClassId)]).catch((err) => {
       setError(err.message || "Failed to load class data")
     })
   }
@@ -1492,7 +1564,7 @@ export default function AssignmentsPage() {
                   Assignment CSV Import
                 </button>
                 <button type="button" style={teacherSectionButtonStyle("dingtalk")} onClick={() => openTeacherSection("dingtalk")} disabled={!selectedClassId}>
-                  DingTalk Upload
+                  DingTalk Send / Upload
                 </button>
                 <button
                   type="button"
@@ -1860,8 +1932,38 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
 
               {selectedClassId && teacherSection === "dingtalk" ? (
                 <div ref={dingtalkSectionRef}>
-                  <DetailCard title="DingTalk Assignment Upload">
+                  <DetailCard title="DingTalk Assignment Send / Upload">
                     <div style={{ display: "grid", gap: "18px" }}>
+                      <SectionHeader title="Send an Assignment to the DingTalk Group" subtitle="Connect this class once, then choose an assignment and send it to the class group." />
+                      {dingtalkConfigured ? (
+                        <NoticeBox>This class is connected to DingTalk ({dingtalkWebhookHint}). Paste a new webhook below only when you want to replace the connection.</NoticeBox>
+                      ) : (
+                        <NoticeBox>Not connected yet. In the DingTalk class group, add a Custom Robot and paste its webhook below.</NoticeBox>
+                      )}
+                      <InputBlock label={dingtalkConfigured ? "Replace DingTalk Webhook (optional)" : "DingTalk Group Bot Webhook"}>
+                        <input type="password" value={dingtalkWebhookUrl} onChange={(event) => setDingtalkWebhookUrl(event.target.value)} placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+                      </InputBlock>
+                      <InputBlock label="DingTalk Signing Secret (recommended)">
+                        <input type="password" value={dingtalkSigningSecret} onChange={(event) => setDingtalkSigningSecret(event.target.value)} placeholder="SEC..." />
+                      </InputBlock>
+                      <div>
+                        <ActionButton onClick={saveDingtalkSettings} disabled={dingtalkSettingsSaving || !dingtalkWebhookUrl.trim()}>
+                          {dingtalkSettingsSaving ? "Saving..." : dingtalkConfigured ? "Replace DingTalk Connection" : "Connect This Class"}
+                        </ActionButton>
+                      </div>
+                      <InputBlock label="Assignment to Send">
+                        <select value={dingtalkSendAssignmentId} onChange={(event) => setDingtalkSendAssignmentId(event.target.value)}>
+                          <option value="">Select assignment</option>
+                          {teacherAssignments.map((assignment) => <option key={assignment.id} value={assignment.id}>{assignment.title}</option>)}
+                        </select>
+                      </InputBlock>
+                      <div>
+                        <ActionButton onClick={sendAssignmentToDingtalk} disabled={dingtalkSending || !dingtalkConfigured || !dingtalkSendAssignmentId}>
+                          {dingtalkSending ? "Sending..." : "Send to DingTalk Group"}
+                        </ActionButton>
+                      </div>
+                      <hr style={{ width: "100%", border: 0, borderTop: "1px solid #e5e7eb" }} />
+                      <SectionHeader title="Import Student Files from DingTalk" />
                       <NoticeBox>
                         Open the assignment form in DingTalk, download the submitted files, then load them here individually or as one batch. This works through the current teacher VPN connection.
                       </NoticeBox>
