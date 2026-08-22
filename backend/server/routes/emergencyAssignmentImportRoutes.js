@@ -53,7 +53,11 @@ router.get("/emergency-assignment/courses/:courseId/submissions", authenticateJW
 router.post("/emergency-assignment/import", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const sourceCourseId = Number(req.body.sourceCourseId);
   const targetCourseId = Number(req.body.targetCourseId);
+  const requestedSubmissionIds = Array.isArray(req.body.submissionIds)
+    ? [...new Set(req.body.submissionIds.map(Number).filter(Number.isInteger).filter((id) => id > 0))]
+    : null;
   if (!sourceCourseId || !targetCourseId) return res.status(400).json({ error: "Source and destination classes are required." });
+  if (requestedSubmissionIds && !requestedSubmissionIds.length) return res.status(400).json({ error: "Choose at least one submission to import." });
 
   const target = await pool.query(`SELECT id, teacher_id FROM courses WHERE id = $1 LIMIT 1`, [targetCourseId]);
   if (!target.rows.length) return res.status(404).json({ error: "Destination class not found." });
@@ -62,7 +66,12 @@ router.post("/emergency-assignment/import", authenticateJWT, requireRole("admin"
   try {
     const sourceResponse = await sourceFetch(req, `/api/integration/courses/${sourceCourseId}/submissions`);
     const sourceData = await sourceResponse.json();
-    const submissions = Array.isArray(sourceData.submissions) ? sourceData.submissions : [];
+    const availableSubmissions = Array.isArray(sourceData.submissions) ? sourceData.submissions : [];
+    const requestedIdSet = requestedSubmissionIds ? new Set(requestedSubmissionIds) : null;
+    const submissions = requestedIdSet
+      ? availableSubmissions.filter((item) => requestedIdSet.has(Number(item.id)))
+      : availableSubmissions;
+    if (requestedIdSet && submissions.length !== requestedIdSet.size) return res.status(400).json({ error: "One or more selected submissions are not available in this class." });
     const client = await pool.connect();
     const uploadDir = process.env.RAILWAY_VOLUME_MOUNT_PATH ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH) : path.join(__dirname, "..", "uploads");
     fs.mkdirSync(uploadDir, { recursive: true });
