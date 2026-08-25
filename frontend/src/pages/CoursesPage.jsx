@@ -2700,7 +2700,10 @@ export default function CoursesPage() {
         ) : null}
 
         <div style={{ marginBottom: "14px", fontWeight: 800 }}>
-          Showing {courses.length} course{courses.length === 1 ? "" : "s"}.
+          Showing {courseGroups.length} course workspace{courseGroups.length === 1 ? "" : "s"}.
+          {courseGroups.length !== courses.length
+            ? ` ${courses.length - courseGroups.length} section record${courses.length - courseGroups.length === 1 ? " is" : "s are"} organized inside their master courses.`
+            : ""}
         </div>
 
         {courses.length === 0 ? (
@@ -2750,9 +2753,25 @@ export default function CoursesPage() {
                       {courseGroup.masterTitle || courseName}
                     </h2>
                     {courseGroup.isMultiSection ? (
-                      <div style={{ marginBottom: "10px", fontWeight: 800, color: "#1f4e78" }}>
-                        Sections: {courseGroup.sections.map((section) => section.normalized_title).join(", ")}
-                      </div>
+                      <>
+                        <div
+                          style={{
+                            display: "inline-block",
+                            marginBottom: "8px",
+                            borderRadius: "999px",
+                            padding: "5px 9px",
+                            background: "#e6f0f8",
+                            color: "#1f4e78",
+                            fontSize: "12px",
+                            fontWeight: 900,
+                          }}
+                        >
+                          Master course · {courseGroup.sections.length} sections
+                        </div>
+                        <div style={{ marginBottom: "10px", fontWeight: 800, color: "#1f4e78" }}>
+                          Sections: {courseGroup.sections.map((section) => section.normalized_title).join(", ")}
+                        </div>
+                      </>
                     ) : null}
                     <p
                       style={{

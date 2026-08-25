@@ -25,3 +25,30 @@ test("groups sections and honors the backend content-course relationship", () =>
   assert.equal(efp.contentCourse.id, 10)
   assert.equal(groups.find((group) => group.masterTitle === "Accounting 12").isMultiSection, false)
 })
+
+test("collapses every approved core-course section group into one admin workspace", () => {
+  const approvedGroups = [
+    ["Accounting 11", ["A", "B", "C"]],
+    ["Chemistry 12", ["A", "B", "C"]],
+    ["Composition 10", ["A", "B", "C", "D"]],
+    ["EFP 12", ["A", "B", "C"]],
+    ["Fitness and Conditioning 11/12", ["A", "B"]],
+    ["Social Studies 10", ["A", "B", "C", "D"]],
+  ]
+  const courses = approvedGroups.flatMap(([master, sectionCodes], groupIndex) =>
+    sectionCodes.map((sectionCode, sectionIndex) => ({
+      id: groupIndex * 10 + sectionIndex + 1,
+      title: `${master}${sectionCode}`,
+    }))
+  )
+
+  const groups = groupCoursesByMaster(courses)
+  assert.equal(groups.length, approvedGroups.length)
+  for (const [master, sectionCodes] of approvedGroups) {
+    const group = groups.find((candidate) => candidate.masterTitle === master)
+    assert.ok(group, master)
+    assert.equal(group.isMultiSection, true)
+    assert.deepEqual(group.sections.map((section) => section.section_code), sectionCodes)
+    assert.equal(group.contentCourse.section_code, "A")
+  }
+})
