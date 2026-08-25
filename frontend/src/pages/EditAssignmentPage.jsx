@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   EditAssignmentActionButton,
   EditAssignmentDetailCard,
@@ -53,6 +53,8 @@ function WorkflowStep({ number, title, children }) {
 }
 
 export default function EditAssignmentPage() {
+  const location = useLocation();
+  const sectionId = new URLSearchParams(location.search).get("sectionId") || "";
   const { assignmentId } = useParams();
   const navigate = useNavigate();
 
@@ -725,7 +727,7 @@ export default function EditAssignmentPage() {
       setMessage("Assignment updated successfully.");
 
       if (options.openGradePage) {
-        navigate(`/assignments/${assignmentId}/grade`);
+        navigate(`/assignments/${assignmentId}/grade${sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : ""}`);
       }
     } catch (err) {
       console.error(err);
@@ -1087,7 +1089,7 @@ export default function EditAssignmentPage() {
   }
 
   function openGradePage() {
-    navigate(`/assignments/${assignmentId}/grade`);
+    navigate(`/assignments/${assignmentId}/grade${sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : ""}`);
   }
 
   function scrollToElementById(elementId) {
@@ -1192,7 +1194,11 @@ export default function EditAssignmentPage() {
 
   function backToAssignmentsPage() {
     const classId = assignment?.class_id || assignment?.course_id || assignment?.classId || "";
-    navigate(classId ? `/assignments?classId=${classId}&section=current` : "/assignments");
+    navigate(
+      classId
+        ? `/assignments?classId=${classId}${sectionId ? `&sectionId=${encodeURIComponent(sectionId)}` : ""}&section=current`
+        : "/assignments"
+    );
   }
 
   if (loading) {

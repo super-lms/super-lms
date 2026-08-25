@@ -494,16 +494,17 @@ export default function StudentDashboardPage() {
   const [safeReportMessage, setSafeReportMessage] = useState("")
   const [safeReportError, setSafeReportError] = useState("")
 
+  const selectedContentCourseId = selectedCourse?.content_course_id || selectedCourseId
 
   const filteredLessons = useMemo(() => {
-    if (!selectedCourseId) return []
-    return lessons.filter((lesson) => String(getLessonCourseId(lesson)) === String(selectedCourseId))
-  }, [lessons, selectedCourseId])
+    if (!selectedContentCourseId) return []
+    return lessons.filter((lesson) => String(getLessonCourseId(lesson)) === String(selectedContentCourseId))
+  }, [lessons, selectedContentCourseId])
 
   const filteredAssignments = useMemo(() => {
-    if (!selectedCourseId) return []
-    return assignments.filter((assignment) => String(getAssignmentCourseId(assignment)) === String(selectedCourseId))
-  }, [assignments, selectedCourseId])
+    if (!selectedContentCourseId) return []
+    return assignments.filter((assignment) => String(getAssignmentCourseId(assignment)) === String(selectedContentCourseId))
+  }, [assignments, selectedContentCourseId])
 
   const upcomingAssignments = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments

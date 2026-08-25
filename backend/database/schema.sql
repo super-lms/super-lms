@@ -18,8 +18,23 @@ CREATE TABLE IF NOT EXISTS courses (
   description TEXT,
   teacher_id INTEGER,
   school_id INTEGER,
+  master_course_id INTEGER REFERENCES courses(id) ON DELETE RESTRICT,
+  master_title TEXT,
+  section_code TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS courses_master_course_id_idx
+ON courses(master_course_id);
+
+CREATE TABLE IF NOT EXISTS course_teachers (
+  id SERIAL PRIMARY KEY,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'co-teacher',
+  section_inherited BOOLEAN NOT NULL DEFAULT false,
+  UNIQUE (course_id, teacher_id)
 );
 
 CREATE TABLE IF NOT EXISTS lessons (

@@ -471,6 +471,16 @@ async function canManageCourse(user, courseId) {
   return result.rows.length > 0;
 }
 
+async function resolveContentCourseId(courseId) {
+  const parsedCourseId = parseId(courseId);
+  if (!parsedCourseId) return null;
+  const result = await pool.query(
+    `SELECT COALESCE(master_course_id, id) AS content_course_id FROM courses WHERE id = $1 LIMIT 1`,
+    [parsedCourseId]
+  );
+  return parseId(result.rows[0]?.content_course_id);
+}
+
 async function canManageAssessment(user, assessmentId) {
   const assessment = await getAssessment(assessmentId);
   if (!assessment) return { allowed: false, assessment: null };
@@ -484,9 +494,10 @@ async function isStudentEnrolled(studentUserId, courseId) {
   const result = await pool.query(
     `
     SELECT 1
-    FROM class_enrollments
-    WHERE student_user_id = $1
-      AND class_id = $2
+    FROM class_enrollments ce
+    JOIN courses c ON c.id = ce.class_id
+    WHERE ce.student_user_id = $1
+      AND COALESCE(c.master_course_id, c.id) = $2
     LIMIT 1
     `,
     [studentUserId, courseId]
@@ -694,7 +705,10 @@ router.get(
     try {
       const role = String(req.user.role || "").toLowerCase();
       const userId = parseId(req.user.id);
-      const courseId = parseId(req.query.courseId);
+      const requestedCourseId = parseId(req.query.courseId);
+      const courseId = requestedCourseId
+        ? await resolveContentCourseId(requestedCourseId)
+        : null;
       const params = [userId];
       let courseFilter = "";
 
@@ -704,15 +718,20 @@ router.get(
       }
 
       const accessJoin =
-        role === "student"
-          ? "JOIN class_enrollments ce ON ce.class_id = a.course_id AND ce.student_user_id = $1"
-          : role === "teacher"
+        role === "teacher"
             ? `LEFT JOIN course_teachers ct
                  ON ct.course_id = a.course_id AND ct.teacher_id = $1`
             : "";
       const accessWhere =
         role === "student"
-          ? "AND a.status IN ('published', 'closed')"
+          ? `AND a.status IN ('published', 'closed')
+             AND EXISTS (
+               SELECT 1
+               FROM class_enrollments ce
+               JOIN courses enrolled_course ON enrolled_course.id = ce.class_id
+               WHERE ce.student_user_id = $1
+                 AND COALESCE(enrolled_course.master_course_id, enrolled_course.id) = a.course_id
+             )`
           : role === "teacher"
             ? "AND (c.teacher_id = $1 OR ct.teacher_id = $1)"
             : "";
@@ -837,7 +856,8 @@ router.post(
   requireRole("admin", "teacher"),
   async (req, res) => {
     try {
-      const courseId = parseId(req.body.course_id);
+      const requestedCourseId = parseId(req.body.course_id);
+      const courseId = await resolveContentCourseId(requestedCourseId);
       const title = cleanText(req.body.title);
       if (!courseId || !title) {
         return res.status(400).json({ error: "Course and title are required" });
@@ -1761,7 +1781,7 @@ router.get(
       }
       const result = await pool.query(
         `
-        SELECT
+        SELECT DISTINCT
           u.id AS student_user_id,
           u.name AS student_name,
           u.email AS student_email,
@@ -1772,11 +1792,12 @@ router.get(
           COALESCE(ac.notes, '') AS notes,
           ac.updated_at
         FROM class_enrollments ce
+        JOIN courses enrolled_course ON enrolled_course.id = ce.class_id
         JOIN users u ON u.id = ce.student_user_id
         LEFT JOIN assessment_accommodations ac
           ON ac.assessment_id = $1
           AND ac.student_user_id = u.id
-        WHERE ce.class_id = $2
+        WHERE COALESCE(enrolled_course.master_course_id, enrolled_course.id) = $2
         ORDER BY u.name ASC, u.email ASC
         `,
         [assessmentId, access.assessment.course_id]

@@ -102,13 +102,27 @@ router.post("/assignments/:assignmentId/send-to-dingtalk", authenticateJWT, requ
     const assignmentResult = await pool.query(`SELECT a.id,a.title,a.description,a.due_date,a.class_id,c.teacher_id,COALESCE(c.class_name,c.title,c.course_name,'Class ' || c.id::text) AS class_name FROM assignments a JOIN courses c ON c.id=a.class_id WHERE a.id=$1 LIMIT 1`, [Number(req.params.assignmentId)]);
     if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found." });
     const assignment = assignmentResult.rows[0];
-    if (String(req.user.role).toLowerCase() !== "admin" && Number(assignment.teacher_id) !== Number(req.user.id)) return res.status(403).json({ error: "You can only send assignments from your own class." });
-    const settingResult = await pool.query("SELECT webhook_url, signing_secret FROM dingtalk_class_settings WHERE course_id=$1", [assignment.class_id]);
+    const sectionId = Number(req.body.sectionId || assignment.class_id);
+    const sectionResult = await pool.query(
+      `SELECT c.id, c.title AS class_name
+       FROM courses c
+       WHERE c.id = $1 AND COALESCE(c.master_course_id, c.id) = $2 LIMIT 1`,
+      [sectionId, assignment.class_id]
+    );
+    if (!sectionResult.rows.length) return res.status(400).json({ error: "Selected section does not belong to this assignment's course." });
+    const accessResult = await pool.query(
+      `SELECT 1 FROM courses c
+       LEFT JOIN course_teachers ct ON ct.course_id = c.id AND ct.teacher_id = $2
+       WHERE c.id = $1 AND (c.teacher_id = $2 OR ct.teacher_id = $2) LIMIT 1`,
+      [sectionId, Number(req.user.id)]
+    );
+    if (String(req.user.role).toLowerCase() !== "admin" && !accessResult.rows.length) return res.status(403).json({ error: "You can only send assignments from your own section." });
+    const settingResult = await pool.query("SELECT webhook_url, signing_secret FROM dingtalk_class_settings WHERE course_id=$1", [sectionId]);
     if (!settingResult.rows.length) return res.status(400).json({ error: "Connect this class to its DingTalk group first." });
     const portalUrl = String(process.env.EMERGENCY_ASSIGNMENT_STUDENT_URL || "https://emergency-assignment-upload-production.up.railway.app").replace(/\/$/, "");
     const due = assignment.due_date ? String(assignment.due_date).slice(0, 10) : "No due date";
     const description = String(assignment.description || "No additional instructions.").trim();
-    const markdown = `### ${assignment.title}\n\n**Class:** ${assignment.class_name}\n\n**Due:** ${due}\n\n${description}\n\n[Open Emergency Assignment to submit](${portalUrl})`;
+    const markdown = `### ${assignment.title}\n\n**Class:** ${sectionResult.rows[0].class_name}\n\n**Due:** ${due}\n\n${description}\n\n[Open Emergency Assignment to submit](${portalUrl})`;
     const response = await fetch(signedWebhook(open(settingResult.rows[0].webhook_url), open(settingResult.rows[0].signing_secret)), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ msgtype: "markdown", markdown: { title: assignment.title, text: markdown }, at: { isAtAll: false } }), signal: AbortSignal.timeout(15000) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || Number(data.errcode || 0) !== 0) throw new Error(data.errmsg || `DingTalk returned ${response.status}.`);

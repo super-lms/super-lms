@@ -21,6 +21,10 @@ const {
   router: assessmentRoutes,
   ensureAssessmentTables,
 } = require("./routes/assessmentRoutes");
+const {
+  ensureCourseSectionStructure: ensureCourseSectionStructureWithPool,
+  resolveContentCourseId: resolveContentCourseIdWithPool,
+} = require("./courseSections");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
 
 const app = express();
@@ -214,6 +218,11 @@ async function ensureAttendanceTables() {
     )
   `);
 }
+
+
+const ensureCourseSectionStructure = () => ensureCourseSectionStructureWithPool(pool);
+const resolveContentCourseId = (courseId, queryable = pool) =>
+  resolveContentCourseIdWithPool(pool, courseId, queryable);
 
 async function ensureRubricFrameworkTables() {
   await pool.query(`
@@ -1118,7 +1127,7 @@ async function seedRubricDemoForClass(classId) {
   };
 }
 
-async function buildRubricGradebookStudents(classId) {
+async function buildRubricGradebookStudents(classId, contentClassId = classId) {
   const studentsResult = await pool.query(
     `
     SELECT
@@ -1165,7 +1174,7 @@ async function buildRubricGradebookStudents(classId) {
       ON a.id = ar.assignment_id
     WHERE a.class_id = $1
     `,
-    [classId]
+    [contentClassId]
   );
 
   const rubricScoresByStudent = new Map();
@@ -1678,7 +1687,7 @@ app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async
 
     const courseResult = await pool.query(
       `
-      SELECT id
+      SELECT id, master_course_id
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -1690,13 +1699,17 @@ app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async
       return res.status(404).json({ error: "Course not found" });
     }
 
+    const contentCourseId = Number(
+      courseResult.rows[0].master_course_id || courseResult.rows[0].id
+    );
+
     const orderResult = await pool.query(
       `
       SELECT COALESCE(MAX(order_index), 0) + 1 AS next_order_index
       FROM lessons
       WHERE course_id = $1
       `,
-      [courseId]
+      [contentCourseId]
     );
 
     const orderIndex = Number(orderResult.rows[0]?.next_order_index || 1);
@@ -1714,7 +1727,7 @@ app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async
       VALUES ($1, $2, $3, $4, NOW(), NOW())
       RETURNING *
       `,
-      [courseId, title, content, orderIndex]
+      [contentCourseId, title, content, orderIndex]
     );
 
     return res.json(result.rows[0]);
@@ -1872,6 +1885,10 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         c.teacher_id,
         c.school_id,
         c.term_id,
+        c.master_course_id,
+        c.master_title,
+        c.section_code,
+        COALESCE(c.master_course_id, c.id) AS content_course_id,
         c.created_at,
         ${teacherNameSql} AS teacher_name,
         u.email AS teacher_email,
@@ -1889,6 +1906,9 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         c.teacher_id,
         c.school_id,
         c.term_id,
+        c.master_course_id,
+        c.master_title,
+        c.section_code,
         c.created_at,
         u.email${teacherGroupBySql}
       ORDER BY c.id ASC
@@ -1997,7 +2017,8 @@ app.put("/api/admin/courses/:courseId/assign-to-me", authenticateJWT, requireRol
       INSERT INTO course_teachers (course_id, teacher_id, role)
       VALUES ($1, $2, 'co-teacher')
       ON CONFLICT (course_id, teacher_id) DO UPDATE
-      SET role = EXCLUDED.role
+      SET role = EXCLUDED.role,
+          section_inherited = false
       `,
       [courseId, teacherId]
     );
@@ -2311,8 +2332,16 @@ app.get("/api/classes", authenticateJWT, requireRole("admin", "teacher"), async 
         c.teacher_id,
         c.school_id,
         c.term_id,
+        c.master_course_id,
+        c.master_title,
+        c.section_code,
+        COALESCE(c.master_course_id, c.id) AS content_course_id,
         c.created_at,
-        '[]'::json AS shared_teacher_ids
+        COALESCE((
+          SELECT json_agg(DISTINCT ct.teacher_id)
+          FROM course_teachers ct
+          WHERE ct.course_id = c.id
+        ), '[]'::json) AS shared_teacher_ids
       FROM courses c
       ORDER BY c.id ASC
     `);
@@ -2343,6 +2372,10 @@ app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "s
         c.teacher_id,
         c.school_id,
         c.term_id,
+        c.master_course_id,
+        c.master_title,
+        c.section_code,
+        COALESCE(c.master_course_id, c.id) AS content_course_id,
         c.created_at,
         '[]'::json AS shared_teacher_ids
       FROM users u
@@ -2366,11 +2399,13 @@ app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "s
 /* GET KDU CATEGORIES FOR COURSE */
 app.get("/api/courses/:courseId/categories", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
+    const requestedCourseId = Number(req.params.courseId);
 
-    if (!courseId) {
+    if (!requestedCourseId) {
       return res.status(400).json({ error: "Valid courseId required" });
     }
+    const courseId = await resolveContentCourseId(requestedCourseId);
+    if (!courseId) return res.status(404).json({ error: "Course not found" });
 
     const result = await pool.query(
       `
@@ -2566,14 +2601,14 @@ app.post("/api/courses/:courseId/categories", authenticateJWT, requireRole("admi
   const client = await pool.connect();
 
   try {
-    const courseId = Number(req.params.courseId);
+    const requestedCourseId = Number(req.params.courseId);
     const name = String(req.body.name || "").trim();
     const weightPercent = Number(req.body.weight_percent || 0);
     const insertAfterCategoryId = req.body.insert_after_category_id
       ? Number(req.body.insert_after_category_id)
       : null;
 
-    if (!courseId) {
+    if (!requestedCourseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
     }
 
@@ -2586,6 +2621,12 @@ app.post("/api/courses/:courseId/categories", authenticateJWT, requireRole("admi
     }
 
     await client.query("BEGIN");
+
+    const courseId = await resolveContentCourseId(requestedCourseId, client);
+    if (!courseId) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Course not found" });
+    }
 
     const courseResult = await client.query(
       `
@@ -3689,13 +3730,16 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    const contentCourseId = await resolveContentCourseId(class_id);
+    if (!contentCourseId) return res.status(404).json({ error: "Course not found" });
+
     const sortResult = await pool.query(
       `
       SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
       FROM assignments
       WHERE class_id = $1
       `,
-      [class_id]
+      [contentCourseId]
     );
 
     const sortOrder = Number(sortResult.rows[0]?.next_sort_order || 1);
@@ -3704,7 +3748,7 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
       `INSERT INTO assignments (class_id, teacher_id, title, description, due_date, subcategory_id, is_published, sort_order)
        VALUES ($1,$2,$3,$4,$5,$6,true,$7)
        RETURNING *`,
-      [class_id, teacher_id, title, description, due_date, subcategory_id, sortOrder]
+      [contentCourseId, teacher_id, title, description, due_date, subcategory_id, sortOrder]
     );
 
     return res.json(result.rows[0]);
@@ -4272,8 +4316,20 @@ app.get(
         return res.status(403).json({ error: "This student course is not linked to this observer" });
       }
 
+      const contentCourseId = await resolveContentCourseId(courseId);
+      if (!contentCourseId) {
+        return res.status(404).json({ error: "Course not found" });
+      }
+
       const [courseResult, assignmentsResult, submissionsResult, lessonsResult, groupsResult] = await Promise.all([
-        pool.query(`SELECT * FROM courses WHERE id = $1 LIMIT 1`, [courseId]),
+        pool.query(
+          `SELECT c.*, COALESCE(shared.description, c.description) AS description,
+                  COALESCE(c.master_course_id, c.id) AS content_course_id
+           FROM courses c
+           LEFT JOIN courses shared ON shared.id = COALESCE(c.master_course_id, c.id)
+           WHERE c.id = $1 LIMIT 1`,
+          [courseId]
+        ),
         pool.query(
           `
           SELECT
@@ -4299,7 +4355,7 @@ app.get(
             AND COALESCE(a.source_type, 'assignment') <> 'assessment'
           ORDER BY COALESCE(a.sort_order, a.id), a.id
           `,
-          [courseId]
+          [contentCourseId]
         ),
         pool.query(
           `
@@ -4316,12 +4372,12 @@ app.get(
           WHERE a.class_id = $1 AND LOWER(s.student_email) = $2
           GROUP BY s.id
           `,
-          [courseId, studentEmail]
+          [contentCourseId, studentEmail]
         ),
         pool.query(
           `SELECT id, course_id, title, content, order_index, created_at, updated_at
            FROM lessons WHERE course_id = $1 ORDER BY order_index ASC, id ASC`,
-          [courseId]
+          [contentCourseId]
         ),
         pool.query(
           `
@@ -4338,7 +4394,7 @@ app.get(
           WHERE cc.course_id = $1
           ORDER BY cc.sort_order, cc.id, cs.sort_order, cs.id
           `,
-          [courseId]
+          [contentCourseId]
         ),
       ]);
 
@@ -4468,6 +4524,7 @@ app.get(
         course: courseResult.rows[0],
         assignments: assignmentsResult.rows,
         lessons: lessonsResult.rows,
+        content_course_id: contentCourseId,
         submissionStatesByAssignmentId,
         gradebook: {
           assignment_scores: assignmentScores,
@@ -4501,9 +4558,11 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
 
     const courseResult = await pool.query(
       `
-      SELECT *
-      FROM courses
-      WHERE id = $1
+      SELECT c.*, COALESCE(shared.description, c.description) AS description,
+             COALESCE(c.master_course_id, c.id) AS content_course_id
+      FROM courses c
+      LEFT JOIN courses shared ON shared.id = COALESCE(c.master_course_id, c.id)
+      WHERE c.id = $1
       LIMIT 1
       `,
       [courseId]
@@ -4512,6 +4571,10 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
     if (courseResult.rows.length === 0) {
       return res.status(404).json({ error: "Course not found" });
     }
+
+    const contentCourseId = Number(
+      courseResult.rows[0].master_course_id || courseResult.rows[0].id
+    );
 
     const assignmentsResult = await pool.query(
       `
@@ -4541,7 +4604,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         AND COALESCE(a.source_type, 'assignment') <> 'assessment'
       ORDER BY COALESCE(a.sort_order, a.id), a.id
       `,
-      [courseId]
+      [contentCourseId]
     );
 
     const submissionsResult = await pool.query(
@@ -4562,7 +4625,17 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       WHERE a.class_id = $1
         AND LOWER(s.student_email) = $2
       `,
-      [courseId, studentEmail]
+      [contentCourseId, studentEmail]
+    );
+
+    const lessonsResult = await pool.query(
+      `
+      SELECT id, course_id, title, content, order_index, created_at, updated_at
+      FROM lessons
+      WHERE course_id = $1
+      ORDER BY order_index ASC, id ASC
+      `,
+      [contentCourseId]
     );
 
     const submissionsByAssignmentId = {};
@@ -4587,7 +4660,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
     return res.json({
       course: courseResult.rows[0],
       assignments: assignmentsResult.rows,
-      lessons: [],
+      lessons: lessonsResult.rows,
+      content_course_id: contentCourseId,
       submissionStatesByAssignmentId,
     });
   } catch (err) {
@@ -5103,9 +5177,25 @@ app.post(
       if (assignmentResult.rows.length === 0) throw new Error("Assignment not found");
 
       const assignment = assignmentResult.rows[0];
+      const rosterCourseId = Number(req.body.sectionId || assignment.class_id);
+      const rosterCourseResult = await pool.query(
+        `SELECT id FROM courses WHERE id = $1 AND COALESCE(master_course_id, id) = $2 LIMIT 1`,
+        [rosterCourseId, assignment.class_id]
+      );
+      if (rosterCourseResult.rows.length === 0) {
+        throw new Error("Selected section does not belong to this assignment's course");
+      }
       const requesterId = Number(req.user?.id || 0);
       const requesterRole = String(req.user?.role || "").toLowerCase();
-      if (requesterRole !== "admin" && Number(assignment.teacher_id || 0) !== requesterId) {
+      const sharedTeacherResult = await pool.query(
+        `SELECT 1 FROM course_teachers WHERE course_id = $1 AND teacher_id = $2 LIMIT 1`,
+        [assignment.class_id, requesterId]
+      );
+      if (
+        requesterRole !== "admin" &&
+        Number(assignment.teacher_id || 0) !== requesterId &&
+        sharedTeacherResult.rows.length === 0
+      ) {
         return res.status(403).json({ error: "This assignment is not assigned to the signed-in teacher" });
       }
 
@@ -5128,7 +5218,7 @@ app.post(
             WHERE LOWER(u.email) = $1 AND u.role = 'student' AND ce.class_id = $2
             LIMIT 1
             `,
-            [studentEmail, assignment.class_id]
+            [studentEmail, rosterCourseId]
           );
           if (studentResult.rows.length === 0) throw new Error(`${studentEmail} is not enrolled in this assignment's class`);
 
@@ -5283,6 +5373,27 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
       [assignmentId]
     );
 
+    if (assignmentResult.rows.length === 0) {
+      return res.status(404).json({ error: "Assignment not found" });
+    }
+
+    const assignmentCourseId = Number(assignmentResult.rows[0].class_id);
+    const rosterCourseId = Number(req.query.sectionId || assignmentCourseId);
+    const sectionResult = await pool.query(
+      `
+      SELECT id
+      FROM courses
+      WHERE id = $1
+        AND COALESCE(master_course_id, id) = $2
+      LIMIT 1
+      `,
+      [rosterCourseId, assignmentCourseId]
+    );
+
+    if (sectionResult.rows.length === 0) {
+      return res.status(400).json({ error: "Selected section does not belong to this assignment's course" });
+    }
+
     const result = await pool.query(
       `
       SELECT
@@ -5298,7 +5409,7 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         END AS submission_status
       FROM assignments a
       JOIN class_enrollments ce
-        ON ce.class_id = a.class_id
+        ON ce.class_id = $2
       JOIN users u
         ON u.id = ce.student_user_id
       LEFT JOIN submissions s
@@ -5307,11 +5418,12 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
       WHERE a.id = $1
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
       `,
-      [assignmentId]
+      [assignmentId, rosterCourseId]
     );
 
     return res.json({
       assignment: assignmentResult.rows[0] || null,
+      section_id: rosterCourseId,
       rows: result.rows,
     });
   } catch (err) {
@@ -6814,11 +6926,13 @@ app.post("/api/courses/:courseId/save-structure-template", authenticateJWT, requ
 app.get("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
     await ensureLearningPathItemTables();
-    const courseId = Number(req.params.courseId);
+    const requestedCourseId = Number(req.params.courseId);
 
-    if (!courseId) {
+    if (!requestedCourseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
     }
+    const courseId = await resolveContentCourseId(requestedCourseId);
+    if (!courseId) return res.status(404).json({ error: "Course not found" });
 
     const courseResult = await pool.query(
       `
@@ -6872,12 +6986,14 @@ app.post(
   async (req, res) => {
     try {
       await ensureLearningPathItemTables();
-      const courseId = Number(req.params.courseId);
+      const requestedCourseId = Number(req.params.courseId);
       const categoryId = Number(req.params.categoryId);
 
-      if (!courseId || !categoryId) {
+      if (!requestedCourseId || !categoryId) {
         return res.status(400).json({ error: "Valid courseId and categoryId are required" });
       }
+      const courseId = await resolveContentCourseId(requestedCourseId);
+      if (!courseId) return res.status(404).json({ error: "Course not found" });
 
       const categoryResult = await pool.query(
         `
@@ -6932,17 +7048,19 @@ app.post(
 
 app.post("/api/courses/:courseId/learning-paths", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
+    const requestedCourseId = Number(req.params.courseId);
     const title = String(req.body.title || "").trim();
     const description = String(req.body.description || "").trim();
 
-    if (!courseId) {
+    if (!requestedCourseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
     }
 
     if (!title) {
       return res.status(400).json({ error: "Learning path title is required" });
     }
+    const courseId = await resolveContentCourseId(requestedCourseId);
+    if (!courseId) return res.status(404).json({ error: "Course not found" });
 
     const courseResult = await pool.query(
       `
@@ -8464,22 +8582,40 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
 /* UPDATE COURSE TITLE AND OVERVIEW */
 app.put("/api/courses/:courseId/overview", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
-    const courseId = Number(req.params.courseId);
-    const title = String(req.body.title || "").trim();
+    const requestedCourseId = Number(req.params.courseId);
+    const requestedTitle = String(req.body.title || "").trim();
     const description = String(req.body.description || "").trim();
 
-    if (!courseId) {
+    if (!requestedCourseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
     }
 
-    if (!title) {
+    if (!requestedTitle) {
       return res.status(400).json({ error: "Course title is required" });
     }
+
+    const courseResult = await pool.query(
+      `SELECT id, master_course_id, master_title, section_code FROM courses WHERE id = $1 LIMIT 1`,
+      [requestedCourseId]
+    );
+    if (courseResult.rows.length === 0) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+    const courseId = Number(courseResult.rows[0].master_course_id || courseResult.rows[0].id);
+    const contentResult = await pool.query(
+      `SELECT master_course_id, master_title, section_code FROM courses WHERE id = $1 LIMIT 1`,
+      [courseId]
+    );
+    const contentCourse = contentResult.rows[0] || {};
+    const title = contentCourse.master_title && contentCourse.section_code
+      ? `${contentCourse.master_title}${contentCourse.section_code}`
+      : requestedTitle;
 
     const result = await pool.query(
       `
       UPDATE courses
       SET title = $1,
+          course_name = $1,
           description = $2
       WHERE id = $3
       RETURNING id, title, description, teacher_id
@@ -8527,6 +8663,19 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
 
     await client.query("BEGIN");
 
+    const currentCourseResult = await client.query(
+      `SELECT master_course_id, master_title, section_code FROM courses WHERE id = $1 LIMIT 1`,
+      [courseId]
+    );
+    if (currentCourseResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Course not found" });
+    }
+    const currentCourse = currentCourseResult.rows[0];
+    const effectiveTitle = currentCourse.master_title && currentCourse.section_code
+      ? `${currentCourse.master_title}${currentCourse.section_code}`
+      : title;
+
     let teacherId = null;
 
     if (teacherEmail) {
@@ -8555,12 +8704,13 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
       `
       UPDATE courses
       SET title = $1,
+          course_name = $1,
           description = $2,
           teacher_id = $3
       WHERE id = $4
       RETURNING id, title, description, teacher_id
       `,
-      [title, description, teacherId, courseId]
+      [effectiveTitle, description, teacherId, courseId]
     );
 
     if (result.rows.length === 0) {
@@ -8583,9 +8733,29 @@ app.put("/api/courses/:courseId", authenticateJWT, requireRole("admin", "teacher
         INSERT INTO course_teachers (course_id, teacher_id, role)
         VALUES ($1, $2, 'primary')
         ON CONFLICT (course_id, teacher_id) DO UPDATE
-        SET role = EXCLUDED.role
+        SET role = EXCLUDED.role,
+            section_inherited = false
         `,
         [courseId, teacherId]
+      );
+    }
+
+    if (currentCourse.master_title) {
+      const contentCourseId = Number(currentCourse.master_course_id || courseId);
+      await client.query(
+        `DELETE FROM course_teachers WHERE course_id = $1 AND section_inherited = true`,
+        [contentCourseId]
+      );
+      await client.query(
+        `
+        INSERT INTO course_teachers (course_id, teacher_id, role, section_inherited)
+        SELECT $1, section_course.teacher_id, 'co-teacher', true
+        FROM courses section_course
+        WHERE COALESCE(section_course.master_course_id, section_course.id) = $1
+          AND section_course.teacher_id IS NOT NULL
+        ON CONFLICT (course_id, teacher_id) DO NOTHING
+        `,
+        [contentCourseId]
       );
     }
 
@@ -8614,6 +8784,16 @@ app.delete("/api/courses/:courseId", authenticateJWT, requireRole("admin"), asyn
       return res.status(400).json({ error: "Valid courseId is required" });
     }
 
+    const childSectionResult = await pool.query(
+      `SELECT COUNT(*)::INTEGER AS count FROM courses WHERE master_course_id = $1`,
+      [courseId]
+    );
+    if (Number(childSectionResult.rows[0]?.count || 0) > 0) {
+      return res.status(409).json({
+        error: "This is the shared-content course for a section group. Remove the other sections first.",
+      });
+    }
+
     await pool.query(`DELETE FROM class_enrollments WHERE class_id = $1`, [courseId]);
     await pool.query(`DELETE FROM course_categories WHERE course_id = $1`, [courseId]);
 
@@ -8628,6 +8808,25 @@ app.delete("/api/courses/:courseId", authenticateJWT, requireRole("admin"), asyn
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Course not found" });
+    }
+
+    const contentCourseId = Number(result.rows[0].master_course_id || 0);
+    if (contentCourseId) {
+      await pool.query(
+        `DELETE FROM course_teachers WHERE course_id = $1 AND section_inherited = true`,
+        [contentCourseId]
+      );
+      await pool.query(
+        `
+        INSERT INTO course_teachers (course_id, teacher_id, role, section_inherited)
+        SELECT $1, section_course.teacher_id, 'co-teacher', true
+        FROM courses section_course
+        WHERE COALESCE(section_course.master_course_id, section_course.id) = $1
+          AND section_course.teacher_id IS NOT NULL
+        ON CONFLICT (course_id, teacher_id) DO NOTHING
+        `,
+        [contentCourseId]
+      );
     }
 
     return res.json({ success: true, deleted: result.rows[0] });
@@ -10019,7 +10218,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
 
     const courseResult = await pool.query(
       `
-      SELECT id, title AS course_title
+      SELECT id, title AS course_title, master_course_id, master_title, section_code
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -10030,6 +10229,10 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
     if (courseResult.rows.length === 0) {
       return res.status(404).json({ error: "Course not found" });
     }
+
+    const contentCourseId = Number(
+      courseResult.rows[0].master_course_id || courseResult.rows[0].id
+    );
 
     const studentsResult = await pool.query(
       `
@@ -10065,7 +10268,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
       WHERE a.class_id = $1
       ORDER BY a.due_date ASC NULLS LAST, a.id ASC
       `,
-      [courseId]
+      [contentCourseId]
     );
 
     const submissionsResult = await pool.query(
@@ -10083,7 +10286,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
         ON a.id = s.assignment_id
       WHERE a.class_id = $1
       `,
-      [courseId]
+      [contentCourseId]
     );
 
     const submissionsByStudentAssignment = new Map();
@@ -10208,6 +10411,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
 
     return res.json({
       course_id: courseId,
+      content_course_id: contentCourseId,
       course_title: courseResult.rows[0].course_title,
       report_scope: reportScope,
       filters: {
@@ -10240,7 +10444,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
 
     const classResult = await pool.query(
       `
-      SELECT id, title AS class_name, description
+      SELECT id, title AS class_name, description, master_course_id
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -10251,6 +10455,10 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
     if (classResult.rows.length === 0) {
       return res.status(404).json({ error: "Class not found" });
     }
+
+    const contentClassId = Number(
+      classResult.rows[0].master_course_id || classResult.rows[0].id
+    );
 
     const groupsResult = await pool.query(
       `
@@ -10268,7 +10476,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
       WHERE cc.course_id = $1
       ORDER BY cc.sort_order ASC, cc.id ASC, cs.sort_order ASC, cs.id ASC
       `,
-      [classId]
+      [contentClassId]
     );
 
     const assignmentsResult = await pool.query(
@@ -10293,7 +10501,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
       WHERE a.class_id = $1
       ORDER BY a.due_date ASC NULLS LAST, a.id ASC
       `,
-      [classId]
+      [contentClassId]
     );
 
     const studentsResult = await pool.query(
@@ -10324,7 +10532,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
         ON a.id = s.assignment_id
       WHERE a.class_id = $1
       `,
-      [classId]
+      [contentClassId]
     );
 
     const submissionsByStudentAssignment = new Map();
@@ -10459,7 +10667,7 @@ app.get("/api/classes/:classId/gradebook", authenticateJWT, requireRole("admin",
 
     const classResult = await pool.query(
       `
-      SELECT id, title AS class_name, description
+      SELECT id, title AS class_name, description, master_course_id
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -10471,8 +10679,11 @@ app.get("/api/classes/:classId/gradebook", authenticateJWT, requireRole("admin",
       return res.status(404).json({ error: "Class not found" });
     }
 
-    const assignments = await getAssignmentsForClass(classId);
-    const students = await buildRubricGradebookStudents(classId);
+    const contentClassId = Number(
+      classResult.rows[0].master_course_id || classResult.rows[0].id
+    );
+    const assignments = await getAssignmentsForClass(contentClassId);
+    const students = await buildRubricGradebookStudents(classId, contentClassId);
 
     return res.json({
       class: classResult.rows[0],
@@ -10639,7 +10850,7 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
 
     const classResult = await pool.query(
       `
-      SELECT id, title
+      SELECT id, title, master_course_id
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -10650,6 +10861,10 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
     if (classResult.rows.length === 0) {
       return res.status(404).json({ error: "Class not found" });
     }
+
+    const contentClassId = Number(
+      classResult.rows[0].master_course_id || classResult.rows[0].id
+    );
 
     const assignmentsResult = await pool.query(
       `
@@ -10665,7 +10880,7 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       WHERE a.class_id = $1
       ORDER BY a.id ASC
       `,
-      [classId]
+      [contentClassId]
     );
 
     const studentsResult = await pool.query(
@@ -10699,7 +10914,7 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
         ON a.id = s.assignment_id
       WHERE a.class_id = $1
       `,
-      [classId]
+      [contentClassId]
     );
 
     const submissionsByStudentAssignment = new Map();
@@ -10939,6 +11154,7 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
     await ensureAssignmentSectionTables();
 
     const assignmentId = Number(req.params.assignmentId);
+    const rosterCourseId = Number(req.query.sectionId || 0);
 
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
@@ -10960,7 +11176,7 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
         sss.converted_competency_level
       FROM assignments a
       JOIN class_enrollments ce
-        ON ce.class_id = a.class_id
+        ON ce.class_id = CASE WHEN $2::INTEGER > 0 THEN $2 ELSE a.class_id END
       JOIN users u
         ON u.id = ce.student_user_id
       JOIN assignment_sections aps
@@ -10969,9 +11185,18 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
         ON sss.assignment_section_id = aps.id
         AND sss.student_user_id = u.id
       WHERE a.id = $1
+        AND (
+          $2::INTEGER = 0
+          OR EXISTS (
+            SELECT 1
+            FROM courses section_course
+            WHERE section_course.id = $2
+              AND COALESCE(section_course.master_course_id, section_course.id) = a.class_id
+          )
+        )
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, aps.sort_order ASC, aps.id ASC
       `,
-      [assignmentId]
+      [assignmentId, rosterCourseId]
     );
 
     return res.json({
@@ -11227,6 +11452,7 @@ Promise.all([
   ensureLearningPathItemTables(),
   ensureAssessmentTables(),
 ])
+  .then(() => ensureCourseSectionStructure())
   .then(() => {
     app.listen(port, () => {
       console.log("Super LMS backend running on port 3000");

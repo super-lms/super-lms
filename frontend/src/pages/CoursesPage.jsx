@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import * as XLSX from "xlsx"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
+import { findCourseGroup, groupCoursesByMaster } from "../services/courseSections"
 
 
 function buildSampleCsv(courseName = "Accounting 11") {
@@ -151,6 +152,7 @@ export default function CoursesPage() {
   const [teacherCoachGuide, setTeacherCoachGuide] = useState("first_course")
   const [teacherCoachStep, setTeacherCoachStep] = useState(0)
   const openedRequestedSectionRef = useRef("")
+  const courseGroups = useMemo(() => groupCoursesByMaster(courses), [courses])
 
   useEffect(() => {
     loadCourses()
@@ -2713,18 +2715,26 @@ export default function CoursesPage() {
           </div>
         ) : !selectedCourseId ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-            {courses.map((course) => {
+            {courseGroups.map((courseGroup) => {
+              const course = courseGroup.contentCourse
+              const defaultSection = String(user?.role || "").toLowerCase() === "admin"
+                ? courseGroup.sections[0]
+                : courseGroup.sections.find((section) => Number(section.teacher_id) === Number(user?.id)) || course
               const courseName = getCourseName(course)
-              const roster = rosterByCourseId[course.id]
-              const rosterStudents = roster?.students || []
+              const rosterStudents = courseGroup.sections.flatMap(
+                (section) => rosterByCourseId[section.id]?.students || []
+              )
               const courseAssignments = getAssignmentsForCourse(course.id)
-              const displayedStudentCount = Number(course.student_count ?? rosterStudents.length ?? 0)
+              const displayedStudentCount = courseGroup.sections.reduce(
+                (sum, section) => sum + Number(section.student_count || 0),
+                0
+              ) || rosterStudents.length
 
               return (
                 <button
-                  key={course.id}
+                  key={courseGroup.key}
                   type="button"
-                  onClick={() => openCourseWorkspace(course.id)}
+                  onClick={() => openCourseWorkspace(defaultSection.id)}
                   style={{
                     ...courseCardStyle,
                     textAlign: "left",
@@ -2736,7 +2746,14 @@ export default function CoursesPage() {
                   }}
                 >
                   <div>
-                    <h2 style={{ marginTop: 0, marginBottom: "10px", fontSize: "22px" }}>{courseName}</h2>
+                    <h2 style={{ marginTop: 0, marginBottom: "10px", fontSize: "22px" }}>
+                      {courseGroup.masterTitle || courseName}
+                    </h2>
+                    {courseGroup.isMultiSection ? (
+                      <div style={{ marginBottom: "10px", fontWeight: 800, color: "#1f4e78" }}>
+                        Sections: {courseGroup.sections.map((section) => section.normalized_title).join(", ")}
+                      </div>
+                    ) : null}
                     <p
                       style={{
                         margin: 0,
@@ -2773,13 +2790,21 @@ export default function CoursesPage() {
               </button>
             </div>
             {courses.filter((course) => String(course.id) === String(selectedCourseId)).map((course) => {
+              const courseGroup = findCourseGroup(courses, course.id)
+              const contentCourse = courseGroup?.contentCourse || course
+              const contentCourseId = contentCourse.id
+              const availableSections = String(user?.role || "").toLowerCase() === "admin"
+                ? courseGroup?.sections || [course]
+                : (courseGroup?.sections || [course]).filter(
+                    (section) => Number(section.teacher_id) === Number(user?.id)
+                  )
               const roster = rosterByCourseId[course.id]
               const rosterStudents = roster?.students || []
               const isRosterOpen = activeRosterCourseId === course.id
               const isImportOpen = activeImportCourseId === course.id
-              const isLearningPathsOpen = activeLearningPathCourseId === course.id
-              const isCompetenciesOpen = activeCompetencyCourseId === course.id
-              const courseCompetencies = competenciesByCourseId[course.id] || []
+              const isLearningPathsOpen = activeLearningPathCourseId === contentCourseId
+              const isCompetenciesOpen = activeCompetencyCourseId === contentCourseId
+              const courseCompetencies = competenciesByCourseId[contentCourseId] || []
               const assessmentPathwayTotal = courseCompetencies.reduce(
                 (sum, pathway) => sum + Number(pathway.weight_percent || 0),
                 0
@@ -2790,9 +2815,9 @@ export default function CoursesPage() {
                 0
               )
 
-              const courseName = getCourseName(course)
-              const learningPaths = learningPathsByCourseId[course.id] || []
-              const courseAssignments = getAssignmentsForCourse(course.id)
+              const courseName = courseGroup?.masterTitle || getCourseName(course)
+              const learningPaths = learningPathsByCourseId[contentCourseId] || []
+              const courseAssignments = getAssignmentsForCourse(contentCourseId)
 
               const displayedStudentCount = Number(course.student_count ?? rosterStudents.length ?? 0)
               const hasStudents = displayedStudentCount > 0
@@ -2823,7 +2848,38 @@ export default function CoursesPage() {
                   key={course.id}
                   style={courseCardStyle}
                 >
-                  {editingCourseId === course.id ? (
+                  {courseGroup?.isMultiSection ? (
+                    <div
+                      style={{
+                        border: "1px solid #bfd2e4",
+                        borderRadius: "12px",
+                        padding: "14px",
+                        marginBottom: "14px",
+                        background: "#eef5fa",
+                        order: -3,
+                      }}
+                    >
+                      <label style={{ display: "grid", gap: "6px", maxWidth: "420px", fontWeight: 900 }}>
+                        Current section
+                        <select
+                          value={String(course.id)}
+                          onChange={(event) => openCourseWorkspace(event.target.value)}
+                          style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #94a3b8", font: "inherit" }}
+                        >
+                          {(availableSections.length > 0 ? availableSections : [course]).map((section) => (
+                            <option key={section.id} value={section.id}>
+                              {section.normalized_title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div style={{ marginTop: "8px", color: "#334155", lineHeight: 1.45 }}>
+                        Lessons, pathways, resources, and assignment setup are shared from {contentCourse.normalized_title || getCourseName(contentCourse)}.
+                        Attendance, roster, grades, submissions, and reports use the selected section.
+                      </div>
+                    </div>
+                  ) : null}
+                  {editingCourseId === contentCourseId ? (
                     <div
                       style={{
                         border: "1px solid #d7dce5",
@@ -2842,8 +2898,14 @@ export default function CoursesPage() {
                           <input
                             value={editCourseTitle}
                             onChange={(event) => setEditCourseTitle(event.target.value)}
+                            disabled={Boolean(courseGroup?.isMultiSection)}
                             style={inputStyle}
                           />
+                          {courseGroup?.isMultiSection ? (
+                            <div style={{ marginTop: "6px", color: "#64748b" }}>
+                              Section course names are managed automatically.
+                            </div>
+                          ) : null}
                         </div>
 
                         <div>
@@ -2865,17 +2927,17 @@ export default function CoursesPage() {
                         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                           <button
                             type="button"
-                            onClick={() => saveCourse(course.id)}
-                            disabled={savingCourseId === course.id}
+                            onClick={() => saveCourse(contentCourseId)}
+                            disabled={savingCourseId === contentCourseId}
                             style={primaryButtonStyle}
                           >
-                            {savingCourseId === course.id ? "Saving..." : "Save Course Changes"}
+                            {savingCourseId === contentCourseId ? "Saving..." : "Save Course Changes"}
                           </button>
 
                           <button
                             type="button"
                             onClick={cancelEditCourse}
-                            disabled={savingCourseId === course.id}
+                            disabled={savingCourseId === contentCourseId}
                             style={buttonStyle}
                           >
                             Cancel
@@ -2903,11 +2965,14 @@ export default function CoursesPage() {
                             background: "#ffffff",
                           }}
                         >
-                          {course.description || "No course overview has been added yet."}
+                          {contentCourse.description || "No course overview has been added yet."}
                         </div>
                       </div>
 
-                      <div style={{ marginBottom: "14px", color: "#4b5563" }}>Course ID: {course.id}</div>
+                      <div style={{ marginBottom: "14px", color: "#4b5563" }}>
+                        Section ID: {course.id}
+                        {contentCourseId !== course.id ? ` • Shared content ID: ${contentCourseId}` : ""}
+                      </div>
                     </div>
 
                     <div>
@@ -3072,10 +3137,10 @@ export default function CoursesPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => beginEditCourse(course)}
+                      onClick={() => beginEditCourse(contentCourse)}
                       style={buttonStyle}
                     >
-                      Edit Course
+                      Edit Shared Course Content
                     </button>
 
                     <button
@@ -3103,19 +3168,19 @@ export default function CoursesPage() {
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadCompetencies(course.id)
+                        loadCompetencies(contentCourseId)
                       }}
-                      disabled={competencyLoadingCourseId === course.id}
+                      disabled={competencyLoadingCourseId === contentCourseId}
                       style={buttonStyle}
                     >
-                      {competencyLoadingCourseId === course.id ? "Loading Learning & Grading Pathways..." : isCompetenciesOpen ? "Hide Learning & Grading Pathways" : "Learning & Grading Pathways"}
+                      {competencyLoadingCourseId === contentCourseId ? "Loading Learning & Grading Pathways..." : isCompetenciesOpen ? "Hide Learning & Grading Pathways" : "Learning & Grading Pathways"}
                     </button>
 
                     <button
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${course.id}&section=create#create-lesson`)
+                        navigate(`/lessons?courseId=${contentCourseId}&section=create#create-lesson`)
                       }}
                       style={buttonStyle}
                     >
@@ -3126,7 +3191,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/course-assignments/${course.id}`)
+                        navigate(`/course-assignments/${contentCourseId}?sectionId=${course.id}`)
                       }}
                       style={buttonStyle}
                     >
@@ -3137,7 +3202,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/gradebook?classId=${course.id}`)
+                        navigate(`/gradebook?classId=${course.id}&contentClassId=${contentCourseId}`)
                       }}
                       style={buttonStyle}
                     >
@@ -3148,7 +3213,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/reports?courseId=${course.id}`)
+                        navigate(`/reports?courseId=${course.id}&contentCourseId=${contentCourseId}`)
                       }}
                       style={buttonStyle}
                     >
@@ -3163,7 +3228,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.location.href = `/assignments?classId=${course.id}&section=create`
+                        window.location.href = `/assignments?classId=${contentCourseId}&sectionId=${course.id}&section=create`
                       }}
                       style={buttonStyle}
                     >
@@ -3174,7 +3239,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${course.id}&section=create#create-lesson`)
+                        navigate(`/lessons?courseId=${contentCourseId}&section=create#create-lesson`)
                       }}
                       style={buttonStyle}
                     >
@@ -3186,12 +3251,12 @@ export default function CoursesPage() {
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadLearningPaths(course.id)
+                        loadLearningPaths(contentCourseId)
                       }}
-                      disabled={learningPathLoadingCourseId === course.id}
+                      disabled={learningPathLoadingCourseId === contentCourseId}
                       style={buttonStyle}
                     >
-                      {learningPathLoadingCourseId === course.id
+                      {learningPathLoadingCourseId === contentCourseId
                         ? "Loading Learning Paths..."
                         : isLearningPathsOpen
                           ? "Hide Learning Paths & Resources"
@@ -3203,9 +3268,9 @@ export default function CoursesPage() {
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
-                        loadCompetencies(course.id, { forceOpen: true })
+                        loadCompetencies(contentCourseId, { forceOpen: true })
                       }}
-                      disabled={competencyLoadingCourseId === course.id}
+                      disabled={competencyLoadingCourseId === contentCourseId}
                       style={buttonStyle}
                     >
                       + Add Evidence Tier
@@ -3247,45 +3312,47 @@ export default function CoursesPage() {
 
                     <button
                       type="button"
-                      onClick={() => loadTemplateLibrary(course.id)}
-                      disabled={templateLibraryLoading && activeTemplateLibraryCourseId === course.id}
+                      onClick={() => loadTemplateLibrary(contentCourseId)}
+                      disabled={templateLibraryLoading && activeTemplateLibraryCourseId === contentCourseId}
                       style={buttonStyle}
                     >
-                      {templateLibraryLoading && activeTemplateLibraryCourseId === course.id
+                      {templateLibraryLoading && activeTemplateLibraryCourseId === contentCourseId
                         ? "Loading Templates..."
-                        : activeTemplateLibraryCourseId === course.id
+                        : activeTemplateLibraryCourseId === contentCourseId
                           ? "Hide Template Library"
                           : "Template Library"}
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => saveCourseStructureAsTemplate(course)}
-                      disabled={savingTemplateCourseId === course.id}
+                      onClick={() => saveCourseStructureAsTemplate(contentCourse)}
+                      disabled={savingTemplateCourseId === contentCourseId}
                       style={buttonStyle}
                     >
-                      {savingTemplateCourseId === course.id ? "Saving Template..." : "Save Structure as Template"}
+                      {savingTemplateCourseId === contentCourseId ? "Saving Template..." : "Save Structure as Template"}
                     </button>
 
                     <div style={{ flexBasis: "100%", fontWeight: 900, marginTop: "10px" }}>
                       Course Admin
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => duplicateCourse(course)}
-                      disabled={duplicatingCourseId === course.id}
-                      style={buttonStyle}
-                    >
-                      {duplicatingCourseId === course.id ? "Duplicating Course..." : "Duplicate Course"}
-                    </button>
+                    {!courseGroup?.isMultiSection ? (
+                      <button
+                        type="button"
+                        onClick={() => duplicateCourse(course)}
+                        disabled={duplicatingCourseId === course.id}
+                        style={buttonStyle}
+                      >
+                        {duplicatingCourseId === course.id ? "Duplicating Course..." : "Duplicate Course"}
+                      </button>
+                    ) : null}
 
-                    <button type="button" onClick={() => forceSetupKdu(course.id)} disabled={settingUpCourseId === course.id} style={buttonStyle}>
+                    <button type="button" onClick={() => forceSetupKdu(contentCourseId)} disabled={settingUpCourseId === contentCourseId} style={buttonStyle}>
                       Force Reset KDU
                     </button>
                   </div>
 
-                  {activeTemplateLibraryCourseId === course.id ? (
+                  {activeTemplateLibraryCourseId === contentCourseId ? (
                     <div style={learningPathBoxStyle}>
                       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Template Library</h3>
 

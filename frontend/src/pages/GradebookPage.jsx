@@ -119,6 +119,7 @@ export default function GradebookPage() {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const requestedClassId = queryParams.get("classId") || "13";
+  const requestedContentClassId = queryParams.get("contentClassId") || requestedClassId;
   const requestedStudentEmail = queryParams.get("studentEmail") || "";
   const requestedStudentName = queryParams.get("studentName") || "";
   const requestedFocus = queryParams.get("focus") || "";
@@ -168,7 +169,7 @@ export default function GradebookPage() {
 
     try {
       const response = await authFetch(
-        `/api/classes/${courseId}/kdu-gradebook`
+        `/api/classes/${courseId}/kdu-gradebook?contentClassId=${encodeURIComponent(requestedContentClassId)}`
       );
       const data = await response.json();
 

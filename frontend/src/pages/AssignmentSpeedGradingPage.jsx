@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import RawMarkEntryPanel from "./RawMarkEntryPanel";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import API_BASE from "../apiBase";
@@ -215,6 +215,8 @@ function getSavedKduSummary(row) {
 }
 
 export default function AssignmentSpeedGradingPage() {
+  const location = useLocation();
+  const sectionId = new URLSearchParams(location.search).get("sectionId") || "";
   const { assignmentId } = useParams();
   const navigate = useNavigate();
 
@@ -251,7 +253,11 @@ export default function AssignmentSpeedGradingPage() {
 
   function backToAssignmentsPage() {
     const classId = assignment?.class_id || assignment?.course_id || assignment?.classId || "";
-    navigate(classId ? `/assignments?classId=${classId}` : "/assignments");
+    navigate(
+      classId
+        ? `/assignments?classId=${classId}${sectionId ? `&sectionId=${encodeURIComponent(sectionId)}` : ""}`
+        : "/assignments"
+    );
   }
 
   const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
@@ -266,7 +272,7 @@ export default function AssignmentSpeedGradingPage() {
   async function loadGradebook(nextSelectedEmail = null) {
     try {
       const res = await authFetch(
-        `${API_BASE}/api/assignments/${assignmentId}/gradebook`
+        `${API_BASE}/api/assignments/${assignmentId}/gradebook${sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : ""}`
       );
 
       const data = await res.json();
@@ -355,7 +361,8 @@ export default function AssignmentSpeedGradingPage() {
       setSectionScoresLoading(true);
       setSectionScoresMessage("");
 
-      const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/section-scores`);
+      const sectionQuery = sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : "";
+      const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/section-scores${sectionQuery}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -481,7 +488,7 @@ export default function AssignmentSpeedGradingPage() {
 
     try {
       const res = await authFetch(
-        `${API_BASE}/api/assignments/${assignmentId}/gradebook`
+        `${API_BASE}/api/assignments/${assignmentId}/gradebook${sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : ""}`
       );
 
       const data = await res.json();
@@ -989,7 +996,7 @@ export default function AssignmentSpeedGradingPage() {
         action:
           "Go back to Edit Assignment if you need to build the KDU rubric or raw mark sections before grading.",
         buttonLabel: "Edit Assignment",
-        buttonAction: () => navigate(`/assignments/${assignmentId}/edit#exam-sections`),
+        buttonAction: () => navigate(`/assignments/${assignmentId}/edit${sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : ""}#exam-sections`),
       };
     }
 
@@ -1010,6 +1017,7 @@ export default function AssignmentSpeedGradingPage() {
     rubric,
     rubricLoading,
     assignmentId,
+    sectionId,
     navigate,
   ]);
 

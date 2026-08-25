@@ -169,7 +169,10 @@ function ReportsPage() {
       return;
     }
 
-    authFetch(`/api/courses/${courseId}/categories`)
+    const selectedCourseRecord = courses.find((course) => String(course.id) === String(courseId));
+    const contentCourseId = selectedCourseRecord?.content_course_id || courseId;
+
+    authFetch(`/api/courses/${contentCourseId}/categories`)
       .then((res) => {
         if (!res.ok) {
           throw new Error("Could not load categories");
@@ -239,6 +242,8 @@ function ReportsPage() {
 
   function handleCourseChange(event) {
     const courseId = String(event.target.value || "");
+    const selectedCourseRecord = courses.find((course) => String(course.id) === String(courseId));
+    const contentCourseId = selectedCourseRecord?.content_course_id || courseId;
 
     setSelectedCourse(courseId);
 
@@ -292,7 +297,7 @@ function ReportsPage() {
       .then(data => setReportComments(data.comments || []))
       .catch(() => setReportComments([]));
 
-    authFetch(`/api/classes/${courseId}/kdu-gradebook`)
+    authFetch(`/api/classes/${courseId}/kdu-gradebook?contentClassId=${encodeURIComponent(contentCourseId)}`)
       .then(res => res.json())
       .then(data => setKduGradebookStudents(data.students || []))
       .catch(() => setKduGradebookStudents([]));
@@ -356,6 +361,10 @@ function ReportsPage() {
       levelName: selectedLevelName,
       reportScope,
     });
+    const selectedCourseRecord = courses.find(
+      (course) => String(course.id) === String(selectedCourse)
+    );
+    params.set("contentCourseId", String(selectedCourseRecord?.content_course_id || selectedCourse));
 
     authFetch(`/api/reports/${selectedCourse}?${params.toString()}`)
       .then((res) => {

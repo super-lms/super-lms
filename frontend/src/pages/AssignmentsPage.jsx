@@ -229,6 +229,7 @@ export default function AssignmentsPage() {
   const location = useLocation()
   const queryParams = new URLSearchParams(location.search)
   const requestedClassId = queryParams.get("classId")
+  const requestedRosterClassId = queryParams.get("sectionId")
   const requestedSection = queryParams.get("section")
 
   const workspaceContentRef = useRef(null)
@@ -462,7 +463,7 @@ export default function AssignmentsPage() {
     setMessage("")
     setDingtalkConnectionError("")
     try {
-      const response = await authFetch(`/api/courses/${selectedClassId}/dingtalk`, {
+      const response = await authFetch(`/api/courses/${requestedRosterClassId || selectedClassId}/dingtalk`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ webhookUrl: dingtalkWebhookUrl.trim(), signingSecret: dingtalkSigningSecret.trim() }),
@@ -494,7 +495,11 @@ export default function AssignmentsPage() {
     setError("")
     setMessage("")
     try {
-      const response = await authFetch(`/api/assignments/${dingtalkSendAssignmentId}/send-to-dingtalk`, { method: "POST" })
+      const response = await authFetch(`/api/assignments/${dingtalkSendAssignmentId}/send-to-dingtalk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectionId: requestedRosterClassId || selectedClassId }),
+      })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || "Could not send to DingTalk")
       setMessage(data.message || "Assignment sent to DingTalk.")
@@ -622,6 +627,10 @@ export default function AssignmentsPage() {
                   .trim()
                   .toLowerCase()
 
+                const sharedTeacherIds = Array.isArray(classItem?.shared_teacher_ids)
+                  ? classItem.shared_teacher_ids.map((id) => String(id))
+                  : []
+                if (normalizedUserId && sharedTeacherIds.includes(normalizedUserId)) return true
                 if (normalizedUserId && classTeacherId) return classTeacherId === normalizedUserId
                 if (normalizedUserEmail && classTeacherEmail) return classTeacherEmail === normalizedUserEmail
                 return false
@@ -645,7 +654,7 @@ export default function AssignmentsPage() {
           setSelectedClassId(String(requestedClassId))
           setTeacherSection(validRequestedSection)
           pendingSectionScrollRef.current = validRequestedSection
-          return Promise.all([loadCategoriesForClass(String(requestedClassId)), loadClassStudents(String(requestedClassId)), loadDingtalkSettings(String(requestedClassId))])
+          return Promise.all([loadCategoriesForClass(String(requestedClassId)), loadClassStudents(String(requestedRosterClassId || requestedClassId)), loadDingtalkSettings(String(requestedRosterClassId || requestedClassId))])
         }
 
         if (selectedClassId && !selectedStillExists) {
@@ -735,13 +744,13 @@ export default function AssignmentsPage() {
     if (String(selectedClassId) !== String(requestedClassId)) {
       setSelectedClassId(String(requestedClassId))
       loadCategoriesForClass(String(requestedClassId))
-      loadClassStudents(String(requestedClassId))
-      loadDingtalkSettings(String(requestedClassId))
+      loadClassStudents(String(requestedRosterClassId || requestedClassId))
+      loadDingtalkSettings(String(requestedRosterClassId || requestedClassId))
     }
 
     setTeacherSection(validRequestedSection)
     pendingSectionScrollRef.current = validRequestedSection
-  }, [requestedClassId, requestedSection, classes.length, selectedClassId])
+  }, [requestedClassId, requestedRosterClassId, requestedSection, classes, selectedClassId])
 
   useEffect(() => {
     if (!selectedClassId) {
@@ -954,6 +963,7 @@ export default function AssignmentsPage() {
     const formData = new FormData()
     dingtalkFiles.forEach((file) => formData.append("attachments", file))
     formData.append("mappings", JSON.stringify(mappings))
+    formData.append("sectionId", String(requestedRosterClassId || selectedClassId))
     setDingtalkImportLoading(true)
     setDingtalkImportResult(null)
     setError("")
@@ -1228,7 +1238,7 @@ export default function AssignmentsPage() {
     setError("")
     setMessage("")
 
-    authFetch(`/api/classes/${selectedClassId}/students`, {
+    authFetch(`/api/classes/${requestedRosterClassId || selectedClassId}/students`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1248,7 +1258,7 @@ export default function AssignmentsPage() {
         setMessage(
           `Student added to ${data.className || selectedClassName || `Class ${selectedClassId}`}. Roster is ready for grading.`
         )
-        return loadClassStudents(selectedClassId)
+        return loadClassStudents(requestedRosterClassId || selectedClassId)
       })
       .catch((err) => {
         setError(err.message || "Failed to add student to class")

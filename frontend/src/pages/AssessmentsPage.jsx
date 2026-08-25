@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import authFetch from "../services/authFetch";
 import { useAuth } from "../AuthContext.jsx";
+import { groupCoursesByMaster } from "../services/courseSections";
 
 const EMPTY_ASSESSMENT = {
   course_id: "",
@@ -156,8 +157,13 @@ export default function AssessmentsPage() {
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState(EMPTY_IMPORT);
   const [importing, setImporting] = useState(false);
+  const courseGroups = useMemo(() => groupCoursesByMaster(courses), [courses]);
+  const contentCourses = useMemo(
+    () => courseGroups.map((group) => ({ ...group.contentCourse, display_title: group.masterTitle })),
+    [courseGroups]
+  );
 
-  const selectedCourse = courses.find(
+  const selectedCourse = contentCourses.find(
     (course) => String(course.id) === String(form.course_id)
   );
   const pointsPossible = useMemo(
@@ -186,7 +192,18 @@ export default function AssessmentsPage() {
 
   async function loadCourses() {
     const data = await request("/api/classes");
-    setCourses(Array.isArray(data) ? data : []);
+    const safeCourses = Array.isArray(data) ? data : [];
+    const role = String(user?.role || "").toLowerCase();
+    const userId = String(user?.id || "");
+    setCourses(
+      role === "admin"
+        ? safeCourses
+        : safeCourses.filter((course) =>
+            String(course.teacher_id || "") === userId ||
+            (Array.isArray(course.shared_teacher_ids) &&
+              course.shared_teacher_ids.some((teacherId) => String(teacherId) === userId))
+          )
+    );
   }
 
   async function loadAssessments(keepId = selectedId) {
@@ -780,9 +797,9 @@ export default function AssessmentsPage() {
                     style={inputStyle}
                   >
                     <option value="">Select course</option>
-                    {courses.map((course) => (
+                    {contentCourses.map((course) => (
                       <option key={course.id} value={course.id}>
-                        {course.title || course.class_name}
+                        {course.display_title || course.title || course.class_name}
                       </option>
                     ))}
                   </select>
@@ -838,9 +855,9 @@ export default function AssessmentsPage() {
                     style={inputStyle}
                   >
                     <option value="">Select course</option>
-                    {courses.map((course) => (
+                    {contentCourses.map((course) => (
                       <option key={course.id} value={course.id}>
-                        {course.title || course.class_name}
+                        {course.display_title || course.title || course.class_name}
                       </option>
                     ))}
                   </select>

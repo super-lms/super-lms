@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
 import AssignmentCardsView from "../components/courseAssignments/AssignmentCardsView"
@@ -9,6 +9,8 @@ import TeacherCoachPanel from "../components/courseAssignments/TeacherCoachPanel
 export default function CourseAssignmentsPage() {
   const { courseId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const sectionId = new URLSearchParams(location.search).get("sectionId") || courseId
 
   const [course, setCourse] = useState(null)
   const [assignments, setAssignments] = useState([])
@@ -184,15 +186,15 @@ export default function CourseAssignmentsPage() {
   }
 
   function openSpeedGrading(assignmentId) {
-    navigate(`/assignments/${assignmentId}/grade`)
+    navigate(`/assignments/${assignmentId}/grade?sectionId=${encodeURIComponent(sectionId)}`)
   }
 
   function openEditAssignment(assignmentId) {
-    navigate(`/assignments/${assignmentId}/edit`)
+    navigate(`/assignments/${assignmentId}/edit?sectionId=${encodeURIComponent(sectionId)}`)
   }
 
   function openEditSections(assignmentId) {
-    window.location.href = `/assignments/${assignmentId}/edit#exam-sections`
+    window.location.href = `/assignments/${assignmentId}/edit?sectionId=${encodeURIComponent(sectionId)}#exam-sections`
   }
 
   async function moveAssignment(assignmentId, direction) {
