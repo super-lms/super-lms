@@ -9,6 +9,7 @@ const {
 
 class FakePool {
   constructor() {
+    this.users = [];
     this.courses = [
       { id: 10, title: "EFP 12 A", course_name: "EFP 12 A", teacher_id: 1 },
       { id: 20, title: "EFP 12B", course_name: "EFP 12B", teacher_id: 2 },
@@ -32,10 +33,29 @@ class FakePool {
     if (/^(BEGIN|COMMIT|ROLLBACK)$/.test(normalized)) return { rows: [] };
     if (normalized.startsWith("ALTER TABLE courses") || normalized.startsWith("ALTER TABLE course_teachers") || normalized.startsWith("CREATE INDEX") || normalized.startsWith("CREATE TABLE")) return { rows: [] };
     if (normalized.startsWith("SELECT id, title, teacher_id FROM courses")) return { rows: this.courses.map((row) => ({ ...row })) };
+    if (normalized.startsWith("SELECT id FROM users WHERE LOWER(email)")) {
+      const user = this.users.find((row) => String(row.email).toLowerCase() === String(params[0]).toLowerCase());
+      return { rows: user ? [{ id: user.id }] : [] };
+    }
+    if (normalized.startsWith("UPDATE courses SET teacher_id")) {
+      const [teacherId, courseId] = params;
+      this.courses.find((row) => row.id === courseId).teacher_id = teacherId;
+      return { rows: [] };
+    }
+    if (normalized.startsWith("DELETE FROM course_teachers")) {
+      const [courseId] = params;
+      if (normalized.includes("role = 'primary'")) {
+        this.courseTeachers = this.courseTeachers.filter((row) => row.course_id !== courseId || row.role !== "primary");
+      } else if (normalized.includes("section_inherited = true")) {
+        this.courseTeachers = this.courseTeachers.filter((row) => row.course_id !== courseId || !row.section_inherited);
+      }
+      return { rows: [] };
+    }
     if (normalized.startsWith("INSERT INTO course_teachers")) {
       const [course_id, teacher_id] = params;
       if (!this.courseTeachers.some((row) => row.course_id === course_id && row.teacher_id === teacher_id)) {
-        this.courseTeachers.push({ course_id, teacher_id, role: "co-teacher" });
+        const primary = normalized.includes("'primary'");
+        this.courseTeachers.push({ course_id, teacher_id, role: primary ? "primary" : "co-teacher", section_inherited: !primary });
       }
       return { rows: [] };
     }
@@ -92,4 +112,31 @@ test("migrates shared content, preserves section records, and is idempotent", as
   assert.equal(pool.enrollments[0].class_id, 20);
   assert.equal(pool.attendance[0].course_id, 20);
   assert.deepEqual(pool.courseTeachers.map((row) => row.teacher_id).sort(), [1, 2]);
+});
+
+test("corrects Pete Niu's FMP 10 and Accounting 11 sections to his real login", async () => {
+  const pool = new FakePool();
+  pool.users = [{ id: 77, email: "peterniu@cbcschools.ca" }];
+  pool.courses = [
+    { id: 101, title: "FMP 10A", teacher_id: null },
+    { id: 102, title: "FMP 10B", teacher_id: null },
+    { id: 103, title: "FMP 10C", teacher_id: null },
+    { id: 104, title: "FMP 10D", teacher_id: null },
+    { id: 111, title: "Accounting 11A", teacher_id: null },
+    { id: 112, title: "Accounting 11B", teacher_id: null },
+    { id: 113, title: "Accounting 11C", teacher_id: null },
+    { id: 120, title: "Economic Theory 12", teacher_id: null },
+  ];
+  pool.tables = Object.fromEntries(
+    ["lessons", "assignments", "course_categories", "learning_paths", "assessments", "assessment_question_banks", "submissions"]
+      .map((table) => [table, []])
+  );
+
+  await ensureCourseSectionStructure(pool);
+
+  for (const course of pool.courses.filter((course) => /^(FMP 10|Accounting 11)/.test(course.title))) {
+    assert.equal(course.teacher_id, 77, course.title);
+  }
+  assert.equal(pool.courses.find((course) => course.title === "Economic Theory 12").teacher_id, null);
+  assert.equal(pool.courseTeachers.filter((row) => row.role === "primary" && row.teacher_id === 77).length, 7);
 });

@@ -7,6 +7,13 @@ const APPROVED_MULTI_SECTION_COURSES = [
   "Pre-Calculus 12", "Science 10", "Social Studies 10", "Spoken Language 10",
 ];
 
+const KNOWN_TEACHER_ASSIGNMENT_CORRECTIONS = [
+  {
+    teacherEmail: "peterniu@cbcschools.ca",
+    masterTitles: ["FMP 10", "Accounting 11"],
+  },
+];
+
 function comparableCourseTitle(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, "");
 }
@@ -45,6 +52,37 @@ async function ensureCourseSectionStructure(pool) {
   await pool.query(`ALTER TABLE course_teachers ADD COLUMN IF NOT EXISTS section_inherited BOOLEAN NOT NULL DEFAULT false`);
 
   const coursesResult = await pool.query(`SELECT id, title, teacher_id FROM courses ORDER BY id ASC`);
+
+  for (const correction of KNOWN_TEACHER_ASSIGNMENT_CORRECTIONS) {
+    const teacherResult = await pool.query(
+      `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      [correction.teacherEmail]
+    );
+    const teacherId = Number(teacherResult.rows[0]?.id || 0);
+    if (!teacherId) continue;
+
+    const targetCourses = coursesResult.rows.filter((course) => {
+      const identity = getApprovedSectionIdentity(course.title);
+      return identity && correction.masterTitles.includes(identity.masterTitle);
+    });
+
+    for (const course of targetCourses) {
+      await pool.query(`UPDATE courses SET teacher_id = $1 WHERE id = $2`, [teacherId, Number(course.id)]);
+      await pool.query(
+        `DELETE FROM course_teachers WHERE course_id = $1 AND role = 'primary'`,
+        [Number(course.id)]
+      );
+      await pool.query(
+        `INSERT INTO course_teachers (course_id, teacher_id, role, section_inherited)
+         VALUES ($1, $2, 'primary', false)
+         ON CONFLICT (course_id, teacher_id) DO UPDATE
+         SET role = EXCLUDED.role, section_inherited = false`,
+        [Number(course.id), teacherId]
+      );
+      course.teacher_id = teacherId;
+    }
+  }
+
   const groups = new Map();
   for (const course of coursesResult.rows) {
     const identity = getApprovedSectionIdentity(course.title);
@@ -64,6 +102,10 @@ async function ensureCourseSectionStructure(pool) {
 
     try {
       await client.query("BEGIN");
+      await client.query(
+        `DELETE FROM course_teachers WHERE course_id = $1 AND section_inherited = true`,
+        [Number(contentCourse.id)]
+      );
       for (const section of orderedSections) {
         if (!section.teacher_id) continue;
         await client.query(
@@ -118,6 +160,7 @@ async function resolveContentCourseId(pool, courseId, queryable = pool) {
 
 module.exports = {
   APPROVED_MULTI_SECTION_COURSES,
+  KNOWN_TEACHER_ASSIGNMENT_CORRECTIONS,
   getApprovedSectionIdentity,
   ensureCourseSectionStructure,
   resolveContentCourseId,
