@@ -2878,8 +2878,19 @@ export default function CoursesPage() {
                         order: -3,
                       }}
                     >
+                      <div style={{ marginBottom: "12px" }}>
+                        <div style={{ fontSize: "13px", fontWeight: 900, color: "#1f4e78", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                          Master Course
+                        </div>
+                        <div style={{ marginTop: "3px", fontSize: "24px", fontWeight: 900, color: "#0f172a" }}>
+                          {courseGroup.masterTitle}
+                        </div>
+                        <div style={{ marginTop: "6px", color: "#334155", lineHeight: 1.45 }}>
+                          Create lessons, pathways, resources, and assignments once here. They are shared automatically with every section below.
+                        </div>
+                      </div>
                       <label style={{ display: "grid", gap: "6px", maxWidth: "420px", fontWeight: 900 }}>
-                        Current section
+                        Student section for attendance, rosters, grading, and reports
                         <select
                           value={String(course.id)}
                           onChange={(event) => openCourseWorkspace(event.target.value)}
@@ -2893,8 +2904,7 @@ export default function CoursesPage() {
                         </select>
                       </label>
                       <div style={{ marginTop: "8px", color: "#334155", lineHeight: 1.45 }}>
-                        Lessons, pathways, resources, and assignment setup are shared from {contentCourse.normalized_title || getCourseName(contentCourse)}.
-                        Attendance, roster, grades, submissions, and reports use the selected section.
+                        The selected lettered section does not create a separate copy of the course content. It only chooses which students and records you are working with.
                       </div>
                     </div>
                   ) : null}
@@ -2988,10 +2998,17 @@ export default function CoursesPage() {
                         </div>
                       </div>
 
-                      <div style={{ marginBottom: "14px", color: "#4b5563" }}>
-                        Section ID: {course.id}
-                        {contentCourseId !== course.id ? ` • Shared content ID: ${contentCourseId}` : ""}
-                      </div>
+                      {courseGroup?.isMultiSection ? (
+                        <div style={{ marginBottom: "14px", color: "#4b5563" }}>
+                          <strong>Shared content workspace:</strong> {courseGroup.masterTitle} Master Course
+                          <span> • </span>
+                          <strong>Selected student section:</strong> {course.normalized_title || getCourseName(course)}
+                        </div>
+                      ) : (
+                        <div style={{ marginBottom: "14px", color: "#4b5563" }}>
+                          Course ID: {course.id}
+                        </div>
+                      )}
                     </div>
 
                     <div>
