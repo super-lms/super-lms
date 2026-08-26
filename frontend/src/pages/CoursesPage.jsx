@@ -62,6 +62,7 @@ export default function CoursesPage() {
   const [error, setError] = useState("")
   const [settingUpCourseId, setSettingUpCourseId] = useState(null)
   const [selectedCourseId, setSelectedCourseId] = useState(null)
+  const [isMasterWorkspace, setIsMasterWorkspace] = useState(false)
 
   const [showCreateCourse, setShowCreateCourse] = useState(false)
   const [creatingCourse, setCreatingCourse] = useState(false)
@@ -188,6 +189,7 @@ export default function CoursesPage() {
     if (requestedCourseId) {
       window.localStorage.setItem("super-lms-last-course-id", String(requestedCourseId))
       setSelectedCourseId(requestedCourseId)
+      setIsMasterWorkspace(params.get("view") === "master")
 
       window.setTimeout(() => {
         const target = document.getElementById(`course-${requestedCourseId}`)
@@ -233,6 +235,7 @@ export default function CoursesPage() {
       const params = new URLSearchParams(window.location.search)
       const requestedCourseId = params.get("courseId")
       setSelectedCourseId(requestedCourseId || null)
+      setIsMasterWorkspace(Boolean(requestedCourseId) && params.get("view") === "master")
     }
 
     window.addEventListener("popstate", handleCourseBrowserHistory)
@@ -299,17 +302,20 @@ export default function CoursesPage() {
     }
   }
 
-  function openCourseWorkspace(courseId) {
+  function openCourseWorkspace(courseId, options = {}) {
     if (!courseId) return
 
+    const masterView = Boolean(options.master)
     window.localStorage.setItem("super-lms-last-course-id", String(courseId))
-    window.history.pushState(null, "", `/courses?courseId=${courseId}`)
+    window.history.pushState(null, "", `/courses?courseId=${courseId}${masterView ? "&view=master" : ""}`)
     setSelectedCourseId(courseId)
+    setIsMasterWorkspace(masterView)
   }
 
   function returnToCourseCards() {
     window.history.pushState(null, "", "/courses")
     setSelectedCourseId(null)
+    setIsMasterWorkspace(false)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -2737,7 +2743,7 @@ export default function CoursesPage() {
                 <button
                   key={courseGroup.key}
                   type="button"
-                  onClick={() => openCourseWorkspace(defaultSection.id)}
+                  onClick={() => openCourseWorkspace(defaultSection.id, { master: courseGroup.isMultiSection })}
                   style={{
                     ...courseCardStyle,
                     textAlign: "left",
@@ -2892,13 +2898,23 @@ export default function CoursesPage() {
                       <label style={{ display: "grid", gap: "6px", maxWidth: "420px", fontWeight: 900 }}>
                         Student section for attendance, rosters, grading, and reports
                         <select
-                          value={String(course.id)}
-                          onChange={(event) => openCourseWorkspace(event.target.value)}
+                          value={isMasterWorkspace ? `master:${contentCourseId}` : String(course.id)}
+                          onChange={(event) => {
+                            const nextValue = event.target.value
+                            if (nextValue.startsWith("master:")) {
+                              openCourseWorkspace(contentCourseId, { master: true })
+                              return
+                            }
+                            openCourseWorkspace(nextValue)
+                          }}
                           style={{ padding: "10px 12px", borderRadius: "10px", border: "1px solid #94a3b8", font: "inherit" }}
                         >
+                          <option value={`master:${contentCourseId}`}>
+                            {courseGroup.masterTitle} — Master Course
+                          </option>
                           {(availableSections.length > 0 ? availableSections : [course]).map((section) => (
                             <option key={section.id} value={section.id}>
-                              {section.normalized_title}
+                              — {section.normalized_title}
                             </option>
                           ))}
                         </select>
@@ -2906,6 +2922,11 @@ export default function CoursesPage() {
                       <div style={{ marginTop: "8px", color: "#334155", lineHeight: 1.45 }}>
                         The selected lettered section does not create a separate copy of the course content. It only chooses which students and records you are working with.
                       </div>
+                      {isMasterWorkspace ? (
+                        <div style={{ marginTop: "8px", color: "#7a5a00", fontWeight: 800, lineHeight: 1.45 }}>
+                          Choose a lettered section before using attendance, rosters, grading, submissions, or reports.
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   {editingCourseId === contentCourseId ? (
@@ -3002,7 +3023,7 @@ export default function CoursesPage() {
                         <div style={{ marginBottom: "14px", color: "#4b5563" }}>
                           <strong>Shared content workspace:</strong> {courseGroup.masterTitle} Master Course
                           <span> • </span>
-                          <strong>Selected student section:</strong> {course.normalized_title || getCourseName(course)}
+                          <strong>Selected student section:</strong> {isMasterWorkspace ? "None" : course.normalized_title || getCourseName(course)}
                         </div>
                       ) : (
                         <div style={{ marginBottom: "14px", color: "#4b5563" }}>
@@ -3185,6 +3206,8 @@ export default function CoursesPage() {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         navigate(`/courses/${course.id}/attendance`)
                       }}
+                      disabled={isMasterWorkspace}
+                      title={isMasterWorkspace ? "Choose a lettered section before taking attendance." : ""}
                       style={{
                         ...primaryButtonStyle,
                         flexBasis: "100%",
@@ -3229,6 +3252,8 @@ export default function CoursesPage() {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         navigate(`/course-assignments/${contentCourseId}?sectionId=${course.id}`)
                       }}
+                      disabled={isMasterWorkspace}
+                      title={isMasterWorkspace ? "Choose a lettered section before opening current assignments." : ""}
                       style={buttonStyle}
                     >
                       Current Assignments
@@ -3240,6 +3265,8 @@ export default function CoursesPage() {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         navigate(`/gradebook?classId=${course.id}&contentClassId=${contentCourseId}`)
                       }}
+                      disabled={isMasterWorkspace}
+                      title={isMasterWorkspace ? "Choose a lettered section before opening the gradebook." : ""}
                       style={buttonStyle}
                     >
                       Gradebook
@@ -3251,6 +3278,8 @@ export default function CoursesPage() {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         navigate(`/reports?courseId=${course.id}&contentCourseId=${contentCourseId}`)
                       }}
+                      disabled={isMasterWorkspace}
+                      title={isMasterWorkspace ? "Choose a lettered section before opening reports." : ""}
                       style={buttonStyle}
                     >
                       Reports
@@ -3320,7 +3349,7 @@ export default function CoursesPage() {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
                       loadRoster(course.id)
-                    }} disabled={rosterLoadingCourseId === course.id} style={buttonStyle}>
+                    }} disabled={isMasterWorkspace || rosterLoadingCourseId === course.id} title={isMasterWorkspace ? "Choose a lettered section before viewing a roster." : ""} style={buttonStyle}>
                       {rosterLoadingCourseId === course.id ? "Loading Roster..." : isRosterOpen ? "Hide Roster" : "View Roster"}
                     </button>
 
@@ -3333,6 +3362,8 @@ export default function CoursesPage() {
                         )
                         navigate(`/class-roster?courseId=${course.id}`)
                       }}
+                      disabled={isMasterWorkspace}
+                      title={isMasterWorkspace ? "Choose a lettered section before managing a roster." : ""}
                       style={buttonStyle}
                     >
                       Manage Roster
@@ -3342,7 +3373,7 @@ export default function CoursesPage() {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
                       openCourseImport(course)
-                    }} disabled={courseImportingCourseId === course.id} style={buttonStyle}>
+                    }} disabled={isMasterWorkspace || courseImportingCourseId === course.id} title={isMasterWorkspace ? "Choose a lettered section before importing students." : ""} style={buttonStyle}>
                       {isImportOpen ? "Close Import" : "Import Students"}
                     </button>
 
