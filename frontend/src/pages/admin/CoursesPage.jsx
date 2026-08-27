@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import authFetch from "../../services/authFetch"
+import { groupCoursesByMaster } from "../../services/courseSections"
 
 const COURSE_TYPE_OPTIONS = [
   {
@@ -80,10 +81,16 @@ export default function AdminCoursesPage() {
       })
   }, [users])
 
-  const groupedCourses = useMemo(() => {
+  const courseDisplay = useMemo(() => {
+    const masterClasses = groupCoursesByMaster(courses).filter(
+      (group) => group.isMultiSection
+    )
     const groups = new Map()
 
-    courses.forEach((course) => {
+    groupCoursesByMaster(courses)
+      .filter((group) => !group.isMultiSection)
+      .flatMap((group) => group.sections)
+      .forEach((course) => {
       const department = String(course.department || "").trim() || "Other Courses"
 
       if (!groups.has(department)) {
@@ -93,7 +100,7 @@ export default function AdminCoursesPage() {
       groups.get(department).push(course)
     })
 
-    return Array.from(groups.entries())
+    const departments = Array.from(groups.entries())
       .map(([department, departmentCourses]) => ({
         department,
         courses: [...departmentCourses].sort((a, b) =>
@@ -101,6 +108,8 @@ export default function AdminCoursesPage() {
         ),
       }))
       .sort((a, b) => a.department.localeCompare(b.department))
+
+    return { masterClasses, departments }
   }, [courses])
 
   function resetCreateCourseForm() {
@@ -184,7 +193,7 @@ export default function AdminCoursesPage() {
     }
 
     const confirmed = window.confirm(
-      `Delete \"${courseTitle}\"?\n\nThis permanently removes the course and cannot be undone.`
+      `Delete "${courseTitle}"?\n\nThis permanently removes the course and cannot be undone.`
     )
 
     if (!confirmed) {
@@ -452,7 +461,7 @@ export default function AdminCoursesPage() {
         </div>
       )}
 
-      {status === "ready" && groupedCourses.length === 0 && (
+      {status === "ready" && courses.length === 0 && (
         <div
           style={{
             background: "white",
@@ -466,8 +475,114 @@ export default function AdminCoursesPage() {
         </div>
       )}
 
+      {status === "ready" && courseDisplay.masterClasses.length > 0 && (
+        <section style={{ marginBottom: "28px" }}>
+          <h2 style={{ margin: "0 0 6px", fontSize: "22px", color: "#111827" }}>
+            Master Classes
+          </h2>
+          <p style={{ margin: "0 0 14px", color: "#4b5563", lineHeight: 1.5 }}>
+            Choose a master class, then select the correct class section.
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+              gap: "14px",
+            }}
+          >
+            {courseDisplay.masterClasses.map((masterClass) => (
+              <details
+                key={masterClass.key}
+                style={{
+                  background: "white",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "14px",
+                  overflow: "hidden",
+                }}
+              >
+                <summary
+                  style={{
+                    padding: "18px",
+                    cursor: "pointer",
+                    fontSize: "18px",
+                    fontWeight: 800,
+                    color: "#111827",
+                  }}
+                >
+                  {masterClass.masterTitle}
+                  <span
+                    style={{
+                      display: "block",
+                      marginTop: "6px",
+                      marginLeft: "22px",
+                      color: "#6b7280",
+                      fontSize: "14px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {masterClass.sections.length} sections — choose a section
+                  </span>
+                </summary>
+
+                <div style={{ borderTop: "1px solid #e5e7eb", padding: "12px 18px 18px" }}>
+                  {masterClass.sections.map((course) => (
+                    <div
+                      key={course.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "10px 0",
+                        borderBottom: "1px solid #f1f5f9",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, color: "#111827" }}>
+                          {course.title || course.normalized_title}
+                        </div>
+                        <div style={{ marginTop: "3px", color: "#6b7280", fontSize: "14px" }}>
+                          {Number(course.student_count || 0)} students
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/admin/courses/${encodeURIComponent(course.id)}`, {
+                            state: { course },
+                          })
+                        }
+                        style={{
+                          border: "1px solid #111827",
+                          borderRadius: "9px",
+                          background: "#111827",
+                          color: "white",
+                          padding: "9px 13px",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Open Section {course.section_code}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {status === "ready" && courseDisplay.departments.length > 0 && (
+        <h2 style={{ margin: "0 0 14px", fontSize: "22px", color: "#111827" }}>
+          Other Courses
+        </h2>
+      )}
+
       {status === "ready" &&
-        groupedCourses.map((group) => (
+        courseDisplay.departments.map((group) => (
           <section key={group.department} style={{ marginBottom: "24px" }}>
             <h2
               style={{
