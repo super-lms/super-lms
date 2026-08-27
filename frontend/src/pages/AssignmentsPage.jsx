@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
-import { findCourseGroup } from "../services/courseSections"
+import { findCourseGroup, groupCoursesByMaster } from "../services/courseSections"
 
 function SectionHeader({ title, subtitle, action }) {
   return (
@@ -819,7 +819,9 @@ export default function AssignmentsPage() {
   }
 
   function handleTeacherClassChange(e) {
-    const nextClassId = e.target.value
+    const nextValue = e.target.value
+    const selectingMaster = nextValue.startsWith("master:")
+    const nextClassId = selectingMaster ? nextValue.slice("master:".length) : nextValue
     const nextClass = classes.find((classItem) => String(classItem.id) === String(nextClassId))
     const nextContentClassId = nextClass?.content_course_id || nextClassId
 
@@ -835,11 +837,20 @@ export default function AssignmentsPage() {
 
     const nextQuery = new URLSearchParams()
     nextQuery.set("classId", String(nextContentClassId))
-    nextQuery.set("sectionId", String(nextClassId))
     nextQuery.set("section", teacherSection)
+    if (selectingMaster) {
+      nextQuery.set("view", "master")
+      setClassStudents([])
+    } else {
+      nextQuery.set("sectionId", String(nextClassId))
+    }
     navigate(`/assignments?${nextQuery.toString()}`, { replace: true })
 
-    Promise.all([loadCategoriesForClass(nextClassId), loadClassStudents(nextClassId), loadDingtalkSettings(nextClassId)]).catch((err) => {
+    const classRequests = selectingMaster
+      ? [loadCategoriesForClass(nextContentClassId)]
+      : [loadCategoriesForClass(nextClassId), loadClassStudents(nextClassId), loadDingtalkSettings(nextClassId)]
+
+    Promise.all(classRequests).catch((err) => {
       setError(err.message || "Failed to load class data")
     })
   }
@@ -1371,6 +1382,11 @@ export default function AssignmentsPage() {
     return selectedClass?.content_course_id || selectedClassId
   }, [classes, selectedClassId])
 
+  const courseGroups = useMemo(() => groupCoursesByMaster(classes), [classes])
+  const classSelectorValue = isMasterWorkspace
+    ? `master:${selectedContentClassId}`
+    : selectedClassId
+
   const teacherAssignments = useMemo(() => {
     const safeAssignments = Array.isArray(assignments) ? assignments : []
     if (!selectedContentClassId) return []
@@ -1571,7 +1587,7 @@ export default function AssignmentsPage() {
 
               <InputBlock label="Class">
                 <select
-                  value={selectedClassId}
+                  value={classSelectorValue}
                   onChange={handleTeacherClassChange}
                   style={{
                     width: "100%",
@@ -1584,20 +1600,31 @@ export default function AssignmentsPage() {
                   }}
                 >
                   <option value="">Select class</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {isMasterWorkspace && String(c.id) === String(selectedClassId)
-                        ? selectedClassName
-                        : c.class_name || `Class ${c.id}`}
-                    </option>
-                  ))}
+                  {courseGroups.map((courseGroup) =>
+                    courseGroup.isMultiSection ? (
+                      <optgroup key={courseGroup.key} label={courseGroup.masterTitle}>
+                        <option value={`master:${courseGroup.contentCourse.id}`}>
+                          {courseGroup.masterTitle} Master Class
+                        </option>
+                        {courseGroup.sections.map((section) => (
+                          <option key={section.id} value={section.id}>
+                            {section.normalized_title}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : (
+                      <option key={courseGroup.key} value={courseGroup.contentCourse.id}>
+                        {courseGroup.contentCourse.class_name || courseGroup.contentCourse.title || `Class ${courseGroup.contentCourse.id}`}
+                      </option>
+                    )
+                  )}
                 </select>
               </InputBlock>
 
               <div style={{ marginTop: "18px", marginBottom: "10px", fontWeight: 800 }}>Workspace</div>
 
               <div style={{ display: "grid", gap: "10px" }}>
-                <button type="button" style={teacherSectionButtonStyle("roster")} onClick={() => openTeacherSection("roster")} disabled={!selectedClassId}>
+                <button type="button" style={teacherSectionButtonStyle("roster")} onClick={() => openTeacherSection("roster")} disabled={!selectedClassId || isMasterWorkspace} title={isMasterWorkspace ? "Choose a lettered section to work with its roster." : ""}>
                   Roster UI
                 </button>
                 <button type="button" style={teacherSectionButtonStyle("create")} onClick={() => openTeacherSection("create")} disabled={!selectedClassId}>
@@ -1606,7 +1633,7 @@ export default function AssignmentsPage() {
                 <button type="button" style={teacherSectionButtonStyle("import")} onClick={() => openTeacherSection("import")} disabled={!selectedClassId}>
                   Assignment CSV Import
                 </button>
-                <button type="button" style={teacherSectionButtonStyle("dingtalk")} onClick={() => openTeacherSection("dingtalk")} disabled={!selectedClassId}>
+                <button type="button" style={teacherSectionButtonStyle("dingtalk")} onClick={() => openTeacherSection("dingtalk")} disabled={!selectedClassId || isMasterWorkspace} title={isMasterWorkspace ? "Choose a lettered section before using DingTalk." : ""}>
                   DingTalk Send / Upload
                 </button>
                 <button
