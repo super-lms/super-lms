@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
+import { findCourseGroup } from "../services/courseSections"
 
 function SectionHeader({ title, subtitle, action }) {
   return (
@@ -231,6 +232,7 @@ export default function AssignmentsPage() {
   const requestedClassId = queryParams.get("classId")
   const requestedRosterClassId = queryParams.get("sectionId")
   const requestedSection = queryParams.get("section")
+  const isMasterWorkspace = queryParams.get("view") === "master"
 
   const workspaceContentRef = useRef(null)
   const rosterSectionRef = useRef(null)
@@ -1342,8 +1344,14 @@ export default function AssignmentsPage() {
 
   const selectedClassName = useMemo(() => {
     const selectedClass = classes.find((item) => String(item.id) === String(selectedClassId))
+
+    if (isMasterWorkspace && selectedClass) {
+      const courseGroup = findCourseGroup(classes, selectedClass.id)
+      if (courseGroup?.isMultiSection) return `${courseGroup.masterTitle} Master Class`
+    }
+
     return selectedClass?.class_name || selectedClass?.title || ""
-  }, [classes, selectedClassId])
+  }, [classes, isMasterWorkspace, selectedClassId])
 
   const teacherAssignments = useMemo(() => {
     const safeAssignments = Array.isArray(assignments) ? assignments : []
@@ -1560,7 +1568,9 @@ export default function AssignmentsPage() {
                   <option value="">Select class</option>
                   {classes.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.class_name || `Class ${c.id}`}
+                      {isMasterWorkspace && String(c.id) === String(selectedClassId)
+                        ? selectedClassName
+                        : c.class_name || `Class ${c.id}`}
                     </option>
                   ))}
                 </select>

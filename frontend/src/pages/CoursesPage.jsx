@@ -3292,8 +3292,15 @@ export default function CoursesPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.location.href = `/assignments?classId=${contentCourseId}&sectionId=${course.id}&section=create`
+                        const assignmentUrl = isMasterWorkspace
+                          ? `/assignments?classId=${contentCourseId}&section=create&view=master`
+                          : `/assignments?classId=${contentCourseId}&sectionId=${course.id}&section=create`
+
+                        window.localStorage.setItem(
+                          "super-lms-last-course-id",
+                          String(isMasterWorkspace ? contentCourseId : course.id)
+                        )
+                        navigate(assignmentUrl)
                       }}
                       style={buttonStyle}
                     >
