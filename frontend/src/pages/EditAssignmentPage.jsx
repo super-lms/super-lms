@@ -1299,19 +1299,36 @@ export default function EditAssignmentPage() {
             <h2 style={{ marginTop: 0 }}>Assignment Resources</h2>
             <p style={{ color: "#4b5563" }}>Add files, website links, or videos students can use with this assignment.</p>
             <div style={{ display: "grid", gap: "12px" }}>
-              <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} style={inputStyle}>
-                <option value="link">Website link</option>
-                <option value="video">Video link</option>
-                <option value="file">File upload</option>
-              </select>
+              <div>
+                <EditAssignmentFieldLabel>Choose resource type</EditAssignmentFieldLabel>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {[
+                    ["link", "Website Link"],
+                    ["video", "Video Link"],
+                    ["file", "📎 Attach File"],
+                  ].map(([value, label]) => (
+                    <EditAssignmentActionButton
+                      key={value}
+                      type="button"
+                      onClick={() => setResourceType(value)}
+                      quiet={resourceType !== value}
+                    >
+                      {resourceType === value ? `✓ ${label}` : label}
+                    </EditAssignmentActionButton>
+                  ))}
+                </div>
+              </div>
               <input value={resourceTitle} onChange={(e) => setResourceTitle(e.target.value)} placeholder="Resource title" style={inputStyle} />
               {resourceType === "file" ? (
-                <input type="file" onChange={(e) => setResourceFile(e.target.files?.[0] || null)} style={inputStyle} />
+                <label style={{ display: "grid", gap: "6px", fontWeight: 800 }}>
+                  Choose file to attach
+                  <input type="file" onChange={(e) => setResourceFile(e.target.files?.[0] || null)} style={inputStyle} />
+                </label>
               ) : (
                 <input value={resourceUrl} onChange={(e) => setResourceUrl(e.target.value)} placeholder="https://..." style={inputStyle} />
               )}
               <EditAssignmentActionButton type="button" onClick={addAssignmentResource} disabled={resourceSaving}>
-                {resourceSaving ? "Adding..." : "+ Add Resource"}
+                {resourceSaving ? "Adding..." : resourceType === "file" ? "Upload Attached File" : "+ Add Resource"}
               </EditAssignmentActionButton>
               {resourceError ? <div style={{ color: "#b91c1c" }}>{resourceError}</div> : null}
               {resourceMessage ? <div style={{ color: "#166534" }}>{resourceMessage}</div> : null}
