@@ -233,6 +233,9 @@ export default function AssignmentsPage() {
   const requestedRosterClassId = queryParams.get("sectionId")
   const requestedSection = queryParams.get("section")
   const isMasterWorkspace = queryParams.get("view") === "master"
+  const requestedActiveClassId = isMasterWorkspace
+    ? requestedClassId
+    : requestedRosterClassId || requestedClassId
 
   const workspaceContentRef = useRef(null)
   const rosterSectionRef = useRef(null)
@@ -642,21 +645,21 @@ export default function AssignmentsPage() {
         setClasses(visibleClasses)
 
         const requestedClassExists =
-          requestedClassId &&
-          visibleClasses.some((classItem) => String(classItem.id) === String(requestedClassId))
+          requestedActiveClassId &&
+          visibleClasses.some((classItem) => String(classItem.id) === String(requestedActiveClassId))
 
         const selectedStillExists =
           selectedClassId && visibleClasses.some((classItem) => String(classItem.id) === String(selectedClassId))
 
-        if (requestedClassExists && String(selectedClassId) !== String(requestedClassId)) {
+        if (requestedClassExists && String(selectedClassId) !== String(requestedActiveClassId)) {
           const validRequestedSection = ["roster", "create", "import", "dingtalk", "current"].includes(String(requestedSection || ""))
             ? String(requestedSection)
             : "current"
 
-          setSelectedClassId(String(requestedClassId))
+          setSelectedClassId(String(requestedActiveClassId))
           setTeacherSection(validRequestedSection)
           pendingSectionScrollRef.current = validRequestedSection
-          return Promise.all([loadCategoriesForClass(String(requestedClassId)), loadClassStudents(String(requestedRosterClassId || requestedClassId)), loadDingtalkSettings(String(requestedRosterClassId || requestedClassId))])
+          return Promise.all([loadCategoriesForClass(String(requestedActiveClassId)), loadClassStudents(String(requestedActiveClassId)), loadDingtalkSettings(String(requestedActiveClassId))])
         }
 
         if (selectedClassId && !selectedStillExists) {
@@ -674,7 +677,7 @@ export default function AssignmentsPage() {
 
         if (!selectedStillExists && visibleClasses.length > 0) {
           const firstClassId = requestedClassExists
-            ? String(requestedClassId)
+            ? String(requestedActiveClassId)
             : String(visibleClasses[0].id)
           const validRequestedSection = ["roster", "create", "import", "dingtalk", "current"].includes(String(requestedSection || ""))
             ? String(requestedSection)
@@ -733,9 +736,9 @@ export default function AssignmentsPage() {
   }
 
   useEffect(() => {
-    if (!requestedClassId) return
+    if (!requestedActiveClassId) return
 
-    const requestedClassExists = classes.some((classItem) => String(classItem.id) === String(requestedClassId))
+    const requestedClassExists = classes.some((classItem) => String(classItem.id) === String(requestedActiveClassId))
 
     if (!requestedClassExists) return
 
@@ -743,16 +746,16 @@ export default function AssignmentsPage() {
       ? String(requestedSection)
       : "current"
 
-    if (String(selectedClassId) !== String(requestedClassId)) {
-      setSelectedClassId(String(requestedClassId))
-      loadCategoriesForClass(String(requestedClassId))
-      loadClassStudents(String(requestedRosterClassId || requestedClassId))
-      loadDingtalkSettings(String(requestedRosterClassId || requestedClassId))
+    if (String(selectedClassId) !== String(requestedActiveClassId)) {
+      setSelectedClassId(String(requestedActiveClassId))
+      loadCategoriesForClass(String(requestedActiveClassId))
+      loadClassStudents(String(requestedActiveClassId))
+      loadDingtalkSettings(String(requestedActiveClassId))
     }
 
     setTeacherSection(validRequestedSection)
     pendingSectionScrollRef.current = validRequestedSection
-  }, [requestedClassId, requestedRosterClassId, requestedSection, classes, selectedClassId])
+  }, [requestedActiveClassId, requestedSection, classes])
 
   useEffect(() => {
     if (!selectedClassId) {
@@ -817,7 +820,11 @@ export default function AssignmentsPage() {
 
   function handleTeacherClassChange(e) {
     const nextClassId = e.target.value
+    const nextClass = classes.find((classItem) => String(classItem.id) === String(nextClassId))
+    const nextContentClassId = nextClass?.content_course_id || nextClassId
+
     setSelectedClassId(nextClassId)
+    window.localStorage.setItem("super-lms-last-course-id", String(nextClassId))
     setError("")
     setMessage("")
     resetTeacherFormState()
@@ -825,6 +832,12 @@ export default function AssignmentsPage() {
     resetRosterFormState()
     setDeleteTargetAssignment(null)
     pendingSectionScrollRef.current = ""
+
+    const nextQuery = new URLSearchParams()
+    nextQuery.set("classId", String(nextContentClassId))
+    nextQuery.set("sectionId", String(nextClassId))
+    nextQuery.set("section", teacherSection)
+    navigate(`/assignments?${nextQuery.toString()}`, { replace: true })
 
     Promise.all([loadCategoriesForClass(nextClassId), loadClassStudents(nextClassId), loadDingtalkSettings(nextClassId)]).catch((err) => {
       setError(err.message || "Failed to load class data")
@@ -1095,11 +1108,11 @@ export default function AssignmentsPage() {
   }
 
   function openEditAssignmentPage(assignmentId) {
-    navigate(`/assignments/${assignmentId}/edit`)
+    navigate(`/assignments/${assignmentId}/edit?sectionId=${encodeURIComponent(selectedClassId)}`)
   }
 
   function openGradeAssignmentPage(assignmentId) {
-    if (assignmentId) navigate(`/assignments/${assignmentId}/grade`)
+    if (assignmentId) navigate(`/assignments/${assignmentId}/grade?sectionId=${encodeURIComponent(selectedClassId)}`)
   }
 
   function saveEditedAssignment(assignmentId) {
@@ -1353,11 +1366,16 @@ export default function AssignmentsPage() {
     return selectedClass?.class_name || selectedClass?.title || ""
   }, [classes, isMasterWorkspace, selectedClassId])
 
+  const selectedContentClassId = useMemo(() => {
+    const selectedClass = classes.find((item) => String(item.id) === String(selectedClassId))
+    return selectedClass?.content_course_id || selectedClassId
+  }, [classes, selectedClassId])
+
   const teacherAssignments = useMemo(() => {
     const safeAssignments = Array.isArray(assignments) ? assignments : []
-    if (!selectedClassId) return []
-    return safeAssignments.filter((assignment) => String(assignment.class_id) === String(selectedClassId))
-  }, [assignments, selectedClassId])
+    if (!selectedContentClassId) return []
+    return safeAssignments.filter((assignment) => String(assignment.class_id) === String(selectedContentClassId))
+  }, [assignments, selectedContentClassId])
 
   const classHasCategories = categories.length > 0
   const classHasAssignments = teacherAssignments.length > 0
@@ -1687,7 +1705,7 @@ export default function AssignmentsPage() {
                       title="Assignment Inbox"
                       subtitle="Start grading from the assignments that need attention most."
                       action={
-                        <ActionButton quiet onClick={() => navigate(`/course-assignments/${selectedClassId}`)}>
+                        <ActionButton quiet onClick={() => navigate(`/course-assignments/${selectedContentClassId}?sectionId=${encodeURIComponent(selectedClassId)}`)}>
                           View All Assignments
                         </ActionButton>
                       }
