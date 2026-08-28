@@ -135,6 +135,18 @@ async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS observer_relationship TEXT`);
 }
 
+async function ensureCourseScheduleSettingsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS course_schedule_settings (
+      course_id INTEGER PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
+      semester TEXT NOT NULL DEFAULT 'unassigned',
+      block_key TEXT NOT NULL DEFAULT 'unassigned',
+      room TEXT NOT NULL DEFAULT 'TBA',
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+}
+
 async function ensureStudentReportCommentsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS student_report_comments (
@@ -2101,6 +2113,90 @@ app.get("/api/admin/courses/:courseId/students", authenticateJWT, requireRole("a
   } catch (err) {
     console.error("GET /api/admin/courses/:courseId/students failed:", err);
     return res.status(500).json({ error: "Failed to load course students" });
+  }
+});
+
+/* SCHOOL-WIDE STUDENT SCHEDULE PRINTER */
+app.get("/api/admin/student-schedules", authenticateJWT, requireRole("admin"), async (req, res) => {
+  try {
+    await ensureStudentInfoColumns();
+    await ensureCourseScheduleSettingsTable();
+
+    const result = await pool.query(`
+      SELECT
+        c.id AS course_id,
+        c.title AS course_title,
+        COALESCE(
+          NULLIF(TRIM(CONCAT(t.first_name, ' ', t.last_name)), ''),
+          t.email,
+          'Teacher TBA'
+        ) AS teacher_name,
+        COALESCE(
+          css.semester,
+          CASE WHEN LOWER(c.title) LIKE 'bc calculus%' THEN 'semester2' ELSE 'unassigned' END
+        ) AS semester,
+        COALESCE(
+          css.block_key,
+          CASE WHEN LOWER(c.title) LIKE 'bc calculus%' THEN 'after_school' ELSE 'unassigned' END
+        ) AS block_key,
+        COALESCE(NULLIF(css.room, ''), 'TBA') AS room,
+        s.id AS student_user_id,
+        COALESCE(
+          NULLIF(TRIM(CONCAT(s.first_name, ' ', s.last_name)), ''),
+          s.email,
+          'Unnamed Student'
+        ) AS student_name,
+        s.email AS student_email,
+        s.student_id
+      FROM courses c
+      LEFT JOIN users t ON t.id = c.teacher_id
+      LEFT JOIN course_schedule_settings css ON css.course_id = c.id
+      LEFT JOIN class_enrollments ce ON ce.class_id = c.id
+      LEFT JOIN users s ON s.id = ce.student_user_id
+      ORDER BY c.title ASC, student_name ASC, s.email ASC
+    `);
+
+    return res.json({ success: true, rows: result.rows });
+  } catch (err) {
+    console.error("GET /api/admin/student-schedules failed:", err);
+    return res.status(500).json({ error: "Failed to load student schedules" });
+  }
+});
+
+app.put("/api/admin/student-schedules/courses/:courseId", authenticateJWT, requireRole("admin"), async (req, res) => {
+  try {
+    await ensureCourseScheduleSettingsTable();
+
+    const courseId = Number(req.params.courseId);
+    const semester = String(req.body?.semester || "unassigned").trim();
+    const blockKey = String(req.body?.block_key || "unassigned").trim();
+    const room = String(req.body?.room || "TBA").trim() || "TBA";
+
+    const allowedSemesters = new Set(["unassigned", "semester1", "semester2", "full_year"]);
+    const allowedBlocks = new Set(["unassigned", "block1", "block2", "block3", "block4", "after_school"]);
+
+    if (!courseId) return res.status(400).json({ error: "Valid courseId is required" });
+    if (!allowedSemesters.has(semester)) return res.status(400).json({ error: "Invalid semester" });
+    if (!allowedBlocks.has(blockKey)) return res.status(400).json({ error: "Invalid block" });
+
+    const result = await pool.query(
+      `
+      INSERT INTO course_schedule_settings (course_id, semester, block_key, room, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (course_id) DO UPDATE
+      SET semester = EXCLUDED.semester,
+          block_key = EXCLUDED.block_key,
+          room = EXCLUDED.room,
+          updated_at = NOW()
+      RETURNING course_id, semester, block_key, room, updated_at
+      `,
+      [courseId, semester, blockKey, room]
+    );
+
+    return res.json({ success: true, setting: result.rows[0] });
+  } catch (err) {
+    console.error("PUT /api/admin/student-schedules/courses/:courseId failed:", err);
+    return res.status(500).json({ error: "Failed to save course schedule" });
   }
 });
 

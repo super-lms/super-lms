@@ -17,6 +17,7 @@ import {
   School,
   ClipboardCheck,
   Upload,
+  CalendarDays,
 } from "lucide-react"
 
 export default function AdminLayout() {
@@ -60,6 +61,7 @@ export default function AdminLayout() {
     if (location.pathname === "/admin/courses") return "School Courses"
     if (location.pathname === "/admin/teachers") return "Teachers"
     if (location.pathname === "/admin/students") return "Students"
+    if (location.pathname === "/admin/student-schedules") return "Student Schedule Printer"
     if (location.pathname === "/admin/departments") return "Departments"
     if (location.pathname === "/admin/gradebooks") return "School Gradebooks"
     if (location.pathname === "/admin/reports") return "School Reports"
@@ -131,6 +133,9 @@ export default function AdminLayout() {
           </NavItem>
           <NavItem to="/admin/students" style={getNavLinkStyle("/admin/students")} icon={Users}>
             Students
+          </NavItem>
+          <NavItem to="/admin/student-schedules" style={getNavLinkStyle("/admin/student-schedules")} icon={CalendarDays}>
+            Schedule Printer
           </NavItem>
           <NavItem to="/admin/departments" style={getNavLinkStyle("/admin/departments")} icon={Building2}>
             Departments

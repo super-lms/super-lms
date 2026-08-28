@@ -49,6 +49,7 @@ import AdminAnalyticsPage from "./pages/admin/AdminAnalyticsPage.jsx";
 import AdminSafeReportsPage from "./pages/admin/AdminSafeReportsPage.jsx";
 import AdminSchoolSettingsPage from "./pages/admin/AdminSchoolSettingsPage.jsx";
 import AdminSystemPage from "./pages/admin/AdminSystemPage.jsx";
+import AdminStudentSchedulePrinterPage from "./pages/admin/AdminStudentSchedulePrinterPage.jsx";
 
 function LoginRoute() {
   const { user } = useAuth();
@@ -145,6 +146,7 @@ function App() {
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/teachers" element={<AdminTeachersPage />} />
         <Route path="/admin/students" element={<AdminStudentsPage />} />
+        <Route path="/admin/student-schedules" element={<AdminStudentSchedulePrinterPage />} />
         <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
         <Route path="/admin/safe-reports" element={<AdminSafeReportsPage />} />
