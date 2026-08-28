@@ -71,7 +71,9 @@ function defaultScheduleForCourse(title) {
   if (key.startsWith("chemistry12") || key.startsWith("chem12")) return bySection(section === "C" ? "semester1" : "semester2", { A: "block3", B: "block2", C: "block1" })
   if (key.startsWith("accounting11")) return bySection(section === "C" ? "semester2" : "semester1", { A: "block2", B: "block4", C: "block2" })
   if (key.startsWith("clc12")) return { semester: "semester1", block_key: "block4" }
-  if (key.startsWith("academicplanning12") || key.startsWith("avademicplanning12")) return bySection("semester1", { A: "block2", B: "block3", C: "block1" })
+  if (key.startsWith("academicplanning12") || key.startsWith("avademicplanning12")) {
+    return bySection(section === "C" ? "semester2" : "semester1", { A: "block2", B: "block3", C: "block1" })
+  }
 
   if (key.startsWith("composition10") || key.startsWith("creativewriting10")) return bySection("semester2", { A: "block3", B: "block1", C: "block4", D: "block2" })
   if (key.startsWith("physics11")) return bySection("semester2", { B: "block2", C: "block3" })
@@ -152,7 +154,7 @@ function buildData(rows) {
   return { courses, students }
 }
 
-function requiredGrade12SemesterOneCourses(cohort, courses) {
+function requiredGrade12Courses(cohort, semester, courses) {
   const match = String(cohort || "").toUpperCase().match(/^12([ABC])$/)
   if (!match) return []
 
@@ -161,30 +163,66 @@ function requiredGrade12SemesterOneCourses(cohort, courses) {
     const key = compactCourseTitle(course.title)
     return prefixes.some((prefix) => key === `${prefix}${section}`)
   })
-  const findClc = () => (
-    findSection(["clc12"])
-    || courses.find((course) => compactCourseTitle(course.title).startsWith("clc12"))
-  )
+  const forceCourse = (course, fallback, blockKey) => ({
+    ...(course || fallback),
+    semester,
+    block_key: blockKey,
+  })
   const academicPlanningCourse = courses.find((course) => {
     const key = compactCourseTitle(course.title)
     return key.includes(`planning12${section}`)
   })
-  const academicPlanning = {
-    ...(academicPlanningCourse || {
+
+  if (semester === "semester2") {
+    if (match[1] !== "C") return []
+    return [forceCourse(academicPlanningCourse, {
       id: `required-academic-planning-${cohort}`,
       title: `Academic Planning ${cohort}`,
       teacher: "Academic Planning 12 Teacher",
       room: "TBA",
-    }),
-    semester: "semester1",
-    block_key: { A: "block2", B: "block3", C: "block1" }[match[1]],
+    }, "block1")]
   }
 
+  if (semester !== "semester1") return []
+
+  const clcCourse = findSection(["clc12"])
+    || courses.find((course) => compactCourseTitle(course.title).startsWith("clc12"))
+  const blockOneCourse = match[1] === "C"
+    ? forceCourse(findSection(["chemistry12", "chem12"]), {
+        id: `required-chemistry-${cohort}`,
+        title: `Chemistry ${cohort}`,
+        teacher: "Dr. D. Vainer",
+        room: "TBA",
+      }, "block1")
+    : null
+  const academicPlanning = match[1] === "C" ? null : forceCourse(academicPlanningCourse, {
+    id: `required-academic-planning-${cohort}`,
+    title: `Academic Planning ${cohort}`,
+    teacher: "Academic Planning 12 Teacher",
+    room: "TBA",
+  }, { A: "block2", B: "block3" }[match[1]])
+
   return [
+    blockOneCourse,
     academicPlanning,
-    findSection(["physics12"]),
-    findSection(["efp12"]),
-    findClc(),
+    forceCourse(findSection(["physics12"]), {
+      id: `required-physics-${cohort}`,
+      title: `Physics ${cohort}`,
+      teacher: "Mr. Robinson",
+      room: "TBA",
+    }, { A: "block3", B: "block1", C: "block2" }[match[1]]),
+    forceCourse(findSection(["efp12"]), {
+      id: `required-efp-${cohort}`,
+      title: `EFP ${cohort}`,
+      teacher: "Ms. Moses",
+      room: "TBA",
+    }, { A: "block1", B: "block2", C: "block3" }[match[1]]),
+    forceCourse(clcCourse, {
+      id: `required-clc-${cohort}`,
+      title: "CLC 12A / 12B / 12C",
+      teacher: "Dr. B",
+      room: "TBA",
+    }, "block4"),
   ].filter(Boolean)
 }
 
@@ -281,10 +319,13 @@ export default function AdminStudentSchedulePrinterPage() {
       .map((courseId) => courseById.get(courseId))
       .filter(Boolean)
       .filter((course) => course.semester === semester || course.semester === "full_year")
+      .filter((course) => !(
+        student.cohort === "12C"
+        && semester === "semester1"
+        && compactCourseTitle(course.title).includes("planning12c")
+      ))
 
-    const requiredEntries = semester === "semester1"
-      ? requiredGrade12SemesterOneCourses(student.cohort, courses)
-      : []
+    const requiredEntries = requiredGrade12Courses(student.cohort, semester, courses)
     const entries = Array.from(
       new Map([...enrolledEntries, ...requiredEntries].map((course) => [course.id, course])).values()
     )
