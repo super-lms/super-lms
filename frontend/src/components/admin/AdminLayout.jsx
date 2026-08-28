@@ -89,6 +89,7 @@ export default function AdminLayout() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "Arial, sans-serif" }}>
       <div
+        className="admin-sidebar"
         style={{
           width: "280px",
           background: "white",
@@ -105,6 +106,7 @@ export default function AdminLayout() {
         </h2>
 
         <div
+          className="admin-workspace-header"
           style={{
             fontSize: "13px",
             color: "#6b7280",
@@ -243,7 +245,7 @@ export default function AdminLayout() {
           </div>
         </div>
 
-        <main style={{ padding: "24px" }}>
+        <main className="admin-workspace-main" style={{ padding: "24px" }}>
           <Outlet />
         </main>
       </div>

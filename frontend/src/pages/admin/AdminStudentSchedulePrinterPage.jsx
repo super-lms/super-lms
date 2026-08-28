@@ -333,7 +333,7 @@ function combineLinkedCourses(courses) {
   const remaining = [...courses]
   const combined = []
 
-  function combinePair(firstPattern, secondPattern, label) {
+  function combinePair(firstPattern, secondPattern, label, note = "") {
     const firstIndex = remaining.findIndex((course) => firstPattern.test(course.title))
     const secondIndex = remaining.findIndex((course) => secondPattern.test(course.title))
     if (firstIndex < 0 || secondIndex < 0) return
@@ -341,7 +341,7 @@ function combineLinkedCourses(courses) {
     const first = remaining[firstIndex]
     const second = remaining[secondIndex]
     const section = String(first.title).match(/([A-D])$/i)?.[1]?.toUpperCase() || ""
-    combined.push({ ...first, id: `${first.id}-${second.id}`, title: `${label}${section ? ` ${section}` : ""}` })
+    combined.push({ ...first, id: `${first.id}-${second.id}`, title: `${label}${section ? ` ${section}` : ""}`, note })
     remaining.splice(Math.max(firstIndex, secondIndex), 1)
     remaining.splice(Math.min(firstIndex, secondIndex), 1)
   }
@@ -350,7 +350,8 @@ function combineLinkedCourses(courses) {
   combinePair(
     /^Spoken Language 10[A-D]$/i,
     /^New Media 10[A-D]$/i,
-    "Spoken Language (first half) / New Media (second half) 10"
+    "Spoken Language / New Media 10",
+    "First half / Second half"
   )
 
   return [...combined, ...remaining].sort((a, b) => a.title.localeCompare(b.title))
@@ -373,9 +374,9 @@ function StudentSchedulePage({ student, semester, schedule }) {
           {schedule.map((block) => (
             <tr key={block.key}>
               <td>{block.label}</td><td>{block.time}</td>
-              <td>{block.courses.length ? block.courses.map((course) => <div key={course.id}>{course.title}</div>) : "—"}</td>
-              <td>{block.courses.length ? block.courses.map((course) => <div key={course.id}>{course.teacher}</div>) : "—"}</td>
-              <td>{block.courses.length ? block.courses.map((course) => <div key={course.id}>{course.room || "TBA"}</div>) : "TBA"}</td>
+              <td>{block.courses.length ? block.courses.map((course) => <div className="schedule-cell-item" key={course.id}><strong>{course.title}</strong>{course.note ? <small>{course.note}</small> : null}</div>) : "—"}</td>
+              <td>{block.courses.length ? block.courses.map((course) => <div className="schedule-cell-item" key={course.id}>{course.teacher}</div>) : "—"}</td>
+              <td>{block.courses.length ? block.courses.map((course) => <div className="schedule-cell-item" key={course.id}>{course.room || "TBA"}</div>) : "TBA"}</td>
             </tr>
           ))}
         </tbody>
@@ -414,7 +415,9 @@ const printCss = `
   @media print {
     @page { size: A4 portrait; margin: 12mm; }
     body { background: white !important; }
-    .schedule-controls, aside, nav { display: none !important; }
+    .schedule-controls, .admin-sidebar, .admin-workspace-header, aside, nav { display: none !important; }
+    .admin-workspace-main { padding: 0 !important; }
+    .admin-workspace-main, .admin-workspace-main > div { width: 100% !important; max-width: none !important; margin: 0 !important; }
     .schedule-print-area { display: block !important; }
     .student-schedule-page { display: block; box-sizing: border-box; min-height: 270mm; padding: 5mm; break-after: page; page-break-after: always; color: #111827; font-family: Arial, sans-serif; }
     .student-schedule-page:last-child { break-after: auto; page-break-after: auto; }
@@ -426,12 +429,14 @@ const printCss = `
     .student-details strong { font-size: 15px; }
     .student-schedule-page table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .student-schedule-page th { background: #111827; color: white; text-align: left; padding: 11px 9px; font-size: 13px; }
-    .student-schedule-page td { border: 1px solid #d1d5db; padding: 14px 9px; font-size: 13px; vertical-align: top; line-height: 1.35; }
-    .student-schedule-page th:nth-child(1) { width: 14%; }
-    .student-schedule-page th:nth-child(2) { width: 18%; }
-    .student-schedule-page th:nth-child(3) { width: 28%; }
-    .student-schedule-page th:nth-child(4) { width: 25%; }
-    .student-schedule-page th:nth-child(5) { width: 15%; }
+    .student-schedule-page td { border: 1px solid #d1d5db; padding: 13px 8px; font-size: 12px; vertical-align: top; line-height: 1.35; overflow-wrap: anywhere; word-break: normal; }
+    .student-schedule-page th:nth-child(1) { width: 12%; }
+    .student-schedule-page th:nth-child(2) { width: 19%; }
+    .student-schedule-page th:nth-child(3) { width: 34%; }
+    .student-schedule-page th:nth-child(4) { width: 23%; }
+    .student-schedule-page th:nth-child(5) { width: 12%; }
+    .schedule-cell-item + .schedule-cell-item { margin-top: 7px; padding-top: 7px; border-top: 1px solid #e5e7eb; }
+    .schedule-cell-item small { display: block; margin-top: 3px; color: #6b7280; font-size: 10px; font-weight: 400; }
     .schedule-note { margin-top: 18px; color: #6b7280; font-size: 12px; }
   }
 `
