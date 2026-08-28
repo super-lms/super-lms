@@ -152,6 +152,28 @@ function buildData(rows) {
   return { courses, students }
 }
 
+function requiredGrade12SemesterOneCourses(cohort, courses) {
+  const match = String(cohort || "").toUpperCase().match(/^12([ABC])$/)
+  if (!match) return []
+
+  const section = match[1].toLowerCase()
+  const findSection = (prefixes) => courses.find((course) => {
+    const key = compactCourseTitle(course.title)
+    return prefixes.some((prefix) => key === `${prefix}${section}`)
+  })
+  const findClc = () => (
+    findSection(["clc12"])
+    || courses.find((course) => compactCourseTitle(course.title).startsWith("clc12"))
+  )
+
+  return [
+    findSection(["academicplanning12"]),
+    findSection(["physics12"]),
+    findSection(["efp12"]),
+    findClc(),
+  ].filter(Boolean)
+}
+
 export default function AdminStudentSchedulePrinterPage() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -241,10 +263,17 @@ export default function AdminStudentSchedulePrinterPage() {
   }
 
   function scheduleForStudent(student) {
-    const entries = student.courseIds
+    const enrolledEntries = student.courseIds
       .map((courseId) => courseById.get(courseId))
       .filter(Boolean)
       .filter((course) => course.semester === semester || course.semester === "full_year")
+
+    const requiredEntries = semester === "semester1"
+      ? requiredGrade12SemesterOneCourses(student.cohort, courses)
+      : []
+    const entries = Array.from(
+      new Map([...enrolledEntries, ...requiredEntries].map((course) => [course.id, course])).values()
+    )
 
     return BLOCKS.map((block) => ({
       ...block,
