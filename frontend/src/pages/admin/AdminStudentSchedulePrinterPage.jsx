@@ -71,7 +71,7 @@ function defaultScheduleForCourse(title) {
   if (key.startsWith("chemistry12") || key.startsWith("chem12")) return bySection(section === "C" ? "semester1" : "semester2", { A: "block3", B: "block2", C: "block1" })
   if (key.startsWith("accounting11")) return bySection(section === "C" ? "semester2" : "semester1", { A: "block2", B: "block4", C: "block2" })
   if (key.startsWith("clc12")) return { semester: "semester1", block_key: "block4" }
-  if (key.startsWith("academicplanning12")) return bySection("semester1", { A: "block2", B: "block3", C: "block1" })
+  if (key.startsWith("academicplanning12") || key.startsWith("avademicplanning12")) return bySection("semester1", { A: "block2", B: "block3", C: "block1" })
 
   if (key.startsWith("composition10") || key.startsWith("creativewriting10")) return bySection("semester2", { A: "block3", B: "block1", C: "block4", D: "block2" })
   if (key.startsWith("physics11")) return bySection("semester2", { B: "block2", C: "block3" })
@@ -165,9 +165,20 @@ function requiredGrade12SemesterOneCourses(cohort, courses) {
     findSection(["clc12"])
     || courses.find((course) => compactCourseTitle(course.title).startsWith("clc12"))
   )
+  const academicPlanning = courses.find((course) => {
+    const key = compactCourseTitle(course.title)
+    return key.includes(`planning12${section}`)
+  }) || {
+    id: `required-academic-planning-${cohort}`,
+    title: `Academic Planning ${cohort}`,
+    teacher: "Academic Planning 12 Teacher",
+    semester: "semester1",
+    block_key: { A: "block2", B: "block3", C: "block1" }[match[1]],
+    room: "TBA",
+  }
 
   return [
-    findSection(["academicplanning12"]),
+    academicPlanning,
     findSection(["physics12"]),
     findSection(["efp12"]),
     findClc(),
