@@ -165,16 +165,19 @@ function requiredGrade12SemesterOneCourses(cohort, courses) {
     findSection(["clc12"])
     || courses.find((course) => compactCourseTitle(course.title).startsWith("clc12"))
   )
-  const academicPlanning = courses.find((course) => {
+  const academicPlanningCourse = courses.find((course) => {
     const key = compactCourseTitle(course.title)
     return key.includes(`planning12${section}`)
-  }) || {
-    id: `required-academic-planning-${cohort}`,
-    title: `Academic Planning ${cohort}`,
-    teacher: "Academic Planning 12 Teacher",
+  })
+  const academicPlanning = {
+    ...(academicPlanningCourse || {
+      id: `required-academic-planning-${cohort}`,
+      title: `Academic Planning ${cohort}`,
+      teacher: "Academic Planning 12 Teacher",
+      room: "TBA",
+    }),
     semester: "semester1",
     block_key: { A: "block2", B: "block3", C: "block1" }[match[1]],
-    room: "TBA",
   }
 
   return [
