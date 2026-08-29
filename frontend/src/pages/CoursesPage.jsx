@@ -3239,7 +3239,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${contentCourseId}&section=create#create-lesson`)
+                        navigate(`/lessons?courseId=${contentCourseId}&section=create${isMasterWorkspace ? "&view=master" : ""}#create-lesson`)
                       }}
                       style={buttonStyle}
                     >
@@ -3311,7 +3311,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/lessons?courseId=${contentCourseId}&section=create#create-lesson`)
+                        navigate(`/lessons?courseId=${contentCourseId}&section=create${isMasterWorkspace ? "&view=master" : ""}#create-lesson`)
                       }}
                       style={buttonStyle}
                     >

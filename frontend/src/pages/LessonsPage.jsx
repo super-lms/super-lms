@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
+import { groupCoursesByMaster } from "../services/courseSections"
 
 function LessonsPage() {
   const queryParams = new URLSearchParams(window.location.search)
   const requestedCourseId = queryParams.get("courseId") || ""
   const requestedSection = queryParams.get("section") || ""
+  const requestedView = queryParams.get("view") || ""
   const requestedEvidenceTierName = queryParams.get("evidenceTierName") || ""
   const createLessonRef = useRef(null)
   const lessonCreatedTimerRef = useRef(null)
@@ -21,6 +23,15 @@ function LessonsPage() {
   const [selectedFile, setSelectedFile] = useState(null)
   const [message, setMessage] = useState("Loading lessons...")
   const [lessonCreatedMessage, setLessonCreatedMessage] = useState("")
+  const courseGroups = useMemo(() => groupCoursesByMaster(courses), [courses])
+  const masterCourseOptions = useMemo(() => courseGroups.map((group) => ({
+    id: group.contentCourse.id,
+    title: group.isMultiSection ? `${group.masterTitle} — Master Course` : group.contentCourse.title,
+    isMultiSection: group.isMultiSection,
+  })), [courseGroups])
+  const selectedMasterCourse = masterCourseOptions.find(
+    (course) => String(course.id) === String(courseId)
+  )
 
   async function loadLessons() {
     try {
@@ -814,6 +825,12 @@ function LessonsPage() {
         </h3>
 
         <form onSubmit={createLesson}>
+          {requestedView === "master" && selectedMasterCourse?.isMultiSection ? (
+            <div style={{ marginBottom: "16px", padding: "14px", border: "1px solid #bfd2e4", borderRadius: "10px", background: "#eef5fa", color: "#1f4e78", lineHeight: 1.5 }}>
+              <strong>Shared master lesson workspace:</strong> {selectedMasterCourse.title}
+              <div>This lesson will automatically appear in every linked lettered section.</div>
+            </div>
+          ) : null}
           <div style={{ marginBottom: "16px" }}>
             <label style={labelStyle}>Course</label>
 
@@ -826,7 +843,7 @@ function LessonsPage() {
             >
               <option value="">Select Course</option>
 
-              {courses.map((course) => (
+              {(requestedView === "master" ? masterCourseOptions : courses).map((course) => (
                 <option key={course.id} value={course.id}>
                   ID {course.id} — {course.title}
                 </option>

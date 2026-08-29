@@ -1662,7 +1662,7 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
       SELECT
         l.id,
         l.course_id,
-        c.title AS course_title,
+        COALESCE(NULLIF(c.master_title, ''), c.title) AS course_title,
         l.title,
         l.content,
         l.order_index,
