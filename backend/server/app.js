@@ -1699,8 +1699,6 @@ async function ensureLessonsTables() {
 /* LESSONS API */
 app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
-    await ensureLessonsTables();
-
     const result = await pool.query(`
       SELECT
         l.id,
@@ -1744,7 +1742,6 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
 
 app.get("/lesson-resources/:storedName", async (req, res, next) => {
   try {
-    await ensureLessonsTables();
     const storedName = path.basename(String(req.params.storedName || ""));
     if (!storedName) return next();
 
@@ -1786,7 +1783,6 @@ app.post(
     const files = Array.isArray(req.files) ? req.files.slice(0, 20) : [];
     let client;
     try {
-      await ensureLessonsTables();
       const lessonId = Number(req.params.lessonId || 0);
 
       if (!lessonId) return res.status(400).json({ error: "Valid lessonId is required" });
@@ -11687,6 +11683,7 @@ Promise.all([
   ensureAssignmentSectionTables(),
   ensureAssignmentResourceTables(),
   ensureLearningPathItemTables(),
+  ensureLessonsTables(),
   ensureAssessmentTables(),
 ])
   .then(() => ensureCourseSectionStructure())

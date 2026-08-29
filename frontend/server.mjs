@@ -67,7 +67,7 @@ function proxyRequest(request, response, target, upstreamPath = request.url) {
     }
   )
 
-  upstreamRequest.setTimeout(30000, () => {
+  upstreamRequest.setTimeout(180000, () => {
     upstreamRequest.destroy(new Error("SUPER LMS backend timed out"))
   })
 
@@ -184,7 +184,10 @@ const server = http.createServer((request, response) => {
 
   if (
     appBasePath === "/" &&
-    (requestPath === "/api" || requestPath.startsWith("/api/") || requestPath.startsWith("/uploads/"))
+    (requestPath === "/api" ||
+      requestPath.startsWith("/api/") ||
+      requestPath.startsWith("/uploads/") ||
+      requestPath.startsWith("/lesson-resources/"))
   ) {
     proxyRequest(request, response, proxyTarget)
     return
