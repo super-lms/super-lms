@@ -1690,6 +1690,16 @@ async function ensureLessonsTables() {
   `);
 
   await pool.query(`
+    ALTER TABLE lesson_files
+    ADD COLUMN IF NOT EXISTS file_path TEXT DEFAULT ''
+  `);
+
+  await pool.query(`
+    ALTER TABLE lesson_files
+    ALTER COLUMN file_path SET DEFAULT ''
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS lesson_files_lesson_id_idx
     ON lesson_files(lesson_id)
   `);
@@ -1849,10 +1859,10 @@ app.post(
       const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
       stage = "saving the file in the database";
       const result = await pool.query({
-        text: `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
-               VALUES ($1, $2, $3, $4, $5, $6)
+        text: `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data, file_path)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
-        values: [lessonId, storedName, originalName, mimeType, fileData.length, fileData],
+        values: [lessonId, storedName, originalName, mimeType, fileData.length, fileData, `/lesson-resources/${storedName}`],
         query_timeout: 20000,
       });
 
@@ -1866,7 +1876,7 @@ app.post(
         ? `Timed out while ${stage}`
         : err?.code === "23503"
           ? "The lesson no longer exists; refresh the page and try again"
-          : `Failed while ${stage}${err?.code ? ` (${err.code})` : ""}`;
+          : `Failed while ${stage}${err?.column ? `: missing ${err.column}` : ""}${err?.code ? ` (${err.code})` : ""}`;
       return res.status(500).json({ error: reason });
     }
   }
