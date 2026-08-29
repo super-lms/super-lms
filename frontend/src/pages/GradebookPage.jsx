@@ -1131,7 +1131,21 @@ export default function GradebookPage() {
 
                           return (
                             <td key={assignment.id} style={spreadsheetScoreCellStyle}>
-                              {formatPercent(match?.score)}
+                              <div>{formatPercent(match?.score)}</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const gradingParams = new URLSearchParams({
+                                    sectionId: String(selectedCourseId),
+                                    studentEmail: student.student_email,
+                                  });
+                                  window.location.href = `/assignments/${assignment.id}/grade?${gradingParams.toString()}`;
+                                }}
+                                style={spreadsheetEditMarkButtonStyle}
+                                title={`Edit ${student.student_name}'s mark for ${assignment.title || "this assignment"}`}
+                              >
+                                Edit Mark
+                              </button>
                             </td>
                           );
                         })}
@@ -1965,6 +1979,18 @@ const spreadsheetScoreCellStyle = {
   maxWidth: "220px",
   textAlign: "center",
   fontWeight: 800,
+};
+
+const spreadsheetEditMarkButtonStyle = {
+  marginTop: "8px",
+  padding: "6px 10px",
+  border: "1px solid #94a3b8",
+  borderRadius: "7px",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontSize: "0.78rem",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const spreadsheetSummaryHeaderStyle = {

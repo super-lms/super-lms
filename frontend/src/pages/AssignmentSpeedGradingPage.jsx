@@ -216,7 +216,9 @@ function getSavedKduSummary(row) {
 
 export default function AssignmentSpeedGradingPage() {
   const location = useLocation();
-  const sectionId = new URLSearchParams(location.search).get("sectionId") || "";
+  const gradingQueryParams = new URLSearchParams(location.search);
+  const sectionId = gradingQueryParams.get("sectionId") || "";
+  const requestedStudentEmail = gradingQueryParams.get("studentEmail") || "";
   const { assignmentId } = useParams();
   const navigate = useNavigate();
 
@@ -282,7 +284,11 @@ export default function AssignmentSpeedGradingPage() {
         setRows(data.rows);
 
         const preferredEmail =
-          nextSelectedEmail || selectedRow?.student_email || data.rows[0]?.student_email || null;
+          nextSelectedEmail ||
+          selectedRow?.student_email ||
+          requestedStudentEmail ||
+          data.rows[0]?.student_email ||
+          null;
 
         const preferredRow =
           data.rows.find((row) => row.student_email === preferredEmail) || data.rows[0] || null;
