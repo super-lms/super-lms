@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
 import { groupCoursesByMaster } from "../services/courseSections"
+import { useAuth } from "../AuthContext.jsx"
 
 function LessonsPage() {
+  const { user } = useAuth()
   const queryParams = new URLSearchParams(window.location.search)
   const requestedCourseId = queryParams.get("courseId") || ""
   const requestedSection = queryParams.get("section") || ""
@@ -20,7 +22,9 @@ function LessonsPage() {
   const [content, setContent] = useState(
     requestedEvidenceTierName ? `Evidence focus: ${requestedEvidenceTierName}\n\n` : ""
   )
-  const [selectedFile, setSelectedFile] = useState(null)
+  const [selectedFiles, setSelectedFiles] = useState([])
+  const [moduleFiles, setModuleFiles] = useState([])
+  const [uploadingResources, setUploadingResources] = useState(false)
   const [message, setMessage] = useState("Loading lessons...")
   const [lessonCreatedMessage, setLessonCreatedMessage] = useState("")
   const courseGroups = useMemo(() => groupCoursesByMaster(courses), [courses])
@@ -120,13 +124,13 @@ function LessonsPage() {
     }
   }, [requestedSection])
 
-  async function uploadLessonFile(lessonId) {
-    if (!selectedFile) {
+  async function uploadLessonFiles(lessonId, files = selectedFiles) {
+    if (!files.length) {
       return { skipped: true }
     }
 
     const formData = new FormData()
-    formData.append("file", selectedFile)
+    files.forEach((file) => formData.append("files", file))
 
     const response = await authFetch(
       `${API_BASE}/api/lesson-files/${lessonId}`,
@@ -137,11 +141,8 @@ function LessonsPage() {
     )
 
     if (!response.ok) {
-      return {
-        skipped: true,
-        warning:
-          "Lesson was created, but file upload is not available yet.",
-      }
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data?.error || "Lesson resources could not be saved")
     }
 
     return response.json()
@@ -179,11 +180,11 @@ function LessonsPage() {
       }
 
       const newLesson = responseData
-      await uploadLessonFile(newLesson.id)
+      await uploadLessonFiles(newLesson.id)
 
       setTitle("")
       setContent("")
-      setSelectedFile(null)
+      setSelectedFiles([])
 
       const fileInput = document.getElementById("lesson-file")
       if (fileInput) {
@@ -197,6 +198,29 @@ function LessonsPage() {
       setMessage(
         error.message || "Error creating lesson or uploading file"
       )
+    }
+  }
+
+  async function addResourcesToLesson(lessonId) {
+    if (!moduleFiles.length) {
+      setMessage("Choose one or more lesson resources first")
+      return
+    }
+
+    try {
+      setUploadingResources(true)
+      setMessage("Saving lesson resources...")
+      await uploadLessonFiles(lessonId, moduleFiles)
+      setModuleFiles([])
+      const input = document.getElementById(`lesson-module-files-${lessonId}`)
+      if (input) input.value = ""
+      await loadLessons()
+      setMessage("Lesson resources saved")
+    } catch (error) {
+      console.error(error)
+      setMessage(error.message || "Could not save lesson resources")
+    } finally {
+      setUploadingResources(false)
     }
   }
 
@@ -785,6 +809,29 @@ function LessonsPage() {
                             ))}
                           </ul>
                         )}
+
+                        {["admin", "teacher"].includes(String(user?.role || "").toLowerCase()) ? (
+                          <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #dbe4ee" }}>
+                            <div style={{ fontSize: "16px", fontWeight: 800, marginBottom: "8px" }}>
+                              Add Resources to This Lesson Module
+                            </div>
+                            <input
+                              id={`lesson-module-files-${lesson.id}`}
+                              type="file"
+                              multiple
+                              onChange={(event) => setModuleFiles(Array.from(event.target.files || []))}
+                              style={{ display: "block", fontSize: "15px", marginBottom: "10px" }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => addResourcesToLesson(lesson.id)}
+                              disabled={uploadingResources || moduleFiles.length === 0}
+                              style={primaryButtonStyle}
+                            >
+                              {uploadingResources ? "Uploading Resources..." : `Upload ${moduleFiles.length || ""} Resource${moduleFiles.length === 1 ? "" : "s"}`}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
@@ -879,20 +926,15 @@ function LessonsPage() {
 
           <div style={{ marginBottom: "20px" }}>
             <label style={labelStyle}>
-              Lesson Attachment
+              Lesson Module Resources
             </label>
 
             <input
               id="lesson-file"
               type="file"
+              multiple
               onChange={(event) => {
-                const file =
-                  event.target.files &&
-                  event.target.files[0]
-                    ? event.target.files[0]
-                    : null
-
-                setSelectedFile(file)
+                setSelectedFiles(Array.from(event.target.files || []))
               }}
               style={{
                 display: "block",
@@ -908,8 +950,7 @@ function LessonsPage() {
                 color: "#475569",
               }}
             >
-              Attach one file for now. This structure will support
-              multiple files later.
+              Select multiple files if needed. All resources will be stored together in this lesson module and shared with linked class sections.
             </p>
           </div>
 

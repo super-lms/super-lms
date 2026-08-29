@@ -1651,6 +1651,23 @@ async function ensureLessonsTables() {
     ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lesson_files (
+      id SERIAL PRIMARY KEY,
+      lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      stored_name TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mime_type TEXT,
+      file_size BIGINT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS lesson_files_lesson_id_idx
+    ON lesson_files(lesson_id)
+  `);
+
 }
 
 /* LESSONS API */
@@ -1667,7 +1684,25 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
         l.content,
         l.order_index,
         l.created_at,
-        l.updated_at
+        l.updated_at,
+        COALESCE(
+          (
+            SELECT JSON_AGG(
+              JSON_BUILD_OBJECT(
+                'id', lf.id,
+                'original_name', lf.original_name,
+                'mime_type', lf.mime_type,
+                'file_size', lf.file_size,
+                'file_path', '/uploads/' || lf.stored_name,
+                'created_at', lf.created_at
+              )
+              ORDER BY lf.id ASC
+            )
+            FROM lesson_files lf
+            WHERE lf.lesson_id = l.id
+          ),
+          '[]'::json
+        ) AS files
       FROM lessons l
       LEFT JOIN courses c
         ON c.id = l.course_id
@@ -1680,6 +1715,42 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
     return res.status(500).json({ error: "Failed to fetch lessons" });
   }
 });
+
+app.post(
+  "/api/lesson-files/:lessonId",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  upload.any(),
+  async (req, res) => {
+    try {
+      await ensureLessonsTables();
+      const lessonId = Number(req.params.lessonId || 0);
+      const files = Array.isArray(req.files) ? req.files.slice(0, 20) : [];
+
+      if (!lessonId) return res.status(400).json({ error: "Valid lessonId is required" });
+      if (files.length === 0) return res.status(400).json({ error: "Choose at least one lesson resource" });
+
+      const lessonResult = await pool.query(`SELECT id FROM lessons WHERE id = $1 LIMIT 1`, [lessonId]);
+      if (lessonResult.rows.length === 0) return res.status(404).json({ error: "Lesson not found" });
+
+      const savedFiles = [];
+      for (const file of files) {
+        const result = await pool.query(
+          `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
+          [lessonId, file.filename, file.originalname, file.mimetype, file.size]
+        );
+        savedFiles.push({ ...result.rows[0], file_path: `/uploads/${file.filename}` });
+      }
+
+      return res.status(201).json({ success: true, files: savedFiles });
+    } catch (err) {
+      console.error("POST /api/lesson-files/:lessonId failed:", err);
+      return res.status(500).json({ error: "Failed to save lesson resources" });
+    }
+  }
+);
 
 app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
