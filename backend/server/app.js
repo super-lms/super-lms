@@ -1685,6 +1685,11 @@ async function ensureLessonsTables() {
   `);
 
   await pool.query(`
+    ALTER TABLE lesson_files
+    ADD COLUMN IF NOT EXISTS file_data BYTEA
+  `);
+
+  await pool.query(`
     CREATE INDEX IF NOT EXISTS lesson_files_lesson_id_idx
     ON lesson_files(lesson_id)
   `);
@@ -1714,7 +1719,7 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
                 'original_name', lf.original_name,
                 'mime_type', lf.mime_type,
                 'file_size', lf.file_size,
-                'file_path', '/uploads/' || lf.stored_name,
+                'file_path', '/lesson-resources/' || lf.stored_name,
                 'created_at', lf.created_at
               )
               ORDER BY lf.id ASC
@@ -1737,16 +1742,52 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
   }
 });
 
+app.get("/lesson-resources/:storedName", async (req, res, next) => {
+  try {
+    await ensureLessonsTables();
+    const storedName = path.basename(String(req.params.storedName || ""));
+    if (!storedName) return next();
+
+    const result = await pool.query(
+      `SELECT original_name, mime_type, file_data
+       FROM lesson_files
+       WHERE stored_name = $1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [storedName]
+    );
+
+    if (result.rows.length === 0) return next();
+    const resource = result.rows[0];
+
+    if (!resource.file_data) {
+      const legacyPath = path.join(uploadDir, storedName);
+      if (!fs.existsSync(legacyPath)) return res.status(404).send("Lesson resource not found");
+      return res.sendFile(legacyPath);
+    }
+
+    const safeName = String(resource.original_name || "lesson-resource")
+      .replace(/[\r\n"]/g, "_");
+    res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+    return res.send(resource.file_data);
+  } catch (err) {
+    console.error("GET /lesson-resources/:storedName failed:", err);
+    return res.status(500).send("Failed to load lesson resource");
+  }
+});
+
 app.post(
   "/api/lesson-files/:lessonId",
   authenticateJWT,
   requireRole("admin", "teacher"),
   handleLessonResourceUpload,
   async (req, res) => {
+    const files = Array.isArray(req.files) ? req.files.slice(0, 20) : [];
+    let client;
     try {
       await ensureLessonsTables();
       const lessonId = Number(req.params.lessonId || 0);
-      const files = Array.isArray(req.files) ? req.files.slice(0, 20) : [];
 
       if (!lessonId) return res.status(400).json({ error: "Valid lessonId is required" });
       if (files.length === 0) return res.status(400).json({ error: "Choose at least one lesson resource" });
@@ -1754,21 +1795,29 @@ app.post(
       const lessonResult = await pool.query(`SELECT id FROM lessons WHERE id = $1 LIMIT 1`, [lessonId]);
       if (lessonResult.rows.length === 0) return res.status(404).json({ error: "Lesson not found" });
 
+      client = await pool.connect();
+      await client.query("BEGIN");
       const savedFiles = [];
       for (const file of files) {
-        const result = await pool.query(
-          `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size)
-           VALUES ($1, $2, $3, $4, $5)
+        const fileData = await fs.promises.readFile(file.path);
+        const result = await client.query(
+          `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
-          [lessonId, file.filename, file.originalname, file.mimetype, file.size]
+          [lessonId, file.filename, file.originalname, file.mimetype, file.size, fileData]
         );
-        savedFiles.push({ ...result.rows[0], file_path: `/uploads/${file.filename}` });
+        savedFiles.push({ ...result.rows[0], file_path: `/lesson-resources/${file.filename}` });
       }
+      await client.query("COMMIT");
 
       return res.status(201).json({ success: true, files: savedFiles });
     } catch (err) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
       console.error("POST /api/lesson-files/:lessonId failed:", err);
       return res.status(500).json({ error: "Failed to save lesson resources" });
+    } finally {
+      if (client) client.release();
+      await Promise.all(files.map((file) => fs.promises.unlink(file.path).catch(() => {})));
     }
   }
 );

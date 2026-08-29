@@ -36,6 +36,15 @@ function LessonsPage() {
   const selectedMasterCourse = masterCourseOptions.find(
     (course) => String(course.id) === String(courseId)
   )
+  const availableLessonCourses = requestedView === "master" ? masterCourseOptions : courses
+  const lessonCourseOptions = requestedCourseId
+    ? availableLessonCourses.filter(
+        (course) => String(course.id) === String(requestedCourseId)
+      )
+    : availableLessonCourses
+  const selectedCourseTitle = availableLessonCourses.find(
+    (course) => String(course.id) === String(requestedCourseId)
+  )?.title
   const canEditLessonResources = requestedView === "master" || ["admin", "administrator", "teacher"].includes(
     String(user?.role || "").toLowerCase()
   )
@@ -148,7 +157,11 @@ function LessonsPage() {
       throw new Error(data?.error || "Lesson resources could not be saved")
     }
 
-    return response.json()
+    const data = await response.json()
+    if (!Array.isArray(data?.files) || data.files.length !== files.length) {
+      throw new Error("The server did not confirm every selected lesson resource")
+    }
+    return data
   }
 
   async function createLesson(event) {
@@ -273,7 +286,11 @@ function LessonsPage() {
     return `${(size / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const groupedLessons = lessons.reduce((groups, lesson) => {
+  const visibleLessons = requestedCourseId
+    ? lessons.filter((lesson) => String(lesson.course_id) === String(requestedCourseId))
+    : lessons
+
+  const groupedLessons = visibleLessons.reduce((groups, lesson) => {
     const groupName =
       lesson.course_title || `Course ${lesson.course_id}`
 
@@ -285,33 +302,33 @@ function LessonsPage() {
     return groups
   }, {})
 
-  const lessonsWithContent = lessons.filter(
+  const lessonsWithContent = visibleLessons.filter(
     (lesson) => String(lesson.content || "").trim().length > 0
   )
 
-  const lessonsWithFiles = lessons.filter(
+  const lessonsWithFiles = visibleLessons.filter(
     (lesson) =>
       Array.isArray(lesson.files) && lesson.files.length > 0
   )
 
   const lessonsMissingContent =
-    lessons.length - lessonsWithContent.length
+    visibleLessons.length - lessonsWithContent.length
 
   const lessonsMissingFiles =
-    lessons.length - lessonsWithFiles.length
+    visibleLessons.length - lessonsWithFiles.length
 
   const courseCountWithLessons = Object.keys(groupedLessons).length
 
   const lessonReadinessScore =
-    lessons.length === 0
+    visibleLessons.length === 0
       ? 0
       : Math.round(
-          (lessonsWithContent.length / lessons.length) * 50 +
-            (lessonsWithFiles.length / lessons.length) * 50
+          (lessonsWithContent.length / visibleLessons.length) * 50 +
+            (lessonsWithFiles.length / visibleLessons.length) * 50
         )
 
   const lessonReadinessLabel =
-    lessons.length === 0
+    visibleLessons.length === 0
       ? "No Lessons Yet"
       : lessonReadinessScore === 100
         ? "Lesson Workspace Ready"
@@ -341,6 +358,12 @@ function LessonsPage() {
         >
           Lessons
         </h2>
+
+        {requestedCourseId ? (
+          <p style={{ margin: "0 0 8px", fontSize: "22px", fontWeight: 800 }}>
+            Course: {selectedCourseTitle || `Course ${requestedCourseId}`}
+          </p>
+        ) : null}
 
         <p style={{ margin: 0, fontSize: "20px" }}>{message}</p>
       </header>
@@ -375,7 +398,7 @@ function LessonsPage() {
         >
           <div style={statusCardStyle}>
             <div style={statusLabelStyle}>Total Lessons</div>
-            <div style={statusValueStyle}>{lessons.length}</div>
+            <div style={statusValueStyle}>{visibleLessons.length}</div>
           </div>
 
           <div style={statusCardStyle}>
@@ -431,12 +454,12 @@ function LessonsPage() {
 
           <div style={{ display: "grid", gap: "5px" }}>
             <div>
-              {lessons.length > 0 ? "☑" : "☐"} Lessons Created
+              {visibleLessons.length > 0 ? "☑" : "☐"} Lessons Created
             </div>
 
             <div>
               {lessonsMissingContent === 0 &&
-              lessons.length > 0
+              visibleLessons.length > 0
                 ? "☑"
                 : "☐"}{" "}
               Lesson Content Added
@@ -444,14 +467,14 @@ function LessonsPage() {
 
             <div>
               {lessonsMissingFiles === 0 &&
-              lessons.length > 0
+              visibleLessons.length > 0
                 ? "☑"
                 : "☐"}{" "}
               Lesson Files Attached
             </div>
           </div>
 
-          {lessons.length === 0 ? (
+          {visibleLessons.length === 0 ? (
             <div
               style={{
                 marginTop: "10px",
@@ -503,7 +526,7 @@ function LessonsPage() {
           Lessons by Course
         </h3>
 
-        {lessons.length === 0 ? (
+        {visibleLessons.length === 0 ? (
           <p style={{ fontSize: "20px", margin: 0 }}>
             No lessons yet
           </p>
@@ -889,11 +912,12 @@ function LessonsPage() {
               onChange={(event) =>
                 setCourseId(event.target.value)
               }
+              disabled={Boolean(requestedCourseId)}
               style={inputStyle}
             >
               <option value="">Select Course</option>
 
-              {(requestedView === "master" ? masterCourseOptions : courses).map((course) => (
+              {lessonCourseOptions.map((course) => (
                 <option key={course.id} value={course.id}>
                   ID {course.id} — {course.title}
                 </option>
