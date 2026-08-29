@@ -66,6 +66,27 @@ const upload = multer({
   },
 });
 
+const lessonResourceUpload = multer({
+  dest: uploadDir,
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+    files: 20,
+  },
+});
+
+function handleLessonResourceUpload(req, res, next) {
+  lessonResourceUpload.array("files", 20)(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Each lesson resource must be 50 MB or smaller" });
+    }
+    if (error.code === "LIMIT_FILE_COUNT") {
+      return res.status(400).json({ error: "Upload no more than 20 lesson resources at once" });
+    }
+    return res.status(400).json({ error: error.message || "Lesson resources could not be uploaded" });
+  });
+}
+
 app.get("/uploads/:storedName", async (req, res, next) => {
   try {
     const storedName = path.basename(String(req.params.storedName || ""));
@@ -1720,7 +1741,7 @@ app.post(
   "/api/lesson-files/:lessonId",
   authenticateJWT,
   requireRole("admin", "teacher"),
-  upload.any(),
+  handleLessonResourceUpload,
   async (req, res) => {
     try {
       await ensureLessonsTables();

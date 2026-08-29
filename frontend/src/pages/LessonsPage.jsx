@@ -36,6 +36,9 @@ function LessonsPage() {
   const selectedMasterCourse = masterCourseOptions.find(
     (course) => String(course.id) === String(courseId)
   )
+  const canEditLessonResources = requestedView === "master" || ["admin", "administrator", "teacher"].includes(
+    String(user?.role || "").toLowerCase()
+  )
 
   async function loadLessons() {
     try {
@@ -749,7 +752,7 @@ function LessonsPage() {
                             marginBottom: "10px",
                           }}
                         >
-                          Attached Files
+                          Lesson Module Resources
                         </div>
 
                         {!lesson.files ||
@@ -810,7 +813,7 @@ function LessonsPage() {
                           </ul>
                         )}
 
-                        {["admin", "teacher"].includes(String(user?.role || "").toLowerCase()) ? (
+                        {canEditLessonResources ? (
                           <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #dbe4ee" }}>
                             <div style={{ fontSize: "16px", fontWeight: 800, marginBottom: "8px" }}>
                               Add Resources to This Lesson Module
@@ -950,7 +953,7 @@ function LessonsPage() {
                 color: "#475569",
               }}
             >
-              Select multiple files if needed. All resources will be stored together in this lesson module and shared with linked class sections.
+              Select up to 20 files at once (maximum 50 MB each). All resources will be stored together in this lesson module and shared with linked class sections.
             </p>
           </div>
 
