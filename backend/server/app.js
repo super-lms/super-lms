@@ -67,7 +67,7 @@ const upload = multer({
 });
 
 const lessonResourceUpload = multer({
-  dest: uploadDir,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 50 * 1024 * 1024,
     files: 20,
@@ -1795,14 +1795,15 @@ app.post(
       await client.query("BEGIN");
       const savedFiles = [];
       for (const file of files) {
-        const fileData = await fs.promises.readFile(file.path);
+        const extension = path.extname(String(file.originalname || "")).slice(0, 20);
+        const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
         const result = await client.query(
           `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
-          [lessonId, file.filename, file.originalname, file.mimetype, file.size, fileData]
+          [lessonId, storedName, file.originalname, file.mimetype, file.size, file.buffer]
         );
-        savedFiles.push({ ...result.rows[0], file_path: `/lesson-resources/${file.filename}` });
+        savedFiles.push({ ...result.rows[0], file_path: `/lesson-resources/${storedName}` });
       }
       await client.query("COMMIT");
 
@@ -1813,7 +1814,6 @@ app.post(
       return res.status(500).json({ error: "Failed to save lesson resources" });
     } finally {
       if (client) client.release();
-      await Promise.all(files.map((file) => fs.promises.unlink(file.path).catch(() => {})));
     }
   }
 );
