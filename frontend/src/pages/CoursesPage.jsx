@@ -255,27 +255,13 @@ export default function CoursesPage() {
 
       if (!res.ok) throw new Error(data.error || "Failed to load courses")
 
-      const currentTeacherId = Number(user?.id || 0)
       const userRole = String(user?.role || "").toLowerCase()
 
-      const visibleCourses = Array.isArray(data)
-        ? data.filter((course) => {
-            if (userRole === "admin") return true
-            if (userRole === "teacher") {
-              const sharedTeacherIds = Array.isArray(course.shared_teacher_ids)
-                ? course.shared_teacher_ids.map((id) => Number(id || 0)).filter(Boolean)
-                : []
-
-              return (
-                currentTeacherId &&
-                (
-                  Number(course.teacher_id || course.teacherId || 0) === currentTeacherId ||
-                  sharedTeacherIds.includes(currentTeacherId)
-                )
-              )
-            }
-            return false
-          })
+      // Teacher visibility is enforced by the API from the authoritative
+      // teacher/course assignment list. Do not second-guess it here with stale
+      // legacy teacher_id values.
+      const visibleCourses = Array.isArray(data) && ["admin", "teacher"].includes(userRole)
+        ? data
         : []
 
       const sortedCourses = visibleCourses.sort((a, b) => {
@@ -2728,7 +2714,7 @@ export default function CoursesPage() {
               const course = courseGroup.contentCourse
               const defaultSection = String(user?.role || "").toLowerCase() === "admin"
                 ? courseGroup.sections[0]
-                : courseGroup.sections.find((section) => Number(section.teacher_id) === Number(user?.id)) || course
+                : courseGroup.sections[0] || course
               const courseName = getCourseName(course)
               const rosterStudents = courseGroup.sections.flatMap(
                 (section) => rosterByCourseId[section.id]?.students || []
@@ -2820,9 +2806,7 @@ export default function CoursesPage() {
               const contentCourseId = contentCourse.id
               const availableSections = String(user?.role || "").toLowerCase() === "admin"
                 ? courseGroup?.sections || [course]
-                : (courseGroup?.sections || [course]).filter(
-                    (section) => Number(section.teacher_id) === Number(user?.id)
-                  )
+                : courseGroup?.sections || [course]
               const roster = rosterByCourseId[course.id]
               const rosterStudents = roster?.students || []
               const isRosterOpen = activeRosterCourseId === course.id

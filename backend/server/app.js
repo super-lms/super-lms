@@ -25,6 +25,7 @@ const {
   ensureCourseSectionStructure: ensureCourseSectionStructureWithPool,
   resolveContentCourseId: resolveContentCourseIdWithPool,
 } = require("./courseSections");
+const { shouldShowCourseForTeacher } = require("./teacherCourseVisibility");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
 
 const app = express();
@@ -2105,6 +2106,11 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         c.created_at,
         ${teacherNameSql} AS teacher_name,
         u.email AS teacher_email,
+        COALESCE((
+          SELECT json_agg(DISTINCT course_teacher.teacher_id)
+          FROM course_teachers course_teacher
+          WHERE course_teacher.course_id = c.id
+        ), '[]'::json) AS shared_teacher_ids,
         COUNT(ce.student_user_id)::int AS student_count
       FROM courses c
       LEFT JOIN users u
@@ -2127,7 +2133,24 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
       ORDER BY c.id ASC
     `, teacherWorkspaceParams);
 
-    return res.json(result.rows);
+    if (String(req.user?.role || "").toLowerCase() !== "teacher") {
+      return res.json(result.rows);
+    }
+
+    const viewerResult = await pool.query(
+      `SELECT email FROM users WHERE id = $1 LIMIT 1`,
+      [Number(req.user.id)]
+    );
+    const viewerEmail = viewerResult.rows[0]?.email || "";
+    const visibleCourses = result.rows.filter((course) =>
+      shouldShowCourseForTeacher({
+        email: viewerEmail,
+        teacherId: Number(req.user.id),
+        course,
+      })
+    );
+
+    return res.json(visibleCourses);
   } catch (err) {
     console.error("GET /api/courses failed:", err);
     return res.status(500).json({ error: "Failed to fetch courses" });
@@ -2643,7 +2666,24 @@ app.get("/api/classes", authenticateJWT, requireRole("admin", "teacher"), async 
       ORDER BY c.id ASC
     `);
 
-    return res.json(result.rows);
+    if (String(req.user?.role || "").toLowerCase() !== "teacher") {
+      return res.json(result.rows);
+    }
+
+    const teacherResult = await pool.query(
+      `SELECT email FROM users WHERE id = $1 LIMIT 1`,
+      [Number(req.user.id)]
+    );
+    const teacherEmail = teacherResult.rows[0]?.email || "";
+    const visibleCourses = result.rows.filter((course) =>
+      shouldShowCourseForTeacher({
+        email: teacherEmail,
+        teacherId: Number(req.user.id),
+        course,
+      })
+    );
+
+    return res.json(visibleCourses);
   } catch (err) {
     console.error("GET /api/classes failed:", err);
     return res.status(500).json({ error: "Failed to fetch classes" });
@@ -9481,6 +9521,13 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
       return res.status(400).json({ error: "Valid teacherId is required" });
     }
 
+    if (
+      String(req.user?.role || "").toLowerCase() === "teacher" &&
+      Number(req.user.id) !== teacherId
+    ) {
+      return res.status(403).json({ error: "Teachers may only open their own dashboard" });
+    }
+
     const teacherResult = await pool.query(
       `
       SELECT
@@ -9503,12 +9550,21 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
 
     const coursesResult = await pool.query(
       `
-      SELECT DISTINCT c.*
+      SELECT DISTINCT
+        c.*,
+        COALESCE((
+          SELECT json_agg(DISTINCT ct.teacher_id)
+          FROM course_teachers ct
+          WHERE ct.course_id = c.id
+        ), '[]'::json) AS shared_teacher_ids
       FROM courses c
-      WHERE c.teacher_id = $1
       ORDER BY c.id ASC
-      `,
-      [teacherId]
+      `
+    );
+
+    const teacher = teacherResult.rows[0];
+    coursesResult.rows = coursesResult.rows.filter((course) =>
+      shouldShowCourseForTeacher({ email: teacher.email, teacherId, course })
     );
 
     const teacherCourseIds = coursesResult.rows.map((course) => Number(course.id)).filter(Boolean);
