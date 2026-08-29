@@ -147,18 +147,30 @@ function LessonsPage() {
       const file = files[index]
       setMessage(`Uploading resource ${index + 1} of ${files.length}: ${file.name}`)
 
-      const formData = new FormData()
-      formData.append("files", file)
+      const encodedData = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onerror = () => reject(new Error(`${file.name} could not be read`))
+        reader.onload = () => {
+          const result = String(reader.result || "")
+          resolve(result.includes(",") ? result.split(",", 2)[1] : result)
+        }
+        reader.readAsDataURL(file)
+      })
 
       const controller = new AbortController()
       const timeoutId = window.setTimeout(() => controller.abort(), 120000)
 
       try {
         const response = await authFetch(
-          `${API_BASE}/api/lesson-files/${lessonId}`,
+          `${API_BASE}/api/lesson-file-data/${lessonId}`,
           {
             method: "POST",
-            body: formData,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: file.name,
+              type: file.type || "application/octet-stream",
+              data: encodedData,
+            }),
             signal: controller.signal,
           }
         )

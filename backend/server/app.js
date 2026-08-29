@@ -46,7 +46,7 @@ function getRtiSsoSecret() {
 }
 
 app.use(cors());
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "75mb" }));
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
@@ -1814,6 +1814,51 @@ app.post(
       return res.status(500).json({ error: "Failed to save lesson resources" });
     } finally {
       if (client) client.release();
+    }
+  }
+);
+
+app.post(
+  "/api/lesson-file-data/:lessonId",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  async (req, res) => {
+    try {
+      const lessonId = Number(req.params.lessonId || 0);
+      const originalName = String(req.body?.name || "").trim();
+      const mimeType = String(req.body?.type || "application/octet-stream").trim();
+      const encodedData = String(req.body?.data || "");
+
+      if (!lessonId) return res.status(400).json({ error: "Valid lessonId is required" });
+      if (!originalName || !encodedData) {
+        return res.status(400).json({ error: "A named lesson resource is required" });
+      }
+
+      const fileData = Buffer.from(encodedData, "base64");
+      if (!fileData.length) return res.status(400).json({ error: "The selected file is empty" });
+      if (fileData.length > 50 * 1024 * 1024) {
+        return res.status(400).json({ error: "Each lesson resource must be 50 MB or smaller" });
+      }
+
+      const lessonResult = await pool.query(`SELECT id FROM lessons WHERE id = $1 LIMIT 1`, [lessonId]);
+      if (lessonResult.rows.length === 0) return res.status(404).json({ error: "Lesson not found" });
+
+      const extension = path.extname(originalName).slice(0, 20);
+      const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
+      const result = await pool.query(
+        `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
+        [lessonId, storedName, originalName, mimeType, fileData.length, fileData]
+      );
+
+      return res.status(201).json({
+        success: true,
+        files: [{ ...result.rows[0], file_path: `/lesson-resources/${storedName}` }],
+      });
+    } catch (err) {
+      console.error("POST /api/lesson-file-data/:lessonId failed:", err);
+      return res.status(500).json({ error: "Failed to save lesson resource" });
     }
   }
 );
