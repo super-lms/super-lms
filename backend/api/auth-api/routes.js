@@ -160,9 +160,12 @@ function createMailTransport() {
 // EMAIL A SINGLE-USE PASSWORD RESET LINK WITHOUT REVEALING WHETHER AN ACCOUNT EXISTS
 router.post("/request-password-reset-email", async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
+  const firstTime = Boolean(req.body.first_time);
   const genericResponse = {
     success: true,
-    message: "If that school email has an account, a password reset link has been sent.",
+    message: firstTime
+      ? "If that school email has an unactivated account, a first-time login link has been sent."
+      : "If that school email has an account, a password reset link has been sent.",
   };
 
   try {
@@ -178,10 +181,13 @@ router.post("/request-password-reset-email", async (req, res) => {
 
     await ensurePasswordRecoveryTables();
     const userResult = await pool.query(
-      `SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1`,
+      `SELECT id, password_hash FROM users WHERE LOWER(email) = $1 LIMIT 1`,
       [email]
     );
     if (!userResult.rows.length) return res.json(genericResponse);
+    if (firstTime && !isPlaceholderPasswordHash(userResult.rows[0].password_hash)) {
+      return res.json(genericResponse);
+    }
 
     const resetCode = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRES_MINUTES * 60 * 1000);
@@ -195,7 +201,7 @@ router.post("/request-password-reset-email", async (req, res) => {
     );
 
     const frontendBase = String(
-      process.env.PASSWORD_RESET_URL_BASE || "https://pretty-nourishment-production-7d3b.up.railway.app/login"
+      process.env.PASSWORD_RESET_URL_BASE || "https://sparkling-passion-production-83e6.up.railway.app/login"
     ).trim();
     const resetUrl = new URL(frontendBase);
     resetUrl.searchParams.set("reset_email", email);
@@ -204,9 +210,13 @@ router.post("/request-password-reset-email", async (req, res) => {
     await createMailTransport().sendMail({
       from: String(process.env.SMTP_FROM || process.env.SMTP_USER).trim(),
       to: email,
-      subject: "SUPER LMS password reset",
-      text: `Use this single-use link within ${RESET_CODE_EXPIRES_MINUTES} minutes to reset your SUPER LMS password: ${resetUrl.toString()}`,
-      html: `<p>Use the button below within ${RESET_CODE_EXPIRES_MINUTES} minutes to reset your SUPER LMS password.</p><p><a href="${resetUrl.toString()}">Reset my SUPER LMS password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+      subject: firstTime ? "Set up your SUPER LMS account" : "SUPER LMS password reset",
+      text: firstTime
+        ? `Use this single-use link within ${RESET_CODE_EXPIRES_MINUTES} minutes to create your SUPER LMS password: ${resetUrl.toString()}`
+        : `Use this single-use link within ${RESET_CODE_EXPIRES_MINUTES} minutes to reset your SUPER LMS password: ${resetUrl.toString()}`,
+      html: firstTime
+        ? `<p>Welcome to SUPER LMS.</p><p>Use the button below within ${RESET_CODE_EXPIRES_MINUTES} minutes to create your password.</p><p><a href="${resetUrl.toString()}">Create my SUPER LMS password</a></p><p>If you did not request this, you can ignore this email.</p>`
+        : `<p>Use the button below within ${RESET_CODE_EXPIRES_MINUTES} minutes to reset your SUPER LMS password.</p><p><a href="${resetUrl.toString()}">Reset my SUPER LMS password</a></p><p>If you did not request this, you can ignore this email.</p>`,
     });
 
     return res.json(genericResponse);
@@ -305,9 +315,9 @@ router.post("/login", async (req, res) => {
     if (isPlaceholderPasswordHash(user.password_hash)) {
       return res.status(403).json({
         success: false,
-        error: "Password setup required",
-        code: "PASSWORD_SETUP_REQUIRED",
-        next_action: "SETUP_PASSWORD",
+        error: "First-time account activation is required",
+        code: "FIRST_TIME_ACTIVATION_REQUIRED",
+        next_action: "REQUEST_FIRST_TIME_EMAIL",
         user: buildSafeUser({
           ...user,
           must_change_password: true,
@@ -412,92 +422,12 @@ router.get(
 );
 
 // SET UP FIRST PASSWORD FOR PLACEHOLDER ACCOUNTS
-router.post("/setup-password", async (req, res) => {
-  try {
-    const email = String(req.body.email || "").trim().toLowerCase();
-    const password = String(req.body.password || "");
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: "Email is required",
-      });
-    }
-
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        error: "Password is required",
-      });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        error: "Password must be at least 8 characters",
-      });
-    }
-
-    const result = await pool.query(
-      `
-      SELECT
-        id,
-        CONCAT(first_name, ' ', last_name) AS name,
-        first_name,
-        last_name,
-        email,
-        role,
-        password_hash,
-        COALESCE(must_change_password, false) AS must_change_password
-      FROM users
-      WHERE LOWER(email) = $1
-      LIMIT 1
-      `,
-      [email]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
-    }
-
-    const user = result.rows[0];
-
-    if (!isPlaceholderPasswordHash(user.password_hash)) {
-      return res.status(409).json({
-        success: false,
-        error: "Password has already been set",
-        code: "PASSWORD_ALREADY_SET",
-        next_action: "LOGIN",
-      });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    await pool.query(
-      `
-      UPDATE users
-      SET password_hash = $1,
-          must_change_password = false
-      WHERE id = $2
-      `,
-      [passwordHash, user.id]
-    );
-
-    return res.json({
-      success: true,
-      message: "Password created successfully.",
-      next_action: "LOGIN",
-    });
-  } catch (error) {
-    console.error("POST /api/auth/setup-password failed:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Password setup failed",
-    });
-  }
+router.post("/setup-password", (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: "For security, first-time passwords must be created using the single-use email link.",
+    code: "FIRST_TIME_EMAIL_REQUIRED",
+  });
 });
 
 // COMPLETE AN ADMINISTRATOR-ISSUED PASSWORD RESET

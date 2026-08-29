@@ -112,9 +112,8 @@ export default function LoginPage() {
 
       const data = await response.json().catch(() => ({}))
 
-      if (data.code === "PASSWORD_SETUP_REQUIRED") {
-        setMode("setup")
-        setMessage("Please create your password to activate this account.")
+      if (data.code === "FIRST_TIME_ACTIVATION_REQUIRED") {
+        setMessage("This account needs first-time activation. Select First-Time Student Login below to receive a secure email link.")
         setPassword("")
         return
       }
@@ -269,6 +268,30 @@ export default function LoginPage() {
       setMessage(data.message || "Check your email for a password reset link.")
     } catch (err) {
       setError(err.message || "Could not send reset email")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleFirstTimeLogin() {
+    const cleanEmail = String(email || "").trim().toLowerCase()
+    if (!cleanEmail) {
+      setError("Enter your registered school email first")
+      return
+    }
+    try {
+      resetMessages()
+      setLoading(true)
+      const response = await fetch(`${API_BASE}/api/auth/request-password-reset-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, first_time: true }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Could not send the first-time login email")
+      setMessage(data.message || "Check your email for your first-time login link.")
+    } catch (err) {
+      setError(err.message || "Could not send the first-time login email")
     } finally {
       setLoading(false)
     }
@@ -450,6 +473,10 @@ export default function LoginPage() {
 
               <button type="submit" disabled={loading} style={buttonStyle}>
                 {loading ? "Signing In..." : "Login"}
+              </button>
+
+              <button type="button" disabled={loading} onClick={handleFirstTimeLogin} style={secondaryButtonStyle}>
+                First-Time Student Login
               </button>
 
               <button type="button" onClick={() => { setMode("password-reset"); resetMessages() }} style={secondaryButtonStyle}>
