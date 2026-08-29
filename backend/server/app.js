@@ -1788,7 +1788,11 @@ app.post(
       if (!lessonId) return res.status(400).json({ error: "Valid lessonId is required" });
       if (files.length === 0) return res.status(400).json({ error: "Choose at least one lesson resource" });
 
-      const lessonResult = await pool.query(`SELECT id FROM lessons WHERE id = $1 LIMIT 1`, [lessonId]);
+      const lessonResult = await pool.query({
+        text: `SELECT id FROM lessons WHERE id = $1 LIMIT 1`,
+        values: [lessonId],
+        query_timeout: 15000,
+      });
       if (lessonResult.rows.length === 0) return res.status(404).json({ error: "Lesson not found" });
 
       client = await pool.connect();
@@ -1823,6 +1827,7 @@ app.post(
   authenticateJWT,
   requireRole("admin", "teacher"),
   async (req, res) => {
+    let stage = "validating the file";
     try {
       const lessonId = Number(req.params.lessonId || 0);
       const originalName = String(req.body?.name || "").trim();
@@ -1840,25 +1845,29 @@ app.post(
         return res.status(400).json({ error: "Each lesson resource must be 50 MB or smaller" });
       }
 
-      const lessonResult = await pool.query(`SELECT id FROM lessons WHERE id = $1 LIMIT 1`, [lessonId]);
-      if (lessonResult.rows.length === 0) return res.status(404).json({ error: "Lesson not found" });
-
       const extension = path.extname(originalName).slice(0, 20);
       const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
-      const result = await pool.query(
-        `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
-        [lessonId, storedName, originalName, mimeType, fileData.length, fileData]
-      );
+      stage = "saving the file in the database";
+      const result = await pool.query({
+        text: `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
+        values: [lessonId, storedName, originalName, mimeType, fileData.length, fileData],
+        query_timeout: 20000,
+      });
 
       return res.status(201).json({
         success: true,
         files: [{ ...result.rows[0], file_path: `/lesson-resources/${storedName}` }],
       });
     } catch (err) {
-      console.error("POST /api/lesson-file-data/:lessonId failed:", err);
-      return res.status(500).json({ error: "Failed to save lesson resource" });
+      console.error(`POST /api/lesson-file-data/:lessonId failed while ${stage}:`, err);
+      const reason = err?.code === "57014"
+        ? `Timed out while ${stage}`
+        : err?.code === "23503"
+          ? "The lesson no longer exists; refresh the page and try again"
+          : `Failed while ${stage}${err?.code ? ` (${err.code})` : ""}`;
+      return res.status(500).json({ error: reason });
     }
   }
 );

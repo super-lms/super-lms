@@ -25,6 +25,7 @@ function LessonsPage() {
   const [selectedFiles, setSelectedFiles] = useState([])
   const [moduleFiles, setModuleFiles] = useState([])
   const [uploadingResources, setUploadingResources] = useState(false)
+  const [resourceUploadMessage, setResourceUploadMessage] = useState("")
   const [message, setMessage] = useState("Loading lessons...")
   const [lessonCreatedMessage, setLessonCreatedMessage] = useState("")
   const courseGroups = useMemo(() => groupCoursesByMaster(courses), [courses])
@@ -146,6 +147,7 @@ function LessonsPage() {
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index]
       setMessage(`Uploading resource ${index + 1} of ${files.length}: ${file.name}`)
+      setResourceUploadMessage(`Uploading ${file.name}—please keep this page open...`)
 
       const encodedData = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -185,6 +187,7 @@ function LessonsPage() {
           throw new Error(`The server did not confirm ${file.name}`)
         }
         savedFiles.push(data.files[0])
+        setResourceUploadMessage(`${file.name} uploaded successfully.`)
       } catch (error) {
         if (error?.name === "AbortError") {
           throw new Error(`${file.name} took too long to upload. Try a smaller file.`)
@@ -249,6 +252,7 @@ function LessonsPage() {
       setMessage(
         error.message || "Error creating lesson or uploading file"
       )
+      setResourceUploadMessage(`Upload failed: ${error.message || "Could not save the lesson resource"}`)
     }
   }
 
@@ -260,6 +264,7 @@ function LessonsPage() {
 
     try {
       setUploadingResources(true)
+      setResourceUploadMessage("Uploading—please keep this page open...")
       setMessage("Saving lesson resources...")
       await uploadLessonFiles(lessonId, moduleFiles)
       setModuleFiles([])
@@ -267,10 +272,12 @@ function LessonsPage() {
       if (input) input.value = ""
       await loadLessons()
       setMessage("Lesson resources saved")
+      setResourceUploadMessage("Upload complete. The file is now attached.")
     } catch (error) {
       console.error(error)
       await loadLessons()
       setMessage(error.message || "Could not save lesson resources")
+      setResourceUploadMessage(`Upload failed: ${error.message || "Could not save lesson resources"}`)
     } finally {
       setUploadingResources(false)
     }
@@ -892,6 +899,21 @@ function LessonsPage() {
                             >
                               {uploadingResources ? "Uploading Resources..." : `Upload ${moduleFiles.length || ""} Resource${moduleFiles.length === 1 ? "" : "s"}`}
                             </button>
+                            {resourceUploadMessage ? (
+                              <div
+                                role="status"
+                                style={{
+                                  marginTop: "10px",
+                                  padding: "10px 12px",
+                                  borderRadius: "8px",
+                                  background: resourceUploadMessage.startsWith("Upload failed") ? "#fee2e2" : "#e0f2fe",
+                                  color: resourceUploadMessage.startsWith("Upload failed") ? "#991b1b" : "#0c4a6e",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {resourceUploadMessage}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
@@ -1028,6 +1050,19 @@ function LessonsPage() {
                 style={{ color: "#166534", fontSize: "18px", fontWeight: 800 }}
               >
                 Lesson created successfully
+              </span>
+            ) : null}
+            {resourceUploadMessage ? (
+              <span
+                role="status"
+                aria-live="polite"
+                style={{
+                  color: resourceUploadMessage.startsWith("Upload failed") ? "#991b1b" : "#0c4a6e",
+                  fontSize: "16px",
+                  fontWeight: 800,
+                }}
+              >
+                {resourceUploadMessage}
               </span>
             ) : null}
           </div>
