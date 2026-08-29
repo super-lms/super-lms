@@ -9673,7 +9673,7 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
 
     const coursesResult = await pool.query(
       `
-      SELECT DISTINCT
+      SELECT
         c.*,
         COALESCE((
           SELECT json_agg(DISTINCT ct.teacher_id)
