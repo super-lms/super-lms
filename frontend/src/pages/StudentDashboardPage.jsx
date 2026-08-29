@@ -493,8 +493,34 @@ export default function StudentDashboardPage() {
   const [safeReportSubmitting, setSafeReportSubmitting] = useState(false)
   const [safeReportMessage, setSafeReportMessage] = useState("")
   const [safeReportError, setSafeReportError] = useState("")
+  const [classResources, setClassResources] = useState([])
+  const [classResourcesLoading, setClassResourcesLoading] = useState(false)
+  const [classResourcesError, setClassResourcesError] = useState("")
 
   const selectedContentCourseId = selectedCourse?.content_course_id || selectedCourseId
+
+  useEffect(() => {
+    if (!selectedContentCourseId) {
+      setClassResources([])
+      return
+    }
+    let cancelled = false
+    setClassResourcesLoading(true)
+    setClassResourcesError("")
+    authFetch(`${API_BASE}/api/courses/${selectedContentCourseId}/resources`)
+      .then(async (response) => {
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || "Failed to load class resources")
+        if (!cancelled) setClassResources(data.resources || [])
+      })
+      .catch((err) => {
+        if (!cancelled) setClassResourcesError(err.message || "Failed to load class resources")
+      })
+      .finally(() => {
+        if (!cancelled) setClassResourcesLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [selectedContentCourseId])
 
   const filteredLessons = useMemo(() => {
     if (!selectedContentCourseId) return []
@@ -1473,6 +1499,34 @@ export default function StudentDashboardPage() {
         />
 
         <StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} />
+
+        <section className="panel">
+          <SectionHeader
+            title="Class Resources"
+            subtitle="General files your teacher has shared for this class."
+          />
+          {classResourcesLoading ? (
+            <NoticeBox>Loading class resources...</NoticeBox>
+          ) : classResourcesError ? (
+            <NoticeBox type="error">{classResourcesError}</NoticeBox>
+          ) : classResources.length === 0 ? (
+            <NoticeBox>No general class resources have been posted yet.</NoticeBox>
+          ) : (
+            <div style={{ display: "grid", gap: "10px" }}>
+              {classResources.map((resource) => (
+                <a
+                  key={resource.id}
+                  href={`${API_BASE}${resource.file_path}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: "block", padding: "12px 14px", border: "1px solid #cfd8e3", borderRadius: "10px", fontWeight: 800, color: "#1d4ed8", textDecoration: "none" }}
+                >
+                  {resource.original_name}
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
 
         <StudentNextStepsPanel />
 

@@ -94,6 +94,11 @@ export default function CoursesPage() {
   const [courseImportFileName, setCourseImportFileName] = useState("")
 
   const [activeLearningPathCourseId, setActiveLearningPathCourseId] = useState(null)
+  const [classResourcesByCourseId, setClassResourcesByCourseId] = useState({})
+  const [classResourceFilesByCourseId, setClassResourceFilesByCourseId] = useState({})
+  const [classResourceLoadingCourseId, setClassResourceLoadingCourseId] = useState(null)
+  const [classResourceUploadingCourseId, setClassResourceUploadingCourseId] = useState(null)
+  const [deletingClassResourceId, setDeletingClassResourceId] = useState(null)
 
   const [activeCompetencyCourseId, setActiveCompetencyCourseId] = useState(null)
   const [competencyLoadingCourseId, setCompetencyLoadingCourseId] = useState(null)
@@ -296,6 +301,8 @@ export default function CoursesPage() {
     window.history.pushState(null, "", `/courses?courseId=${courseId}${masterView ? "&view=master" : ""}`)
     setSelectedCourseId(courseId)
     setIsMasterWorkspace(masterView)
+    const courseGroup = findCourseGroup(courses, courseId)
+    loadClassResources(courseGroup?.contentCourse?.id || courseId)
   }
 
   function returnToCourseCards() {
@@ -2498,6 +2505,59 @@ export default function CoursesPage() {
     }
   }
 
+  async function loadClassResources(courseId) {
+    setClassResourceLoadingCourseId(courseId)
+    setError("")
+    try {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/resources`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to load class resources")
+      setClassResourcesByCourseId((current) => ({ ...current, [courseId]: data.resources || [] }))
+    } catch (err) {
+      setError(err.message || "Failed to load class resources")
+    } finally {
+      setClassResourceLoadingCourseId(null)
+    }
+  }
+
+  async function uploadClassResources(courseId) {
+    const files = Array.from(classResourceFilesByCourseId[courseId] || [])
+    if (files.length === 0) return setError("Choose at least one file to upload.")
+    setClassResourceUploadingCourseId(courseId)
+    setError("")
+    setMessage("")
+    try {
+      const formData = new FormData()
+      files.forEach((file) => formData.append("files", file))
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/resources`, { method: "POST", body: formData })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to upload class resources")
+      setClassResourceFilesByCourseId((current) => ({ ...current, [courseId]: [] }))
+      setMessage(`${files.length} class resource${files.length === 1 ? "" : "s"} uploaded successfully.`)
+      await loadClassResources(courseId)
+    } catch (err) {
+      setError(err.message || "Failed to upload class resources")
+    } finally {
+      setClassResourceUploadingCourseId(null)
+    }
+  }
+
+  async function deleteClassResource(courseId, resourceId) {
+    setDeletingClassResourceId(resourceId)
+    setError("")
+    try {
+      const res = await authFetch(`${API_BASE}/api/courses/${courseId}/resources/${resourceId}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to remove class resource")
+      setMessage("Class resource removed.")
+      await loadClassResources(courseId)
+    } catch (err) {
+      setError(err.message || "Failed to remove class resource")
+    } finally {
+      setDeletingClassResourceId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="content-area">
@@ -3014,6 +3074,40 @@ export default function CoursesPage() {
                           Course ID: {course.id}
                         </div>
                       )}
+                    </div>
+
+                    <div style={{ ...sectionBoxStyle, order: -1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+                        <div>
+                          <h2 style={{ margin: 0 }}>Class Resources</h2>
+                          <div style={{ marginTop: "5px", color: "#4b5563" }}>General files shared with every student section of this course.</div>
+                        </div>
+                        <button type="button" onClick={() => loadClassResources(contentCourseId)} style={buttonStyle}>
+                          {classResourceLoadingCourseId === contentCourseId ? "Loading..." : "Refresh Resources"}
+                        </button>
+                      </div>
+                      <div style={{ marginTop: "14px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={(event) => setClassResourceFilesByCourseId((current) => ({ ...current, [contentCourseId]: event.target.files }))}
+                        />
+                        <button type="button" onClick={() => uploadClassResources(contentCourseId)} disabled={classResourceUploadingCourseId === contentCourseId} style={primaryButtonStyle}>
+                          {classResourceUploadingCourseId === contentCourseId ? "Uploading..." : "Upload Resources"}
+                        </button>
+                      </div>
+                      <div style={{ marginTop: "14px", display: "grid", gap: "8px" }}>
+                        {(classResourcesByCourseId[contentCourseId] || []).length === 0 ? (
+                          <div style={{ color: "#64748b" }}>No general class resources uploaded yet. Select Refresh Resources to check.</div>
+                        ) : (classResourcesByCourseId[contentCourseId] || []).map((resource) => (
+                          <div key={resource.id} style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", padding: "10px", border: "1px solid #d7dce5", borderRadius: "10px" }}>
+                            <a href={`${API_BASE}${resource.file_path}`} target="_blank" rel="noreferrer" style={{ fontWeight: 800 }}>{resource.original_name}</a>
+                            <button type="button" onClick={() => deleteClassResource(contentCourseId, resource.id)} disabled={deletingClassResourceId === resource.id} style={buttonStyle}>
+                              {deletingClassResourceId === resource.id ? "Removing..." : "Remove"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     <div>

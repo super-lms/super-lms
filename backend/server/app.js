@@ -1707,6 +1707,129 @@ async function ensureLessonsTables() {
 
 }
 
+async function ensureCourseResourcesTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS course_resources (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      stored_name TEXT NOT NULL UNIQUE,
+      original_name TEXT NOT NULL,
+      mime_type TEXT,
+      file_size BIGINT,
+      file_data BYTEA NOT NULL,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS course_resources_course_id_idx
+    ON course_resources(course_id)
+  `);
+}
+
+app.get("/course-resources/:storedName", async (req, res, next) => {
+  try {
+    const storedName = path.basename(String(req.params.storedName || ""));
+    if (!storedName) return next();
+    const result = await pool.query(
+      `SELECT original_name, mime_type, file_data
+       FROM course_resources WHERE stored_name = $1 LIMIT 1`,
+      [storedName]
+    );
+    if (result.rows.length === 0) return next();
+    const resource = result.rows[0];
+    const safeName = String(resource.original_name || "class-resource").replace(/[\r\n"]/g, "_");
+    res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+    return res.send(resource.file_data);
+  } catch (err) {
+    console.error("GET /course-resources/:storedName failed:", err);
+    return res.status(500).send("Failed to load class resource");
+  }
+});
+
+app.get(
+  "/api/courses/:courseId/resources",
+  authenticateJWT,
+  requireRole("admin", "teacher", "student", "observer"),
+  async (req, res) => {
+    try {
+      const courseId = await resolveContentCourseId(Number(req.params.courseId || 0));
+      if (!courseId) return res.status(400).json({ error: "Valid courseId is required" });
+      const result = await pool.query(
+        `SELECT id, course_id, original_name, mime_type, file_size, created_at,
+                '/course-resources/' || stored_name AS file_path
+         FROM course_resources WHERE course_id = $1 ORDER BY created_at DESC, id DESC`,
+        [courseId]
+      );
+      return res.json({ course_id: courseId, resources: result.rows });
+    } catch (err) {
+      console.error("GET /api/courses/:courseId/resources failed:", err);
+      return res.status(500).json({ error: "Failed to load class resources" });
+    }
+  }
+);
+
+app.post(
+  "/api/courses/:courseId/resources",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  handleLessonResourceUpload,
+  async (req, res) => {
+    const files = Array.isArray(req.files) ? req.files.slice(0, 20) : [];
+    let client;
+    try {
+      const courseId = await resolveContentCourseId(Number(req.params.courseId || 0));
+      if (!courseId) return res.status(400).json({ error: "Valid courseId is required" });
+      if (files.length === 0) return res.status(400).json({ error: "Choose at least one class resource" });
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const saved = [];
+      for (const file of files) {
+        const extension = path.extname(String(file.originalname || "")).slice(0, 20);
+        const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
+        const result = await client.query(
+          `INSERT INTO course_resources
+             (course_id, stored_name, original_name, mime_type, file_size, file_data, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, course_id, original_name, mime_type, file_size, created_at`,
+          [courseId, storedName, file.originalname, file.mimetype, file.size, file.buffer, req.user?.id || null]
+        );
+        saved.push({ ...result.rows[0], file_path: `/course-resources/${storedName}` });
+      }
+      await client.query("COMMIT");
+      return res.status(201).json({ success: true, resources: saved });
+    } catch (err) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
+      console.error("POST /api/courses/:courseId/resources failed:", err);
+      return res.status(500).json({ error: "Failed to save class resources" });
+    } finally {
+      if (client) client.release();
+    }
+  }
+);
+
+app.delete(
+  "/api/courses/:courseId/resources/:resourceId",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  async (req, res) => {
+    try {
+      const courseId = await resolveContentCourseId(Number(req.params.courseId || 0));
+      const resourceId = Number(req.params.resourceId || 0);
+      const result = await pool.query(
+        `DELETE FROM course_resources WHERE id = $1 AND course_id = $2 RETURNING id`,
+        [resourceId, courseId]
+      );
+      if (result.rows.length === 0) return res.status(404).json({ error: "Class resource not found" });
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("DELETE /api/courses/:courseId/resources/:resourceId failed:", err);
+      return res.status(500).json({ error: "Failed to remove class resource" });
+    }
+  }
+);
+
 /* LESSONS API */
 app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
@@ -11804,6 +11927,7 @@ Promise.all([
   ensureAssignmentResourceTables(),
   ensureLearningPathItemTables(),
   ensureLessonsTables(),
+  ensureCourseResourcesTable(),
   ensureAssessmentTables(),
 ])
   .then(() => ensureCourseSectionStructure())
