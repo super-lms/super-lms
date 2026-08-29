@@ -141,27 +141,49 @@ function LessonsPage() {
       return { skipped: true }
     }
 
-    const formData = new FormData()
-    files.forEach((file) => formData.append("files", file))
+    const savedFiles = []
 
-    const response = await authFetch(
-      `${API_BASE}/api/lesson-files/${lessonId}`,
-      {
-        method: "POST",
-        body: formData,
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index]
+      setMessage(`Uploading resource ${index + 1} of ${files.length}: ${file.name}`)
+
+      const formData = new FormData()
+      formData.append("files", file)
+
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 120000)
+
+      try {
+        const response = await authFetch(
+          `${API_BASE}/api/lesson-files/${lessonId}`,
+          {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
+          }
+        )
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data?.error || `${file.name} could not be saved`)
+        }
+
+        const data = await response.json()
+        if (!Array.isArray(data?.files) || data.files.length !== 1) {
+          throw new Error(`The server did not confirm ${file.name}`)
+        }
+        savedFiles.push(data.files[0])
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          throw new Error(`${file.name} took too long to upload. Try a smaller file.`)
+        }
+        throw error
+      } finally {
+        window.clearTimeout(timeoutId)
       }
-    )
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}))
-      throw new Error(data?.error || "Lesson resources could not be saved")
     }
 
-    const data = await response.json()
-    if (!Array.isArray(data?.files) || data.files.length !== files.length) {
-      throw new Error("The server did not confirm every selected lesson resource")
-    }
-    return data
+    return { success: true, files: savedFiles }
   }
 
   async function createLesson(event) {
@@ -211,6 +233,7 @@ function LessonsPage() {
       showLessonCreatedMessage()
     } catch (error) {
       console.error(error)
+      await loadLessons()
       setMessage(
         error.message || "Error creating lesson or uploading file"
       )
@@ -234,6 +257,7 @@ function LessonsPage() {
       setMessage("Lesson resources saved")
     } catch (error) {
       console.error(error)
+      await loadLessons()
       setMessage(error.message || "Could not save lesson resources")
     } finally {
       setUploadingResources(false)
