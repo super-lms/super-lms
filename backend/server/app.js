@@ -157,6 +157,18 @@ async function ensureStudentInfoColumns() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS observer_relationship TEXT`);
 }
 
+async function ensureManualStudentDirectorySupport() {
+  await pool.query(`
+    ALTER TABLE master_students
+    ALTER COLUMN pen DROP NOT NULL
+  `);
+
+  await pool.query(`
+    ALTER TABLE master_students
+    ADD COLUMN IF NOT EXISTS parent_email TEXT
+  `);
+}
+
 async function ensureCourseScheduleSettingsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS course_schedule_settings (
@@ -9539,6 +9551,8 @@ app.post("/api/teachers", authenticateJWT, requireRole("admin"), async (req, res
 /* CREATE STUDENT */
 app.post("/api/students", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
+    await ensureManualStudentDirectorySupport();
+
     const name = String(req.body.name || "").trim();
     const email = String(req.body.email || "").trim().toLowerCase();
     const studentId = String(req.body.student_id || "").trim();
@@ -12009,6 +12023,7 @@ app.get(
 Promise.all([
   ensurePasswordRecoveryTables(),
   ensureStudentInfoColumns(),
+  ensureManualStudentDirectorySupport(),
   ensureRubricFrameworkTables(),
   ensureStudentReportCommentsTable(),
   ensureSafeReportTables(),
