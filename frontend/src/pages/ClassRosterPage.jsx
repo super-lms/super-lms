@@ -267,20 +267,40 @@ export default function ClassRosterPage() {
 
         setCourses(visibleCourses);
 
-        if (visibleCourses.length === 0) {
+        const preferredCourseId = requestedCourseId || storedCourseId;
+
+        if (visibleCourses.length === 0 && !preferredCourseId) {
           setSelectedCourseId("");
           setStatusMessage("No courses found");
           return;
         }
 
-        const preferredCourseId = requestedCourseId || storedCourseId;
-
-        const requestedCourseMatch =
+        let requestedCourseMatch =
           preferredCourseId === ""
             ? null
             : visibleCourses.find(
                 (course) => String(course.id) === preferredCourseId
               ) || null;
+
+        // An administrator using the teacher workspace may open a section
+        // assigned to another teacher. That section is intentionally omitted
+        // from the general teacher-workspace course list, but Manage Roster
+        // must still remain on the exact section that launched this page.
+        let selectableCourses = visibleCourses;
+        if (!requestedCourseMatch && preferredCourseId) {
+          const rosterResponse = await authFetch(
+            `/api/class-roster/${preferredCourseId}`
+          );
+
+          if (rosterResponse.ok) {
+            const rosterData = await rosterResponse.json();
+            if (rosterData?.course?.id) {
+              requestedCourseMatch = rosterData.course;
+              selectableCourses = [rosterData.course, ...visibleCourses];
+              setCourses(selectableCourses);
+            }
+          }
+        }
 
         if (requestedCourseMatch) {
           const matchedCourseId = String(requestedCourseMatch.id);
@@ -290,14 +310,18 @@ export default function ClassRosterPage() {
             matchedCourseId
           );
           setSearchParams({ courseId: matchedCourseId });
-        } else {
-          const fallbackCourseId = String(visibleCourses[0].id);
+        } else if (selectableCourses.length > 0) {
+          const fallbackCourseId = String(selectableCourses[0].id);
           setSelectedCourseId(fallbackCourseId);
           window.localStorage.setItem(
             "super-lms-class-roster-course-id",
             fallbackCourseId
           );
           setSearchParams({ courseId: fallbackCourseId });
+        } else {
+          setSelectedCourseId("");
+          setStatusMessage("Course not found");
+          return;
         }
 
         setStatusMessage("");
