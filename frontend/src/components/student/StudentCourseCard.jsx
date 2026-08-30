@@ -1,4 +1,4 @@
-export default function StudentCourseCard({ course, isSelected, onOpen }) {
+export default function StudentCourseCard({ course, isSelected, onOpen, onOpenResources }) {
   const title = course?.title || course?.class_name || "Untitled Course"
   const teacher =
     course?.teacher_name ||
@@ -19,6 +19,14 @@ export default function StudentCourseCard({ course, isSelected, onOpen }) {
 
   return (
     <div style={cardStyle(isSelected)}>
+      <button
+        type="button"
+        onClick={() => onOpenResources(String(course.id))}
+        style={repositoryButtonStyle}
+      >
+        File Repository
+      </button>
+
       <div style={titleStyle}>{title}</div>
 
       <div style={metaGridStyle}>
@@ -92,4 +100,12 @@ const buttonStyle = {
   font: "inherit",
   fontWeight: 800,
   cursor: "pointer",
+}
+
+const repositoryButtonStyle = {
+  ...buttonStyle,
+  background: "#e8f1ff",
+  border: "1px solid #93b4e8",
+  color: "#1d4ed8",
+  marginBottom: "14px",
 }

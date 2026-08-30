@@ -77,12 +77,13 @@ function DetailCard({ title, children }) {
   )
 }
 
-function CourseOverviewCard({ course, isSelected, onSelect }) {
+function CourseOverviewCard({ course, isSelected, onSelect, onOpenResources }) {
   return (
     <StudentCourseCard
       course={course}
       isSelected={isSelected}
       onOpen={onSelect}
+      onOpenResources={onOpenResources}
     />
   )
 }
@@ -450,6 +451,7 @@ export default function StudentDashboardPage() {
   const [searchParams] = useSearchParams()
   const submissionEditorRef = useRef(null)
   const courseWorkspaceRef = useRef(null)
+  const classResourcesRef = useRef(null)
 
   const {
     courses,
@@ -1054,6 +1056,19 @@ export default function StudentDashboardPage() {
     })
   }
 
+  async function handleOpenClassResources(courseId) {
+    closeSubmissionEditor()
+    await selectCourse(courseId)
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        classResourcesRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
+      })
+    })
+  }
+
   async function handleSafeReportSubmit(event) {
     event.preventDefault()
     setSafeReportError("")
@@ -1449,6 +1464,7 @@ export default function StudentDashboardPage() {
                   course={course}
                   isSelected={String(course.id) === String(selectedCourseId)}
                   onSelect={handleOpenCourse}
+                  onOpenResources={handleOpenClassResources}
                 />
               ))}
             </div>
@@ -1500,7 +1516,7 @@ export default function StudentDashboardPage() {
 
         <StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} />
 
-        <section className="panel">
+        <section className="panel" ref={classResourcesRef} style={{ scrollMarginTop: "18px" }}>
           <SectionHeader
             title="Class Resources"
             subtitle="General files your teacher has shared for this class."
