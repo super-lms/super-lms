@@ -2831,6 +2831,9 @@ export default function CoursesPage() {
                         color: "#4b5563",
                         lineHeight: 1.45,
                         overflowWrap: "anywhere",
+                        maxHeight: "132px",
+                        overflowY: "auto",
+                        paddingRight: "8px",
                       }}
                     >
                       {course.description || "Open this course workspace to manage assignments, students, learning paths, and grading."}
