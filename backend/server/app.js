@@ -5003,7 +5003,7 @@ app.get(
   }
 );
 
-app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
+app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJWT, requireRole("admin", "teacher", "student"), async (req, res) => {
   try {
     const studentEmail = String(req.params.studentEmail || "").trim().toLowerCase();
     const courseId = Number(req.params.courseId);
@@ -5014,6 +5014,13 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
 
     if (!courseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
+    }
+
+    const viewerRole = String(req.user?.role || "").trim().toLowerCase();
+    const viewerEmail = String(req.user?.email || "").trim().toLowerCase();
+
+    if (viewerRole === "student" && viewerEmail !== studentEmail) {
+      return res.status(403).json({ error: "Students may only open their own dashboard" });
     }
 
     const courseResult = await pool.query(
@@ -5030,6 +5037,39 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
 
     if (courseResult.rows.length === 0) {
       return res.status(404).json({ error: "Course not found" });
+    }
+
+    if (viewerRole === "teacher") {
+      const teacherCanViewCourse = shouldShowCourseForTeacher({
+        email: viewerEmail,
+        teacherId: Number(req.user?.id),
+        course: courseResult.rows[0],
+      });
+
+      if (!teacherCanViewCourse) {
+        return res.status(403).json({ error: "Teachers may only preview their assigned courses" });
+      }
+
+      const enrollmentResult = await pool.query(
+        `
+        SELECT 1
+        FROM users u
+        JOIN class_enrollments ce ON ce.student_user_id = u.id
+        JOIN courses enrolled_course ON enrolled_course.id = ce.class_id
+        WHERE LOWER(u.email) = $1
+          AND (
+            enrolled_course.id = $2
+            OR enrolled_course.master_course_id = $2
+            OR enrolled_course.id = COALESCE($3, $2)
+          )
+        LIMIT 1
+        `,
+        [studentEmail, courseId, courseResult.rows[0].master_course_id]
+      );
+
+      if (enrollmentResult.rows.length === 0) {
+        return res.status(403).json({ error: "This student is not enrolled in the selected course" });
+      }
     }
 
     const contentCourseId = Number(
@@ -9706,11 +9746,15 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
           u.last_name,
           u.email,
           u.role,
-          ce.class_id
+          ce.class_id,
+          enrolled_course.master_course_id
         FROM class_enrollments ce
         JOIN users u
           ON u.id = ce.student_user_id
+        JOIN courses enrolled_course
+          ON enrolled_course.id = ce.class_id
         WHERE ce.class_id = ANY($1::int[])
+           OR enrolled_course.master_course_id = ANY($1::int[])
         ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
         `,
         [teacherCourseIds]

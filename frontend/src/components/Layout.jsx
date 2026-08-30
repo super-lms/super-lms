@@ -17,6 +17,7 @@ import {
   CalendarCheck,
   LogOut,
   Upload,
+  Eye,
 } from "lucide-react"
 
 export default function Layout() {
@@ -227,6 +228,9 @@ export default function Layout() {
               icon={LayoutDashboard}
             >
               Dashboard
+            </NavItem>
+            <NavItem to="/student-view" style={getNavLinkStyle("/student-view")} icon={Eye}>
+              Student View
             </NavItem>
             <NavItem to="/users" style={getNavLinkStyle("/users")} icon={Users}>
               Users

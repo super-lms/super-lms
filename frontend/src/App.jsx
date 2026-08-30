@@ -32,6 +32,7 @@ import StudentProgressPage from "./pages/StudentProgressPage.jsx";
 import StudentReportsPage from "./pages/StudentReportsPage.jsx";
 import StudentSnapshotPage from "./pages/StudentSnapshotPage.jsx";
 import TimetableBuilderPage from "./pages/TimetableBuilderPage.jsx";
+import TeacherStudentViewPage from "./pages/TeacherStudentViewPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
 
 import AdminDashboardPage from "./pages/admin/AdminDashboardPage.jsx";
@@ -139,6 +140,15 @@ function App() {
         <Route path="/courses/:courseId/attendance" element={<AttendancePage />} />
         <Route path="/student-snapshot/:courseId/:studentEmail" element={<StudentSnapshotPage />} />
       </Route>
+
+      <Route
+        path="/student-view"
+        element={
+          <ProtectedRoute allowedRoles={["teacher", "admin"]}>
+            <TeacherStudentViewPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route element={<AdminProtectedLayout />}>
         <Route path="/admin" element={<AdminDashboardPage />} />
