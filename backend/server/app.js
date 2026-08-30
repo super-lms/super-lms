@@ -2822,6 +2822,15 @@ app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "s
       return res.status(400).json({ error: "Student email is required" });
     }
 
+    if (
+      String(req.user?.role || "").trim().toLowerCase() === "student" &&
+      String(req.user?.email || "").trim().toLowerCase() !== studentEmail
+    ) {
+      return res.status(403).json({ error: "Students may only open their own classes" });
+    }
+
+    await ensureCourseScheduleSettingsTable();
+
     const result = await pool.query(
       `
       SELECT
@@ -2837,12 +2846,49 @@ app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "s
         c.section_code,
         COALESCE(c.master_course_id, c.id) AS content_course_id,
         c.created_at,
+        COALESCE(
+          NULLIF(TRIM(CONCAT(direct_teacher.first_name, ' ', direct_teacher.last_name)), ''),
+          direct_teacher.email,
+          NULLIF(TRIM(CONCAT(linked_teacher.first_name, ' ', linked_teacher.last_name)), ''),
+          linked_teacher.email,
+          NULLIF(TRIM(CONCAT(master_teacher.first_name, ' ', master_teacher.last_name)), ''),
+          master_teacher.email
+        ) AS teacher_name,
+        COALESCE(direct_teacher.email, linked_teacher.email, master_teacher.email) AS teacher_email,
+        '2026–2027' AS school_year,
+        CASE COALESCE(course_schedule.semester, master_schedule.semester)
+          WHEN 'semester1' THEN 'Semester 1'
+          WHEN 'semester2' THEN 'Semester 2'
+          WHEN 'full_year' THEN 'Full Year'
+          ELSE NULL
+        END AS semester,
         '[]'::json AS shared_teacher_ids
       FROM users u
       JOIN class_enrollments ce
         ON ce.student_user_id = u.id
       JOIN courses c
         ON c.id = ce.class_id
+      LEFT JOIN users direct_teacher
+        ON direct_teacher.id = c.teacher_id
+      LEFT JOIN courses master_course
+        ON master_course.id = c.master_course_id
+      LEFT JOIN users master_teacher
+        ON master_teacher.id = master_course.teacher_id
+      LEFT JOIN LATERAL (
+        SELECT teacher_user.first_name, teacher_user.last_name, teacher_user.email
+        FROM course_teachers course_teacher
+        JOIN users teacher_user ON teacher_user.id = course_teacher.teacher_id
+        WHERE course_teacher.course_id IN (c.id, COALESCE(c.master_course_id, c.id))
+        ORDER BY
+          CASE WHEN course_teacher.role = 'primary' THEN 0 ELSE 1 END,
+          CASE WHEN course_teacher.course_id = c.id THEN 0 ELSE 1 END,
+          course_teacher.id ASC
+        LIMIT 1
+      ) linked_teacher ON true
+      LEFT JOIN course_schedule_settings course_schedule
+        ON course_schedule.course_id = c.id
+      LEFT JOIN course_schedule_settings master_schedule
+        ON master_schedule.course_id = c.master_course_id
       WHERE LOWER(u.email) = $1
       ORDER BY c.title ASC, c.id ASC
       `,
