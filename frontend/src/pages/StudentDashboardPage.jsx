@@ -1045,20 +1045,32 @@ export default function StudentDashboardPage() {
 
   async function handleOpenCourse(courseId) {
     closeSubmissionEditor()
-    await selectCourse(courseId)
+    const dashboardPromise = selectCourse(courseId)
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        courseWorkspaceRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        })
+      courseWorkspaceRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+    await dashboardPromise
+    window.requestAnimationFrame(() => {
+      courseWorkspaceRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
       })
     })
   }
 
   async function handleOpenClassResources(courseId) {
     closeSubmissionEditor()
-    await selectCourse(courseId)
+    const dashboardPromise = selectCourse(courseId)
+    window.requestAnimationFrame(() => {
+      classResourcesRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+    await dashboardPromise
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         classResourcesRef.current?.scrollIntoView({
@@ -1481,6 +1493,11 @@ export default function StudentDashboardPage() {
               <SectionHeader
                 title="Course Workspace"
                 subtitle={`Now viewing ${selectedCourse?.title || selectedCourse?.class_name || "the selected course"}.`}
+                action={
+                  <ActionButton onClick={() => handleOpenClassResources(selectedCourseId)}>
+                    File Repository
+                  </ActionButton>
+                }
               />
             </section>
 
