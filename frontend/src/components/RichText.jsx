@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { sanitizeRichText } from "../services/richText"
+import { normalizePastedRichText, sanitizeRichText } from "../services/richText"
 
 export function FormattedText({ value, fallback = "", style }) {
   const content = String(value || fallback || "")
@@ -31,6 +31,15 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
     const url = window.prompt("Paste the web address for this link:", "https://")
     if (!url) return
     runCommand("createLink", url)
+  }
+
+  function pasteFormattedText(event) {
+    event.preventDefault()
+    const html = event.clipboardData.getData("text/html")
+    const plainText = event.clipboardData.getData("text/plain")
+    const normalized = normalizePastedRichText(html, plainText)
+    document.execCommand("insertHTML", false, normalized)
+    onChange(editorRef.current?.innerHTML || "")
   }
 
   const toolbarButton = (label, command, commandValue = null) => (
@@ -66,6 +75,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
         aria-multiline="true"
         data-placeholder={placeholder}
         onInput={(event) => onChange(event.currentTarget.innerHTML)}
+        onPaste={pasteFormattedText}
         style={editorStyle}
       />
     </div>
