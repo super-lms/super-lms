@@ -3043,7 +3043,16 @@ export default function CoursesPage() {
                       <h2 style={{ marginTop: 0, marginBottom: "8px" }}>{courseName}</h2>
 
                       <div style={{ marginBottom: "10px" }}>
-                        <div style={{ fontWeight: 800, marginBottom: "6px" }}>Course Overview</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
+                          <div style={{ fontWeight: 800 }}>Course Overview</div>
+                          <button
+                            type="button"
+                            onClick={() => beginEditCourse(contentCourse)}
+                            style={buttonStyle}
+                          >
+                            Edit Course Overview
+                          </button>
+                        </div>
                         <div
                           style={{
                             maxHeight: "240px",
@@ -3268,14 +3277,6 @@ export default function CoursesPage() {
                       marginBottom: "14px",
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => beginEditCourse(contentCourse)}
-                      style={buttonStyle}
-                    >
-                      Edit Shared Course Content
-                    </button>
-
                     <button
                       type="button"
                       onClick={() => {
