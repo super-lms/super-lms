@@ -29,6 +29,16 @@ const PLACEHOLDER_PASSWORDS = new Set([
 
 async function ensurePasswordRecoveryTables() {
   await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_reset_token_hash TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -208,6 +218,15 @@ router.post("/request-password-reset-email", async (req, res) => {
       VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 minute'))
       `,
       [userResult.rows[0].id, hashRecoveryValue(resetCode), RESET_CODE_EXPIRES_MINUTES]
+    );
+    await pool.query(
+      `
+      UPDATE users
+      SET password_reset_token_hash = $1,
+          password_reset_expires_at = NOW() + ($2 * INTERVAL '1 minute')
+      WHERE id = $3
+      `,
+      [hashRecoveryValue(resetCode), RESET_CODE_EXPIRES_MINUTES, userResult.rows[0].id]
     );
 
     const frontendBase = String(
@@ -475,18 +494,16 @@ router.post("/complete-password-reset", async (req, res) => {
     }
 
     await client.query("BEGIN");
+    await ensurePasswordRecoveryTables();
     const result = await client.query(
       `
-      SELECT prt.id AS reset_id, u.id AS user_id
-      FROM password_reset_tokens prt
-      JOIN users u ON u.id = prt.user_id
+      SELECT u.id AS user_id
+      FROM users u
       WHERE LOWER(u.email) = $1
-        AND prt.token_hash = $2
-        AND prt.used_at IS NULL
-        AND prt.expires_at > NOW()
-      ORDER BY prt.created_at DESC
+        AND u.password_reset_token_hash = $2
+        AND u.password_reset_expires_at > NOW()
       LIMIT 1
-      FOR UPDATE OF prt
+      FOR UPDATE OF u
       `,
       [email, hashRecoveryValue(resetCode)]
     );
@@ -498,10 +515,20 @@ router.post("/complete-password-reset", async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     await client.query(
-      `UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2`,
+      `
+      UPDATE users
+      SET password_hash = $1,
+          must_change_password = false,
+          password_reset_token_hash = NULL,
+          password_reset_expires_at = NULL
+      WHERE id = $2
+      `,
       [passwordHash, result.rows[0].user_id]
     );
-    await client.query(`UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1`, [result.rows[0].reset_id]);
+    await client.query(
+      `UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
+      [result.rows[0].user_id]
+    );
     await client.query(
       `INSERT INTO password_recovery_audit (user_id, event_type, request_ip) VALUES ($1, $2, $3)`,
       [result.rows[0].user_id, "admin_issued_reset_completed", req.ip || ""]
@@ -578,17 +605,30 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
       `,
       [user.id]
     );
-    const insertedResetResult = await client.query(
+    await ensurePasswordRecoveryTables();
+    await client.query(
       `
       INSERT INTO password_reset_tokens (user_id, token_hash, created_by_user_id, expires_at)
       VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 minute'))
-      RETURNING expires_at
       `,
       [user.id, hashRecoveryValue(resetCode), req.user.id, RESET_CODE_EXPIRES_MINUTES]
     );
-    await client.query(
-      `UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2`,
-      [RESET_CODE_REQUIRED_PASSWORD, user.id]
+    const updatedUserResult = await client.query(
+      `
+      UPDATE users
+      SET password_hash = $1,
+          must_change_password = true,
+          password_reset_token_hash = $2,
+          password_reset_expires_at = NOW() + ($3 * INTERVAL '1 minute')
+      WHERE id = $4
+      RETURNING password_reset_expires_at
+      `,
+      [
+        RESET_CODE_REQUIRED_PASSWORD,
+        hashRecoveryValue(resetCode),
+        RESET_CODE_EXPIRES_MINUTES,
+        user.id,
+      ]
     );
     await client.query(
       `INSERT INTO password_recovery_audit (user_id, actor_user_id, event_type, request_ip) VALUES ($1, $2, $3, $4)`,
@@ -606,7 +646,7 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
       success: true,
       message: "One-time password reset code created.",
       reset_code: resetCode,
-      expires_at: new Date(insertedResetResult.rows[0].expires_at).toISOString(),
+      expires_at: new Date(updatedUserResult.rows[0].password_reset_expires_at).toISOString(),
       email: user.email,
       role: user.role,
     });
