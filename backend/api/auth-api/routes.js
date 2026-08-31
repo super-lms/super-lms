@@ -237,6 +237,21 @@ function isRateLimited(req, email) {
   return recent.length > 5;
 }
 
+function clearRecoveryAttemptsForEmail(email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return;
+
+  for (const key of recoveryAttempts.keys()) {
+    const trackedEmail = String(key).slice(String(key).indexOf(":") + 1).toLowerCase();
+    if (
+      trackedEmail === normalizedEmail ||
+      trackedEmail === `email-reset:${normalizedEmail}`
+    ) {
+      recoveryAttempts.delete(key);
+    }
+  }
+}
+
 function isPlaceholderPasswordHash(passwordHash) {
   return PLACEHOLDER_PASSWORDS.has(String(passwordHash || "").trim());
 }
@@ -571,6 +586,12 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
       [user.id, req.user.id, "admin_issued_reset_created", req.ip || ""]
     );
     await client.query("COMMIT");
+
+    // A newly issued administrator code must remain usable even if earlier
+    // failed attempts temporarily rate-limited this account. Older database
+    // codes are invalidated above, so clearing only the in-memory attempt
+    // history does not weaken the single-use reset flow.
+    clearRecoveryAttemptsForEmail(email);
 
     return res.json({
       success: true,
