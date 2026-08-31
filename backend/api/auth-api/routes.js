@@ -129,9 +129,17 @@ function recordSuccessfulLogin(user) {
 }
 
 function hashRecoveryValue(value) {
+  // People commonly type a displayed XXXX-XXXX-XXXX code with spaces,
+  // without dashes, or with a phone-generated Unicode dash. Recovery codes
+  // are alphanumeric, so normalize away formatting before hashing.
+  const normalizedValue = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+
   return crypto
     .createHmac("sha256", JWT_SECRET)
-    .update(String(value || "").trim().toUpperCase())
+    .update(normalizedValue)
     .digest("hex");
 }
 
@@ -190,14 +198,16 @@ router.post("/request-password-reset-email", async (req, res) => {
     }
 
     const resetCode = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRES_MINUTES * 60 * 1000);
     await pool.query(
       `UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`,
       [userResult.rows[0].id]
     );
     await pool.query(
-      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
-      [userResult.rows[0].id, hashRecoveryValue(resetCode), expiresAt]
+      `
+      INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+      VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 minute'))
+      `,
+      [userResult.rows[0].id, hashRecoveryValue(resetCode), RESET_CODE_EXPIRES_MINUTES]
     );
 
     const frontendBase = String(
@@ -559,8 +569,6 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
     }
 
     const resetCode = generateRecoveryCode();
-    const expiresAt = new Date(Date.now() + RESET_CODE_EXPIRES_MINUTES * 60 * 1000);
-
     await client.query("BEGIN");
     await client.query(
       `
@@ -570,12 +578,13 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
       `,
       [user.id]
     );
-    await client.query(
+    const insertedResetResult = await client.query(
       `
       INSERT INTO password_reset_tokens (user_id, token_hash, created_by_user_id, expires_at)
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 minute'))
+      RETURNING expires_at
       `,
-      [user.id, hashRecoveryValue(resetCode), req.user.id, expiresAt]
+      [user.id, hashRecoveryValue(resetCode), req.user.id, RESET_CODE_EXPIRES_MINUTES]
     );
     await client.query(
       `UPDATE users SET password_hash = $1, must_change_password = true WHERE id = $2`,
@@ -597,7 +606,7 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
       success: true,
       message: "One-time password reset code created.",
       reset_code: resetCode,
-      expires_at: expiresAt.toISOString(),
+      expires_at: new Date(insertedResetResult.rows[0].expires_at).toISOString(),
       email: user.email,
       role: user.role,
     });
