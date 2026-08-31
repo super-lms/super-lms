@@ -1739,6 +1739,200 @@ async function ensureCourseResourcesTable() {
   `);
 }
 
+async function ensureCourseModuleTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS course_modules (
+      id SERIAL PRIMARY KEY,
+      course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 1,
+      is_published BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS course_module_items (
+      id SERIAL PRIMARY KEY,
+      module_id INTEGER NOT NULL REFERENCES course_modules(id) ON DELETE CASCADE,
+      item_type TEXT NOT NULL CHECK (item_type IN ('heading', 'instruction', 'lesson', 'assignment', 'resource')),
+      title TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+      assignment_id INTEGER REFERENCES assignments(id) ON DELETE CASCADE,
+      course_resource_id INTEGER REFERENCES course_resources(id) ON DELETE CASCADE,
+      sort_order INTEGER NOT NULL DEFAULT 1,
+      is_published BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+}
+
+async function loadCourseModules(requestedCourseId, includeDrafts = false) {
+  await ensureCourseModuleTables();
+  const courseId = await resolveContentCourseId(Number(requestedCourseId || 0));
+  if (!courseId) return [];
+
+  const result = await pool.query(
+    `
+    SELECT
+      m.*,
+      COALESCE(
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'id', i.id,
+            'module_id', i.module_id,
+            'item_type', i.item_type,
+            'title', i.title,
+            'description', i.description,
+            'sort_order', i.sort_order,
+            'is_published', i.is_published,
+            'lesson_id', i.lesson_id,
+            'lesson_title', l.title,
+            'lesson_content', l.content,
+            'lesson_files', COALESCE((
+              SELECT JSON_AGG(JSON_BUILD_OBJECT(
+                'id', lf.id,
+                'original_name', lf.original_name,
+                'file_path', '/lesson-resources/' || lf.stored_name
+              ) ORDER BY lf.id)
+              FROM lesson_files lf WHERE lf.lesson_id = l.id
+            ), '[]'::json),
+            'assignment_id', i.assignment_id,
+            'assignment_title', a.title,
+            'assignment_description', a.description,
+            'assignment_due_date', a.due_date,
+            'course_resource_id', i.course_resource_id,
+            'resource_name', cr.original_name,
+            'resource_path', CASE WHEN cr.id IS NULL THEN NULL ELSE '/course-resources/' || cr.stored_name END
+          ) ORDER BY i.sort_order, i.id
+        ) FILTER (WHERE i.id IS NOT NULL),
+        '[]'::json
+      ) AS items
+    FROM course_modules m
+    LEFT JOIN course_module_items i
+      ON i.module_id = m.id
+      AND ($2::boolean OR i.is_published = TRUE)
+    LEFT JOIN lessons l ON l.id = i.lesson_id
+    LEFT JOIN assignments a ON a.id = i.assignment_id
+    LEFT JOIN course_resources cr ON cr.id = i.course_resource_id
+    WHERE m.course_id = $1
+      AND ($2::boolean OR m.is_published = TRUE)
+    GROUP BY m.id
+    ORDER BY m.sort_order, m.id
+    `,
+    [courseId, includeDrafts]
+  );
+  return result.rows;
+}
+
+app.get("/api/courses/:courseId/modules", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
+  try {
+    const includeDrafts = ["admin", "teacher"].includes(String(req.user?.role || "").toLowerCase());
+    return res.json(await loadCourseModules(req.params.courseId, includeDrafts));
+  } catch (err) {
+    console.error("GET course modules failed:", err);
+    return res.status(500).json({ error: "Failed to load course modules" });
+  }
+});
+
+app.post("/api/courses/:courseId/modules", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    await ensureCourseModuleTables();
+    const courseId = await resolveContentCourseId(Number(req.params.courseId || 0));
+    const title = String(req.body?.title || "").trim();
+    if (!courseId || !title) return res.status(400).json({ error: "Course and module title are required" });
+    const order = await pool.query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM course_modules WHERE course_id = $1", [courseId]);
+    const result = await pool.query(
+      "INSERT INTO course_modules (course_id, title, description, sort_order, is_published) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [courseId, title, String(req.body?.description || ""), order.rows[0].next_order, Boolean(req.body?.is_published)]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("POST course module failed:", err);
+    return res.status(500).json({ error: "Failed to create module" });
+  }
+});
+
+app.put("/api/modules/:moduleId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE course_modules SET title = COALESCE($2, title), description = COALESCE($3, description),
+       is_published = COALESCE($4, is_published), updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [Number(req.params.moduleId), req.body?.title ?? null, req.body?.description ?? null, typeof req.body?.is_published === "boolean" ? req.body.is_published : null]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Module not found" });
+    return res.json(result.rows[0]);
+  } catch (err) { return res.status(500).json({ error: "Failed to update module" }); }
+});
+
+app.delete("/api/modules/:moduleId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    await pool.query("DELETE FROM course_modules WHERE id = $1", [Number(req.params.moduleId)]);
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: "Failed to delete module" }); }
+});
+
+app.post("/api/modules/:moduleId/items", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    await ensureCourseModuleTables();
+    const type = String(req.body?.item_type || "").trim().toLowerCase();
+    if (!["heading", "instruction", "lesson", "assignment", "resource"].includes(type)) {
+      return res.status(400).json({ error: "Choose a valid module item type" });
+    }
+    const order = await pool.query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM course_module_items WHERE module_id = $1", [Number(req.params.moduleId)]);
+    const result = await pool.query(
+      `INSERT INTO course_module_items
+       (module_id, item_type, title, description, lesson_id, assignment_id, course_resource_id, sort_order, is_published)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [Number(req.params.moduleId), type, String(req.body?.title || ""), String(req.body?.description || ""), req.body?.lesson_id || null, req.body?.assignment_id || null, req.body?.course_resource_id || null, order.rows[0].next_order, req.body?.is_published !== false]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("POST module item failed:", err);
+    return res.status(500).json({ error: "Failed to add module item" });
+  }
+});
+
+app.put("/api/modules/:moduleId/items/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const ids = Array.isArray(req.body?.item_ids) ? req.body.item_ids.map(Number).filter(Boolean) : [];
+    await client.query("BEGIN");
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query("UPDATE course_module_items SET sort_order = $1, updated_at = NOW() WHERE id = $2 AND module_id = $3", [index + 1, ids[index], Number(req.params.moduleId)]);
+    }
+    await client.query("COMMIT");
+    return res.json({ success: true });
+  } catch (err) { await client.query("ROLLBACK"); return res.status(500).json({ error: "Failed to reorder module items" }); }
+  finally { client.release(); }
+});
+
+app.put("/api/courses/:courseId/modules/reorder", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const courseId = await resolveContentCourseId(Number(req.params.courseId || 0), client);
+    const ids = Array.isArray(req.body?.module_ids) ? req.body.module_ids.map(Number).filter(Boolean) : [];
+    await client.query("BEGIN");
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query("UPDATE course_modules SET sort_order = $1, updated_at = NOW() WHERE id = $2 AND course_id = $3", [index + 1, ids[index], courseId]);
+    }
+    await client.query("COMMIT");
+    return res.json({ success: true });
+  } catch (err) { await client.query("ROLLBACK"); return res.status(500).json({ error: "Failed to reorder modules" }); }
+  finally { client.release(); }
+});
+
+app.delete("/api/module-items/:itemId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    await pool.query("DELETE FROM course_module_items WHERE id = $1", [Number(req.params.itemId)]);
+    return res.json({ success: true });
+  } catch (err) { return res.status(500).json({ error: "Failed to remove module item" }); }
+});
+
 app.get("/course-resources/:storedName", async (req, res, next) => {
   try {
     const storedName = path.basename(String(req.params.storedName || ""));
@@ -12060,6 +12254,7 @@ Promise.all([
   ensureAssessmentTables(),
 ])
   .then(() => ensureCourseSectionStructure())
+  .then(() => ensureCourseModuleTables())
   .then(() => {
     app.listen(port, () => {
       console.log("Super LMS backend running on port 3000");

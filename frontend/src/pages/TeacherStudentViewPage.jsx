@@ -5,6 +5,7 @@ import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
 import API_BASE from "../apiBase"
 import { FormattedText } from "../components/RichText.jsx"
+import CourseModulesView from "../components/CourseModulesView.jsx"
 
 const cardStyle = {
   background: "#fff",
@@ -23,6 +24,7 @@ export default function TeacherStudentViewPage() {
   const [courseId, setCourseId] = useState("")
   const [studentEmail, setStudentEmail] = useState("")
   const [dashboard, setDashboard] = useState(null)
+  const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -74,10 +76,14 @@ export default function TeacherStudentViewPage() {
       try {
         setLoading(true)
         setError("")
-        const response = await authFetch(`/api/students/${encodeURIComponent(studentEmail)}/courses/${courseId}/dashboard`)
-        const data = await response.json().catch(() => ({}))
+        const [response, modulesResponse] = await Promise.all([
+          authFetch(`/api/students/${encodeURIComponent(studentEmail)}/courses/${courseId}/dashboard`),
+          authFetch(`/api/courses/${courseId}/modules`),
+        ])
+        const [data, modulesData] = await Promise.all([response.json().catch(() => ({})), modulesResponse.json().catch(() => ([]))])
         if (!response.ok) throw new Error(data.error || "Could not load this student preview")
-        if (!cancelled) setDashboard(data)
+        if (!modulesResponse.ok) throw new Error(modulesData.error || "Could not load module preview")
+        if (!cancelled) { setDashboard(data); setModules((modulesData || []).filter((module) => module.is_published)) }
       } catch (err) {
         if (!cancelled) {
           setDashboard(null)
@@ -180,6 +186,11 @@ export default function TeacherStudentViewPage() {
                 ))}
               </section>
             </div>
+
+            <section style={{ ...cardStyle, marginTop: "18px" }}>
+              <h2>Course Modules</h2>
+              <CourseModulesView modules={modules} />
+            </section>
 
             <section style={{ ...cardStyle, marginTop: "18px", display: "flex", gap: "10px", alignItems: "center", color: "#475569" }}>
               <BookOpen size={22} /> This preview is read-only. Submission, upload, and grading controls are intentionally unavailable.
