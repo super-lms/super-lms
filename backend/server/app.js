@@ -4893,8 +4893,20 @@ app.get(
           [contentCourseId, studentEmail]
         ),
         pool.query(
-          `SELECT id, course_id, title, content, order_index, created_at, updated_at
-           FROM lessons WHERE course_id = $1 ORDER BY order_index ASC, id ASC`,
+          `SELECT l.id, l.course_id, l.title, l.content, l.order_index, l.created_at, l.updated_at,
+            COALESCE(
+              (SELECT JSON_AGG(JSON_BUILD_OBJECT(
+                'id', lf.id,
+                'original_name', lf.original_name,
+                'mime_type', lf.mime_type,
+                'file_size', lf.file_size,
+                'file_path', '/lesson-resources/' || lf.stored_name,
+                'created_at', lf.created_at
+              ) ORDER BY lf.id ASC)
+               FROM lesson_files lf WHERE lf.lesson_id = l.id),
+              '[]'::json
+            ) AS files
+           FROM lessons l WHERE l.course_id = $1 ORDER BY l.order_index ASC, l.id ASC`,
           [contentCourseId]
         ),
         pool.query(
@@ -5188,10 +5200,22 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
 
     const lessonsResult = await pool.query(
       `
-      SELECT id, course_id, title, content, order_index, created_at, updated_at
-      FROM lessons
-      WHERE course_id = $1
-      ORDER BY order_index ASC, id ASC
+      SELECT l.id, l.course_id, l.title, l.content, l.order_index, l.created_at, l.updated_at,
+        COALESCE(
+          (SELECT JSON_AGG(JSON_BUILD_OBJECT(
+            'id', lf.id,
+            'original_name', lf.original_name,
+            'mime_type', lf.mime_type,
+            'file_size', lf.file_size,
+            'file_path', '/lesson-resources/' || lf.stored_name,
+            'created_at', lf.created_at
+          ) ORDER BY lf.id ASC)
+           FROM lesson_files lf WHERE lf.lesson_id = l.id),
+          '[]'::json
+        ) AS files
+      FROM lessons l
+      WHERE l.course_id = $1
+      ORDER BY l.order_index ASC, l.id ASC
       `,
       [contentCourseId]
     );

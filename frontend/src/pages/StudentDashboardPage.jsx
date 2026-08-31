@@ -127,12 +127,32 @@ function AssignmentCard({ assignment, compact = false, footer = null, submission
 }
 
 function LessonCard({ lesson }) {
+  const files = Array.isArray(lesson?.files) ? lesson.files : []
+
   return (
     <div style={lessonCardStyle}>
       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{lesson.title || "Untitled Lesson"}</h3>
       <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-        {lesson.description || "No lesson description available."}
+        {lesson.description || lesson.content || "No lesson description available."}
       </p>
+      {files.length > 0 ? (
+        <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #d7dce5" }}>
+          <div style={{ marginBottom: "8px", fontWeight: 800 }}>Lesson Resources</div>
+          <div style={{ display: "grid", gap: "8px" }}>
+            {files.map((file) => (
+              <a
+                key={file.id || file.file_path || file.original_name}
+                href={`${API_BASE}${file.file_path}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: "#1d4ed8", fontWeight: 700, overflowWrap: "anywhere" }}
+              >
+                {file.original_name || "Download lesson resource"}
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
