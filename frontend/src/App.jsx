@@ -12,7 +12,6 @@ import ClassEnrollmentPage from "./pages/ClassEnrollmentPage.jsx";
 import ClassRosterPage from "./pages/ClassRosterPage.jsx";
 import CoursesPage from "./pages/CoursesPage.jsx";
 import CourseAssignmentsPage from "./pages/CourseAssignmentsPage.jsx";
-import CourseModulesPage from "./pages/CourseModulesPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import EditAssignmentPage from "./pages/EditAssignmentPage.jsx";
 import EmergencyAssignmentImportPage from "./pages/EmergencyAssignmentImportPage.jsx";
@@ -123,7 +122,6 @@ function App() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/courses" element={<CoursesPage />} />
         <Route path="/course-assignments/:courseId" element={<CourseAssignmentsPage />} />
-        <Route path="/courses/:courseId/modules" element={<CourseModulesPage />} />
         <Route path="/lessons" element={<LessonsPage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
         <Route path="/import-emergency-assignment" element={<EmergencyAssignmentImportPage />} />

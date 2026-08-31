@@ -12,7 +12,6 @@ import StudentNextStepsPanel from "../components/student/StudentNextStepsPanel.j
 import StudentTeacherAnnouncementsPanel from "../components/student/StudentTeacherAnnouncementsPanel.jsx"
 import StudentUpcomingDueDatesPanel from "../components/student/StudentUpcomingDueDatesPanel.jsx"
 import { FormattedText } from "../components/RichText.jsx"
-import CourseModulesView from "../components/CourseModulesView.jsx"
 import { useAuth } from "../AuthContext.jsx"
 import useStudentDashboard from "../hooks/dashboard/useStudentDashboard.js"
 
@@ -517,26 +516,8 @@ export default function StudentDashboardPage() {
   const [classResources, setClassResources] = useState([])
   const [classResourcesLoading, setClassResourcesLoading] = useState(false)
   const [classResourcesError, setClassResourcesError] = useState("")
-  const [courseModules, setCourseModules] = useState([])
-  const [courseModulesLoading, setCourseModulesLoading] = useState(false)
-  const [courseModulesError, setCourseModulesError] = useState("")
 
   const selectedContentCourseId = selectedCourse?.content_course_id || selectedCourseId
-
-  useEffect(() => {
-    let cancelled = false
-    if (!selectedContentCourseId) { setCourseModules([]); return undefined }
-    setCourseModulesLoading(true); setCourseModulesError("")
-    authFetch(`/api/courses/${selectedContentCourseId}/modules`)
-      .then(async (response) => {
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.error || "Modules could not be loaded")
-        if (!cancelled) setCourseModules(data || [])
-      })
-      .catch((err) => { if (!cancelled) setCourseModulesError(err.message) })
-      .finally(() => { if (!cancelled) setCourseModulesLoading(false) })
-    return () => { cancelled = true }
-  }, [selectedContentCourseId])
 
   useEffect(() => {
     if (!selectedContentCourseId) {
@@ -1569,26 +1550,6 @@ export default function StudentDashboardPage() {
         />
 
         <StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} />
-
-        <section className="panel">
-          <SectionHeader
-            title="Course Modules"
-            subtitle="Follow your teacher's recommended learning sequence from top to bottom."
-          />
-          {courseModulesLoading ? (
-            <NoticeBox>Loading course modules...</NoticeBox>
-          ) : courseModulesError ? (
-            <NoticeBox type="error">{courseModulesError}</NoticeBox>
-          ) : (
-            <CourseModulesView
-              modules={courseModules}
-              onOpenAssignment={(assignmentId) => {
-                const assignment = assignments.find((item) => String(item.id) === String(assignmentId))
-                if (assignment) openSubmissionEditor(assignment)
-              }}
-            />
-          )}
-        </section>
 
         <section className="panel" ref={classResourcesRef} style={{ scrollMarginTop: "18px" }}>
           <SectionHeader
