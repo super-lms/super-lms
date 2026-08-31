@@ -2436,7 +2436,7 @@ app.get("/api/admin/courses/:courseId/students", authenticateJWT, requireRole("a
 
     const courseResult = await pool.query(
       `
-      SELECT id, title
+      SELECT id, title, master_course_id
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -10385,6 +10385,23 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
       return res.status(404).json({ error: "Course not found" });
     }
 
+    const course = courseResult.rows[0];
+    const isMasterCourse = !course.master_course_id;
+    const sectionsResult = isMasterCourse
+      ? await pool.query(
+          `
+          SELECT id, title
+          FROM courses
+          WHERE master_course_id = $1
+          ORDER BY title ASC, id ASC
+          `,
+          [courseId]
+        )
+      : { rows: [] };
+    const rosterCourseIds = isMasterCourse && sectionsResult.rows.length > 0
+      ? sectionsResult.rows.map((section) => Number(section.id))
+      : [courseId];
+
     const studentsResult = await pool.query(
       `
       SELECT
@@ -10394,18 +10411,31 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
         u.last_name,
         u.email,
         u.parent_email,
-        u.student_id
+        u.student_id,
+        STRING_AGG(DISTINCT c.title, ', ' ORDER BY c.title) AS section_title
       FROM class_enrollments ce
       JOIN users u
         ON u.id = ce.student_user_id
-      WHERE ce.class_id = $1
+      JOIN courses c
+        ON c.id = ce.class_id
+      WHERE ce.class_id = ANY($1::int[])
+      GROUP BY
+        u.id,
+        u.name,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.parent_email,
+        u.student_id
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
       `,
-      [courseId]
+      [rosterCourseIds]
     );
 
     return res.json({
-      course: courseResult.rows[0],
+      course,
+      is_master_roster: isMasterCourse,
+      sections: sectionsResult.rows,
       students: studentsResult.rows,
     });
   } catch (err) {

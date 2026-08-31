@@ -1733,6 +1733,8 @@ export default function CoursesPage() {
         ...current,
         [courseId]: {
           course: data.course || null,
+          isMasterRoster: data.is_master_roster === true,
+          sections: Array.isArray(data.sections) ? data.sections : [],
           students: Array.isArray(data.students) ? data.students : [],
         },
       }))
@@ -3433,7 +3435,7 @@ export default function CoursesPage() {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
                       loadRoster(course.id)
-                    }} disabled={isMasterWorkspace || rosterLoadingCourseId === course.id} title={isMasterWorkspace ? "Choose a lettered section before viewing a roster." : ""} style={buttonStyle}>
+                    }} disabled={rosterLoadingCourseId === course.id} title={isMasterWorkspace ? "View all students from every linked section." : ""} style={buttonStyle}>
                       {rosterLoadingCourseId === course.id ? "Loading Roster..." : isRosterOpen ? "Hide Roster" : "View Roster"}
                     </button>
 
@@ -4643,7 +4645,13 @@ export default function CoursesPage() {
 
                   {isRosterOpen ? (
                     <div id={`course-${course.id}-roster`} style={rosterBoxStyle}>
-                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Roster</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{roster?.isMasterRoster ? "Master Course Roster" : "Roster"}</h3>
+
+                      {roster?.isMasterRoster && roster?.sections?.length > 0 ? (
+                        <div style={{ marginBottom: "10px", color: "#4b5563" }}>
+                          Combined from {roster.sections.map((section) => section.title).join(", ")}
+                        </div>
+                      ) : null}
 
                       <div style={{ marginBottom: "12px", fontWeight: 800 }}>
                         {rosterStudents.length} enrolled student{rosterStudents.length === 1 ? "" : "s"}
@@ -4659,6 +4667,7 @@ export default function CoursesPage() {
                             <thead>
                               <tr>
                                 <th style={tableHeaderStyle}>Student</th>
+                                {roster?.isMasterRoster ? <th style={tableHeaderStyle}>Section</th> : null}
                                 <th style={tableHeaderStyle}>Email</th>
                                 <th style={tableHeaderStyle}>Parent Email</th>
                                 <th style={tableHeaderStyle}>Student ID</th>
@@ -4668,6 +4677,7 @@ export default function CoursesPage() {
                               {rosterStudents.map((student) => (
                                 <tr key={student.id || student.email}>
                                   <td style={tableCellStyle}>{student.name || "—"}</td>
+                                  {roster?.isMasterRoster ? <td style={tableCellStyle}>{student.section_title || "—"}</td> : null}
                                   <td style={tableCellStyle}>{student.email || "—"}</td>
                                   <td style={tableCellStyle}>{student.parent_email || "—"}</td>
                                   <td style={tableCellStyle}>{student.student_id || "—"}</td>
