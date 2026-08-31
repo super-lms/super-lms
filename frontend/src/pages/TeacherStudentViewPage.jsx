@@ -4,6 +4,7 @@ import { Eye, LogOut, BookOpen, ClipboardList, FileText } from "lucide-react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
 import API_BASE from "../apiBase"
+import { FormattedText } from "../components/RichText.jsx"
 
 const cardStyle = {
   background: "#fff",
@@ -137,7 +138,7 @@ export default function TeacherStudentViewPage() {
               <div style={{ color: "#64748b", fontWeight: 700 }}>STUDENT PORTAL PREVIEW</div>
               <h2 style={{ fontSize: "30px", margin: "8px 0" }}>{dashboard.course?.title || "Course"}</h2>
               <p style={{ margin: 0, color: "#475569" }}>Viewing as {selectedStudent?.name || studentEmail}</p>
-              {dashboard.course?.description && <p style={{ lineHeight: 1.6 }}>{dashboard.course.description}</p>}
+              {dashboard.course?.description && <FormattedText value={dashboard.course.description} style={{ marginTop: "14px" }} />}
             </section>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px" }}>

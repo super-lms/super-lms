@@ -5,6 +5,8 @@ import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
 import { findCourseGroup, groupCoursesByMaster } from "../services/courseSections"
+import { FormattedText, RichTextEditor } from "../components/RichText.jsx"
+import { sanitizeRichText } from "../services/richText"
 
 
 function buildSampleCsv(courseName = "Accounting 11") {
@@ -1430,7 +1432,7 @@ export default function CoursesPage() {
 
   async function saveCourse(courseId) {
     const cleanTitle = String(editCourseTitle || "").trim()
-    const cleanDescription = String(editCourseDescription || "").trim()
+    const cleanDescription = sanitizeRichText(editCourseDescription)
     if (!cleanTitle) {
       setError("Course title is required.")
       setMessage("")
@@ -2825,7 +2827,7 @@ export default function CoursesPage() {
                         </div>
                       </>
                     ) : null}
-                    <p
+                    <div
                       style={{
                         margin: 0,
                         color: "#4b5563",
@@ -2836,8 +2838,8 @@ export default function CoursesPage() {
                         paddingRight: "8px",
                       }}
                     >
-                      {course.description || "Open this course workspace to manage assignments, students, learning paths, and grading."}
-                    </p>
+                      <FormattedText value={course.description} fallback="Open this course workspace to manage assignments, students, learning paths, and grading." />
+                    </div>
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "18px" }}>
@@ -3007,17 +3009,10 @@ export default function CoursesPage() {
 
                         <div>
                           <label style={labelStyle}>Course Overview</label>
-                          <textarea
+                          <RichTextEditor
                             value={editCourseDescription}
-                            onChange={(event) => setEditCourseDescription(event.target.value)}
-                            rows="10"
+                            onChange={setEditCourseDescription}
                             placeholder="Enter the full course overview, learning goals, major topics, expectations, or other information students should know."
-                            style={{
-                              ...textareaStyle,
-                              minHeight: "240px",
-                              maxHeight: "320px",
-                              overflowY: "auto",
-                            }}
                           />
                         </div>
 
@@ -3062,7 +3057,7 @@ export default function CoursesPage() {
                             background: "#ffffff",
                           }}
                         >
-                          {contentCourse.description || "No course overview has been added yet."}
+                          <FormattedText value={contentCourse.description} fallback="No course overview has been added yet." />
                         </div>
                       </div>
 
