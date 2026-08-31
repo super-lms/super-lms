@@ -4,6 +4,8 @@ import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
 import { findCourseGroup, groupCoursesByMaster } from "../services/courseSections"
+import { sanitizeRichText } from "../services/richText"
+import { FormattedText, RichTextEditor } from "../components/RichText.jsx"
 
 function SectionHeader({ title, subtitle, action }) {
   return (
@@ -881,7 +883,7 @@ export default function AssignmentsPage() {
         class_id: Number(selectedClassId),
         teacher_id: user.id,
         title: title.trim(),
-        description: description.trim(),
+        description: sanitizeRichText(description),
         due_date: dueDate || null,
         subcategory_id: Number(selectedSubcategoryId),
       }),
@@ -1141,7 +1143,7 @@ export default function AssignmentsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: String(editTitle || "").trim(),
-        description: String(editDescription || "").trim(),
+        description: sanitizeRichText(editDescription),
         due_date: editDueDate || null,
       }),
     })
@@ -1927,7 +1929,7 @@ export default function AssignmentsPage() {
                           </InputBlock>
 
                           <InputBlock label="Description">
-                            <textarea rows="5" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Enter assignment description" />
+                            <RichTextEditor value={description} onChange={setDescription} placeholder="Enter assignment description." />
                           </InputBlock>
 
                           <InputBlock label="Due Date">
@@ -2108,7 +2110,8 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not linked"}
                                 </div>
                                 <div>
-                                  <strong>Description:</strong> {assignment.description || "No description"}
+                                  <strong>Description:</strong>
+                                  <FormattedText value={assignment.description} fallback="No description" style={{ marginTop: "6px" }} />
                                 </div>
                                 <div>
                                   <strong>Weight:</strong>{" "}
@@ -2147,7 +2150,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                       <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
                                     </InputBlock>
                                     <InputBlock label="Description">
-                                      <textarea rows="4" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+                                      <RichTextEditor value={editDescription} onChange={setEditDescription} placeholder="Enter assignment description." />
                                     </InputBlock>
                                     <InputBlock label="Due Date">
                                       <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />

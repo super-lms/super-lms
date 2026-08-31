@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
 import { groupCoursesByMaster } from "../services/courseSections"
+import { sanitizeRichText } from "../services/richText"
 import { useAuth } from "../AuthContext.jsx"
+import { FormattedText, RichTextEditor } from "../components/RichText.jsx"
 
 function LessonsPage() {
   const { user } = useAuth()
@@ -220,7 +222,7 @@ function LessonsPage() {
         body: JSON.stringify({
           course_id: Number(courseId),
           title: title.trim(),
-          content,
+          content: sanitizeRichText(content),
         }),
       })
 
@@ -635,7 +637,9 @@ function LessonsPage() {
                             {lesson.title}
                           </div>
 
-                          <div
+                          <FormattedText
+                            value={lesson.content}
+                            fallback="No lesson content added yet."
                             style={{
                               fontSize: "16px",
                               color: "#4b5563",
@@ -645,10 +649,7 @@ function LessonsPage() {
                               WebkitBoxOrient: "vertical",
                               overflow: "hidden",
                             }}
-                          >
-                            {lesson.content ||
-                              "No lesson content added yet."}
-                          </div>
+                          />
                         </div>
 
                         <div>
@@ -782,15 +783,15 @@ function LessonsPage() {
                         {lesson.title}
                       </div>
 
-                      <div
+                      <FormattedText
+                        value={lesson.content}
+                        fallback="No lesson content"
                         style={{
                           fontSize: "18px",
                           marginBottom: "12px",
                           lineHeight: "1.5",
                         }}
-                      >
-                        {lesson.content || "No lesson content"}
-                      </div>
+                      />
 
                       <div
                         style={{
@@ -999,13 +1000,10 @@ function LessonsPage() {
           <div style={{ marginBottom: "16px" }}>
             <label style={labelStyle}>Lesson Content</label>
 
-            <textarea
+            <RichTextEditor
               value={content}
-              onChange={(event) =>
-                setContent(event.target.value)
-              }
-              rows="4"
-              style={textareaStyle}
+              onChange={setContent}
+              placeholder="Enter lesson content."
             />
           </div>
 

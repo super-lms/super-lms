@@ -149,7 +149,7 @@ export default function TeacherStudentViewPage() {
                   return (
                     <article key={lesson.id} style={{ borderTop: "1px solid #e2e8f0", padding: "14px 0" }}>
                       <strong>{lesson.title}</strong>
-                      {lesson.content && <p style={{ color: "#475569", lineHeight: 1.5 }}>{lesson.content}</p>}
+                      {lesson.content && <FormattedText value={lesson.content} style={{ color: "#475569", marginTop: "8px" }} />}
                       {lessonFiles.length > 0 && (
                         <div style={{ marginTop: "12px" }}>
                           <div style={{ fontWeight: 800, marginBottom: "8px" }}>Lesson Resources</div>
@@ -174,6 +174,7 @@ export default function TeacherStudentViewPage() {
                 {assignments.length === 0 ? <p>No assignments posted yet.</p> : assignments.map((assignment) => (
                   <article key={assignment.id} style={{ borderTop: "1px solid #e2e8f0", padding: "14px 0" }}>
                     <strong>{assignment.title || assignment.name}</strong>
+                    {assignment.description && <FormattedText value={assignment.description} style={{ color: "#475569", marginTop: "8px" }} />}
                     <p style={{ marginBottom: 0, color: "#475569" }}>{assignment.due_date ? `Due: ${new Date(assignment.due_date).toLocaleDateString()}` : "No due date"}</p>
                   </article>
                 ))}

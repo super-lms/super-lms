@@ -11,6 +11,7 @@ import StudentGoalsGrowthPanel from "../components/student/StudentGoalsGrowthPan
 import StudentNextStepsPanel from "../components/student/StudentNextStepsPanel.jsx"
 import StudentTeacherAnnouncementsPanel from "../components/student/StudentTeacherAnnouncementsPanel.jsx"
 import StudentUpcomingDueDatesPanel from "../components/student/StudentUpcomingDueDatesPanel.jsx"
+import { FormattedText } from "../components/RichText.jsx"
 import { useAuth } from "../AuthContext.jsx"
 import useStudentDashboard from "../hooks/dashboard/useStudentDashboard.js"
 
@@ -100,9 +101,7 @@ function AssignmentCard({ assignment, compact = false, footer = null, submission
       </div>
 
       {!compact ? (
-        <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-          {assignment?.description || "No assignment description available."}
-        </p>
+        <FormattedText value={assignment?.description} fallback="No assignment description available." style={{ margin: 0, color: "#4b5563" }} />
       ) : null}
 
       <div style={assignmentMetaStyle}>
@@ -132,9 +131,7 @@ function LessonCard({ lesson }) {
   return (
     <div style={lessonCardStyle}>
       <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{lesson.title || "Untitled Lesson"}</h3>
-      <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.5 }}>
-        {lesson.description || lesson.content || "No lesson description available."}
-      </p>
+      <FormattedText value={lesson.description || lesson.content} fallback="No lesson description available." style={{ margin: 0, color: "#4b5563" }} />
       {files.length > 0 ? (
         <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #d7dce5" }}>
           <div style={{ marginBottom: "8px", fontWeight: 800 }}>Lesson Resources</div>
@@ -254,7 +251,8 @@ function SubmissionEditor({
 
       {assignment?.description ? (
         <div style={{ marginBottom: "16px", color: "#4b5563", lineHeight: 1.5 }}>
-          <strong>Assignment Details:</strong> {assignment.description}
+          <strong>Assignment Details:</strong>
+          <FormattedText value={assignment.description} style={{ marginTop: "6px" }} />
         </div>
       ) : null}
 
