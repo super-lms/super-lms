@@ -35,6 +35,10 @@ export default function Layout() {
         : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
   ).trim()
   const canAccessRti = normalizedRole === "teacher" || normalizedRole === "admin"
+  const currentCourseId = new URLSearchParams(location.search).get("courseId") || ""
+  const courseContextQuery = currentCourseId
+    ? `?courseId=${encodeURIComponent(currentCourseId)}`
+    : ""
 
   const isStudentRoute =
     location.pathname.startsWith("/student") &&
@@ -229,7 +233,7 @@ export default function Layout() {
             >
               Dashboard
             </NavItem>
-            <NavItem to="/student-view" style={getNavLinkStyle("/student-view")} icon={Eye}>
+            <NavItem to={`/student-view${courseContextQuery}`} style={getNavLinkStyle("/student-view")} icon={Eye}>
               Student View
             </NavItem>
             <NavItem to="/users" style={getNavLinkStyle("/users")} icon={Users}>
@@ -238,7 +242,7 @@ export default function Layout() {
             <NavItem to="/courses" style={getNavLinkStyle("/courses")} icon={BookOpen}>
               Courses
             </NavItem>
-            <NavItem to="/lessons" style={getNavLinkStyle("/lessons")} icon={FileText}>
+            <NavItem to={`/lessons${courseContextQuery}`} style={getNavLinkStyle("/lessons")} icon={FileText}>
               Lessons
             </NavItem>
             <NavItem to="/assignments" style={getNavLinkStyle("/assignments")} icon={ClipboardList}>

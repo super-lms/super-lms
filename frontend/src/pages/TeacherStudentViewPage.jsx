@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { Eye, LogOut, BookOpen, ClipboardList, FileText } from "lucide-react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
+import API_BASE from "../apiBase"
 
 const cardStyle = {
   background: "#fff",
@@ -14,6 +15,8 @@ const cardStyle = {
 export default function TeacherStudentViewPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requestedCourseId = searchParams.get("courseId") || ""
   const [courses, setCourses] = useState([])
   const [students, setStudents] = useState([])
   const [courseId, setCourseId] = useState("")
@@ -34,7 +37,13 @@ export default function TeacherStudentViewPage() {
         const nextCourses = Array.isArray(data.courses) ? data.courses : []
         setCourses(nextCourses)
         setStudents(Array.isArray(data.students) ? data.students : [])
-        setCourseId(nextCourses[0]?.id ? String(nextCourses[0].id) : "")
+        const requestedCourse = nextCourses.find((course) =>
+          [course.id, course.master_course_id, course.content_course_id]
+            .filter(Boolean)
+            .some((id) => String(id) === String(requestedCourseId))
+        )
+        const initialCourse = requestedCourse || nextCourses[0]
+        setCourseId(initialCourse?.id ? String(initialCourse.id) : "")
       } catch (err) {
         if (!cancelled) setError(err.message || "Could not open Student View")
       } finally {
@@ -43,7 +52,7 @@ export default function TeacherStudentViewPage() {
     }
     loadTeacherData()
     return () => { cancelled = true }
-  }, [user?.id])
+  }, [user?.id, requestedCourseId])
 
   const courseStudents = useMemo(() => {
     return students.filter((student) =>
@@ -102,7 +111,11 @@ export default function TeacherStudentViewPage() {
           <h1 style={{ marginTop: 0 }}>Preview a Student Course</h1>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px" }}>
             <label style={{ fontWeight: 700 }}>Course
-              <select value={courseId} onChange={(event) => setCourseId(event.target.value)} style={{ display: "block", width: "100%", marginTop: "8px", padding: "11px", borderRadius: "8px" }}>
+              <select value={courseId} onChange={(event) => {
+                const nextCourseId = event.target.value
+                setCourseId(nextCourseId)
+                navigate(`/student-view?courseId=${encodeURIComponent(nextCourseId)}`, { replace: true })
+              }} style={{ display: "block", width: "100%", marginTop: "8px", padding: "11px", borderRadius: "8px" }}>
                 {courses.map((course) => <option key={course.id} value={course.id}>{course.title || course.class_name}</option>)}
               </select>
             </label>
@@ -130,12 +143,29 @@ export default function TeacherStudentViewPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px" }}>
               <section style={cardStyle}>
                 <h2 style={{ display: "flex", gap: "9px", alignItems: "center" }}><FileText size={22} /> Lessons</h2>
-                {lessons.length === 0 ? <p>No lessons posted yet.</p> : lessons.map((lesson) => (
-                  <article key={lesson.id} style={{ borderTop: "1px solid #e2e8f0", padding: "14px 0" }}>
-                    <strong>{lesson.title}</strong>
-                    {lesson.content && <p style={{ color: "#475569", lineHeight: 1.5 }}>{lesson.content}</p>}
-                  </article>
-                ))}
+                {lessons.length === 0 ? <p>No lessons posted yet.</p> : lessons.map((lesson) => {
+                  const lessonFiles = Array.isArray(lesson.files) ? lesson.files : []
+                  return (
+                    <article key={lesson.id} style={{ borderTop: "1px solid #e2e8f0", padding: "14px 0" }}>
+                      <strong>{lesson.title}</strong>
+                      {lesson.content && <p style={{ color: "#475569", lineHeight: 1.5 }}>{lesson.content}</p>}
+                      {lessonFiles.length > 0 && (
+                        <div style={{ marginTop: "12px" }}>
+                          <div style={{ fontWeight: 800, marginBottom: "8px" }}>Lesson Resources</div>
+                          <ul style={{ margin: 0, paddingLeft: "20px" }}>
+                            {lessonFiles.map((file) => (
+                              <li key={file.id || file.file_path || file.original_name} style={{ marginBottom: "7px" }}>
+                                <a href={`${API_BASE}${file.file_path}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>
+                                  {file.original_name || file.filename || "Download resource"}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </article>
+                  )
+                })}
               </section>
 
               <section style={cardStyle}>
