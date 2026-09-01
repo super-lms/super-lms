@@ -10635,7 +10635,7 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
 
     const courseResult = await pool.query(
       `
-      SELECT id, title
+      SELECT id, title, master_course_id
       FROM courses
       WHERE id = $1
       LIMIT 1
@@ -11047,9 +11047,25 @@ app.delete("/api/class-roster/:courseId/students/:studentId", authenticateJWT, r
 
     const deleteResult = await pool.query(
       `
+      WITH selected_course AS (
+        SELECT id, master_course_id
+        FROM courses
+        WHERE id = $1
+      ), removable_classes AS (
+        SELECT id
+        FROM selected_course
+
+        UNION
+
+        SELECT section.id
+        FROM courses section
+        JOIN selected_course master
+          ON master.master_course_id IS NULL
+         AND section.master_course_id = master.id
+      )
       DELETE FROM class_enrollments
-      WHERE class_id = $1
-        AND student_user_id = $2
+      WHERE student_user_id = $2
+        AND class_id IN (SELECT id FROM removable_classes)
       RETURNING id, class_id, student_user_id
       `,
       [courseId, studentId]
@@ -11064,6 +11080,8 @@ app.delete("/api/class-roster/:courseId/students/:studentId", authenticateJWT, r
     return res.json({
       message: "Student removed from this course",
       removedEnrollment: deleteResult.rows[0],
+      removedEnrollments: deleteResult.rows,
+      removedCount: deleteResult.rowCount,
     });
   } catch (err) {
     console.error(
