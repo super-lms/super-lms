@@ -1993,7 +1993,7 @@ app.get("/course-resources/:storedName", async (req, res, next) => {
     const resource = result.rows[0];
     const safeName = String(resource.original_name || "class-resource").replace(/[\r\n"]/g, "_");
     res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
     return res.send(resource.file_data);
   } catch (err) {
     console.error("GET /course-resources/:storedName failed:", err);
@@ -2324,6 +2324,27 @@ app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async
   } catch (err) {
     console.error("POST /api/lessons failed:", err);
     return res.status(500).json({ error: "Failed to create lesson" });
+  }
+});
+
+app.put("/api/lessons/:lessonId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    await ensureLessonsTables();
+    const lessonId = Number(req.params.lessonId || 0);
+    const title = String(req.body?.title || "").trim();
+    const content = String(req.body?.content || "").trim();
+    if (!lessonId) return res.status(400).json({ error: "Valid lessonId is required" });
+    if (!title) return res.status(400).json({ error: "Lesson title is required" });
+    const result = await pool.query(
+      `UPDATE lessons SET title = $2, content = $3, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [lessonId, title, content]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Lesson not found" });
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error("PUT /api/lessons/:lessonId failed:", err);
+    return res.status(500).json({ error: "Failed to update lesson" });
   }
 });
 

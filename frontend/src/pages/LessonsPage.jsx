@@ -20,6 +20,9 @@ function LessonsPage() {
   const [courses, setCourses] = useState([])
   const [courseId, setCourseId] = useState(requestedCourseId)
   const [selectedLessonId, setSelectedLessonId] = useState(null)
+  const [editingLessonId, setEditingLessonId] = useState(null)
+  const [editTitle, setEditTitle] = useState("")
+  const [editContent, setEditContent] = useState("")
   const [title, setTitle] = useState("")
   const [content, setContent] = useState(
     requestedEvidenceTierName ? `Evidence focus: ${requestedEvidenceTierName}\n\n` : ""
@@ -312,6 +315,44 @@ function LessonsPage() {
     } catch (error) {
       console.error(error)
       setMessage("Error deleting lesson")
+    }
+  }
+
+  function beginEditLesson(lesson) {
+    setEditingLessonId(lesson.id)
+    setEditTitle(lesson.title || "")
+    setEditContent(lesson.content || "")
+    setMessage("Editing lesson")
+  }
+
+  async function saveLessonEdits(lessonId) {
+    const cleanTitle = editTitle.trim()
+    if (!cleanTitle) {
+      setMessage("Lesson title is required")
+      return
+    }
+
+    try {
+      const response = await authFetch(`${API_BASE}/api/lessons/${lessonId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cleanTitle,
+          content: sanitizeRichText(editContent),
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to update lesson")
+      }
+
+      setEditingLessonId(null)
+      setMessage("Lesson updated successfully")
+      await loadLessons()
+    } catch (error) {
+      console.error(error)
+      setMessage(error.message || "Error updating lesson")
     }
   }
 
@@ -773,25 +814,55 @@ function LessonsPage() {
                         minWidth: "280px",
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: "28px",
-                          fontWeight: "bold",
-                          marginBottom: "10px",
-                        }}
-                      >
-                        {lesson.title}
-                      </div>
+                      {String(editingLessonId) === String(lesson.id) ? (
+                        <div style={{ marginBottom: "18px" }}>
+                          <label style={labelStyle} htmlFor={`edit-lesson-title-${lesson.id}`}>
+                            Lesson Title
+                          </label>
+                          <input
+                            id={`edit-lesson-title-${lesson.id}`}
+                            value={editTitle}
+                            onChange={(event) => setEditTitle(event.target.value)}
+                            style={{ ...inputStyle, maxWidth: "none", marginBottom: "14px" }}
+                          />
+                          <label style={labelStyle}>Lesson Description</label>
+                          <RichTextEditor
+                            value={editContent}
+                            onChange={setEditContent}
+                            placeholder="Enter the lesson description."
+                          />
+                          <div style={{ display: "flex", gap: "10px", marginTop: "14px", flexWrap: "wrap" }}>
+                            <button type="button" onClick={() => saveLessonEdits(lesson.id)} style={primaryButtonStyle}>
+                              Save Changes
+                            </button>
+                            <button type="button" onClick={() => setEditingLessonId(null)} style={secondaryButtonStyle}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div
+                            style={{
+                              fontSize: "28px",
+                              fontWeight: "bold",
+                              marginBottom: "10px",
+                            }}
+                          >
+                            {lesson.title}
+                          </div>
 
-                      <FormattedText
-                        value={lesson.content}
-                        fallback="No lesson content"
-                        style={{
-                          fontSize: "18px",
-                          marginBottom: "12px",
-                          lineHeight: "1.5",
-                        }}
-                      />
+                          <FormattedText
+                            value={lesson.content}
+                            fallback="No lesson content"
+                            style={{
+                              fontSize: "18px",
+                              marginBottom: "12px",
+                              lineHeight: "1.5",
+                            }}
+                          />
+                        </>
+                      )}
 
                       <div
                         style={{
@@ -920,13 +991,22 @@ function LessonsPage() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => deleteLesson(lesson.id)}
-                      style={deleteButtonStyle}
-                    >
-                      Delete
-                    </button>
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => beginEditLesson(lesson)}
+                        style={secondaryButtonStyle}
+                      >
+                        Edit Lesson
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteLesson(lesson.id)}
+                        style={deleteButtonStyle}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1104,6 +1184,12 @@ const primaryButtonStyle = {
   backgroundColor: "#1f2937",
   color: "#ffffff",
   cursor: "pointer",
+}
+
+const secondaryButtonStyle = {
+  ...primaryButtonStyle,
+  backgroundColor: "#ffffff",
+  color: "#1f2937",
 }
 
 const statusCardStyle = {
