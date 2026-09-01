@@ -3283,6 +3283,17 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
+                        navigate(`/courses/${contentCourseId}/modules`)
+                      }}
+                      style={buttonStyle}
+                    >
+                      Modules
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.localStorage.setItem("super-lms-last-course-id", String(course.id))
                         navigate(`/courses/${course.id}/attendance`)
                       }}
                       disabled={isMasterWorkspace}

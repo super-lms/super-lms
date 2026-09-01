@@ -1739,6 +1739,247 @@ async function ensureCourseResourcesTable() {
   `);
 }
 
+let courseModulesReadyPromise = null;
+
+async function ensureCourseModuleTables() {
+  if (!courseModulesReadyPromise) {
+    courseModulesReadyPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS lms_course_modules (
+          id SERIAL PRIMARY KEY,
+          course_id INTEGER NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 1,
+          is_published BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS lms_course_module_items (
+          id SERIAL PRIMARY KEY,
+          module_id INTEGER NOT NULL REFERENCES lms_course_modules(id) ON DELETE CASCADE,
+          item_type TEXT NOT NULL,
+          title TEXT NOT NULL DEFAULT '',
+          description TEXT NOT NULL DEFAULT '',
+          lesson_id INTEGER,
+          assignment_id INTEGER,
+          course_resource_id INTEGER,
+          sort_order INTEGER NOT NULL DEFAULT 1,
+          is_published BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS lms_course_modules_course_order_idx ON lms_course_modules(course_id, sort_order, id)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS lms_course_module_items_module_order_idx ON lms_course_module_items(module_id, sort_order, id)`);
+    })().catch((error) => {
+      courseModulesReadyPromise = null;
+      throw error;
+    });
+  }
+  return courseModulesReadyPromise;
+}
+
+async function loadCourseModules(requestedCourseId, includeDrafts = false) {
+  await ensureCourseModuleTables();
+  const courseId = await resolveContentCourseId(Number(requestedCourseId || 0));
+  if (!courseId) return [];
+  const result = await pool.query(
+    `SELECT m.*,
+      COALESCE(JSON_AGG(JSON_BUILD_OBJECT(
+        'id', i.id, 'module_id', i.module_id, 'item_type', i.item_type,
+        'title', i.title, 'description', i.description, 'sort_order', i.sort_order,
+        'is_published', i.is_published, 'lesson_id', i.lesson_id,
+        'lesson_title', l.title, 'lesson_content', l.content,
+        'lesson_files', COALESCE((SELECT JSON_AGG(JSON_BUILD_OBJECT(
+          'id', lf.id, 'original_name', lf.original_name,
+          'file_path', '/lesson-resources/' || lf.stored_name
+        ) ORDER BY lf.id) FROM lesson_files lf WHERE lf.lesson_id = l.id), '[]'::json),
+        'assignment_id', i.assignment_id, 'assignment_title', a.title,
+        'assignment_description', a.description, 'assignment_due_date', a.due_date,
+        'course_resource_id', i.course_resource_id, 'resource_name', cr.original_name,
+        'resource_path', CASE WHEN cr.id IS NULL THEN NULL ELSE '/course-resources/' || cr.stored_name END
+      ) ORDER BY i.sort_order, i.id) FILTER (WHERE i.id IS NOT NULL), '[]'::json) AS items
+     FROM lms_course_modules m
+     LEFT JOIN lms_course_module_items i ON i.module_id = m.id AND ($2::boolean OR i.is_published = TRUE)
+     LEFT JOIN lessons l ON l.id = i.lesson_id
+     LEFT JOIN assignments a ON a.id = i.assignment_id
+     LEFT JOIN course_resources cr ON cr.id = i.course_resource_id
+     WHERE m.course_id = $1 AND ($2::boolean OR m.is_published = TRUE)
+     GROUP BY m.id ORDER BY m.sort_order, m.id`,
+    [courseId, includeDrafts]
+  );
+  return result.rows;
+}
+
+async function authorizeCourseModuleAccess(req, requestedCourseId) {
+  const requestedId = Number(requestedCourseId || 0);
+  const contentCourseId = await resolveContentCourseId(requestedId);
+  if (!requestedId || !contentCourseId) return { allowed: false, status: 404, courseId: 0 };
+
+  const role = String(req.user?.role || '').toLowerCase();
+  if (role === 'admin') return { allowed: true, status: 200, courseId: contentCourseId };
+
+  if (role === 'teacher') {
+    const result = await pool.query(
+      `SELECT 1
+       FROM courses c
+       LEFT JOIN course_teachers ct ON ct.course_id = c.id
+       WHERE (c.id = $1 OR COALESCE(c.master_course_id, c.id) = $2)
+         AND (c.teacher_id = $3 OR ct.teacher_id = $3)
+       LIMIT 1`,
+      [requestedId, contentCourseId, Number(req.user?.id)]
+    );
+    return { allowed: result.rows.length > 0, status: 403, courseId: contentCourseId };
+  }
+
+  if (role === 'student') {
+    const result = await pool.query(
+      `SELECT 1
+       FROM class_enrollments ce
+       JOIN courses c ON c.id = ce.class_id
+       WHERE ce.student_user_id = $1
+         AND (c.id = $2 OR COALESCE(c.master_course_id, c.id) = $3)
+       LIMIT 1`,
+      [Number(req.user?.id), requestedId, contentCourseId]
+    );
+    return { allowed: result.rows.length > 0, status: 403, courseId: contentCourseId };
+  }
+
+  return { allowed: false, status: 403, courseId: contentCourseId };
+}
+
+async function authorizeModuleMutation(req, moduleId) {
+  await ensureCourseModuleTables();
+  const result = await pool.query('SELECT course_id FROM lms_course_modules WHERE id = $1 LIMIT 1', [Number(moduleId)]);
+  if (!result.rows[0]) return { allowed: false, status: 404, courseId: 0 };
+  return authorizeCourseModuleAccess(req, result.rows[0].course_id);
+}
+
+app.get('/api/courses/:courseId/modules', authenticateJWT, requireRole('admin', 'teacher', 'student', 'observer'), async (req, res) => {
+  try {
+    const access = await authorizeCourseModuleAccess(req, req.params.courseId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Course not found' : 'You do not have access to these course modules' });
+    const includeDrafts = ['admin', 'teacher'].includes(String(req.user?.role || '').toLowerCase());
+    return res.json(await loadCourseModules(access.courseId, includeDrafts));
+  } catch (error) {
+    console.error('GET course modules failed:', error);
+    return res.status(503).json({ error: 'Modules are temporarily unavailable. Other LMS features are unaffected.' });
+  }
+});
+
+app.post('/api/courses/:courseId/modules', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  try {
+    await ensureCourseModuleTables();
+    const access = await authorizeCourseModuleAccess(req, req.params.courseId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Course not found' : 'You are not assigned to this course' });
+    const courseId = access.courseId;
+    const title = String(req.body?.title || '').trim();
+    if (!courseId || !title) return res.status(400).json({ error: 'Course and module title are required' });
+    const order = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM lms_course_modules WHERE course_id = $1', [courseId]);
+    const result = await pool.query(
+      'INSERT INTO lms_course_modules (course_id, title, description, sort_order, is_published) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [courseId, title, String(req.body?.description || ''), order.rows[0].next_order, Boolean(req.body?.is_published)]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('POST course module failed:', error);
+    return res.status(503).json({ error: 'The module could not be created. Teacher access remains available.' });
+  }
+});
+
+app.put('/api/modules/:moduleId', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  try {
+    const access = await authorizeModuleMutation(req, req.params.moduleId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Module not found' : 'You are not assigned to this course' });
+    const result = await pool.query(
+      `UPDATE lms_course_modules SET title = COALESCE($2, title), description = COALESCE($3, description),
+       is_published = COALESCE($4, is_published), updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [Number(req.params.moduleId), req.body?.title ?? null, req.body?.description ?? null, typeof req.body?.is_published === 'boolean' ? req.body.is_published : null]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Module not found' });
+    return res.json(result.rows[0]);
+  } catch (error) { return res.status(503).json({ error: 'Failed to update module' }); }
+});
+
+app.delete('/api/modules/:moduleId', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  try {
+    const access = await authorizeModuleMutation(req, req.params.moduleId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Module not found' : 'You are not assigned to this course' });
+    await pool.query('DELETE FROM lms_course_modules WHERE id = $1', [Number(req.params.moduleId)]);
+    return res.json({ success: true });
+  } catch (error) { return res.status(503).json({ error: 'Failed to delete module' }); }
+});
+
+app.post('/api/modules/:moduleId/items', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  try {
+    const access = await authorizeModuleMutation(req, req.params.moduleId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Module not found' : 'You are not assigned to this course' });
+    const type = String(req.body?.item_type || '').trim().toLowerCase();
+    if (!['heading', 'instruction', 'lesson', 'assignment', 'resource'].includes(type)) return res.status(400).json({ error: 'Choose a valid module item type' });
+    const order = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM lms_course_module_items WHERE module_id = $1', [Number(req.params.moduleId)]);
+    const result = await pool.query(
+      `INSERT INTO lms_course_module_items
+       (module_id,item_type,title,description,lesson_id,assignment_id,course_resource_id,sort_order,is_published)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [Number(req.params.moduleId), type, String(req.body?.title || ''), String(req.body?.description || ''), req.body?.lesson_id || null, req.body?.assignment_id || null, req.body?.course_resource_id || null, order.rows[0].next_order, req.body?.is_published !== false]
+    );
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('POST module item failed:', error);
+    return res.status(503).json({ error: 'Failed to add module item' });
+  }
+});
+
+app.put('/api/modules/:moduleId/items/reorder', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  let client = null;
+  let transactionStarted = false;
+  try {
+    const access = await authorizeModuleMutation(req, req.params.moduleId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Module not found' : 'You are not assigned to this course' });
+    const ids = Array.isArray(req.body?.item_ids) ? req.body.item_ids.map(Number).filter(Boolean) : [];
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+    for (let index = 0; index < ids.length; index += 1) await client.query('UPDATE lms_course_module_items SET sort_order = $1, updated_at = NOW() WHERE id = $2 AND module_id = $3', [index + 1, ids[index], Number(req.params.moduleId)]);
+    await client.query('COMMIT');
+    return res.json({ success: true });
+  } catch (error) { if (transactionStarted) await client.query('ROLLBACK'); return res.status(503).json({ error: 'Failed to reorder module items' }); }
+  finally { if (client) client.release(); }
+});
+
+app.put('/api/courses/:courseId/modules/reorder', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  let client = null;
+  let transactionStarted = false;
+  try {
+    const access = await authorizeCourseModuleAccess(req, req.params.courseId);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Course not found' : 'You are not assigned to this course' });
+    const courseId = access.courseId;
+    const ids = Array.isArray(req.body?.module_ids) ? req.body.module_ids.map(Number).filter(Boolean) : [];
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+    for (let index = 0; index < ids.length; index += 1) await client.query('UPDATE lms_course_modules SET sort_order = $1, updated_at = NOW() WHERE id = $2 AND course_id = $3', [index + 1, ids[index], courseId]);
+    await client.query('COMMIT');
+    return res.json({ success: true });
+  } catch (error) { if (transactionStarted) await client.query('ROLLBACK'); return res.status(503).json({ error: 'Failed to reorder modules' }); }
+  finally { if (client) client.release(); }
+});
+
+app.delete('/api/module-items/:itemId', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
+  try {
+    await ensureCourseModuleTables();
+    const moduleResult = await pool.query('SELECT module_id FROM lms_course_module_items WHERE id = $1 LIMIT 1', [Number(req.params.itemId)]);
+    if (!moduleResult.rows[0]) return res.status(404).json({ error: 'Module item not found' });
+    const access = await authorizeModuleMutation(req, moduleResult.rows[0].module_id);
+    if (!access.allowed) return res.status(access.status).json({ error: access.status === 404 ? 'Module not found' : 'You are not assigned to this course' });
+    await pool.query('DELETE FROM lms_course_module_items WHERE id = $1', [Number(req.params.itemId)]);
+    return res.json({ success: true });
+  } catch (error) { return res.status(503).json({ error: 'Failed to remove module item' }); }
+});
+
 app.get("/course-resources/:storedName", async (req, res, next) => {
   try {
     const storedName = path.basename(String(req.params.storedName || ""));
