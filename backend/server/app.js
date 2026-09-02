@@ -10753,7 +10753,7 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
         )
       : { rows: [] };
     const rosterCourseIds = isMasterCourse && sectionsResult.rows.length > 0
-      ? sectionsResult.rows.map((section) => Number(section.id))
+      ? [courseId, ...sectionsResult.rows.map((section) => Number(section.id))]
       : [courseId];
 
     const studentsResult = await pool.query(
