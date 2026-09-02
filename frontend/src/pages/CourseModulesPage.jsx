@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import authFetch from "../services/authFetch"
 import { FormattedText, RichTextEditor } from "../components/RichText.jsx"
 import CourseModulesView from "../components/CourseModulesView.jsx"
+import RepositoryFilePicker from "../components/RepositoryFilePicker.jsx"
 
 const card = { border: "1px solid #d7dce5", borderRadius: 14, padding: 18, background: "white" }
 const button = { border: "1px solid #111827", borderRadius: 9, padding: "9px 13px", background: "white", fontWeight: 800, cursor: "pointer" }
@@ -21,6 +22,7 @@ export default function CourseModulesPage() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
+  const [repositoryModuleId, setRepositoryModuleId] = useState(null)
 
   const load = useCallback(async () => {
     setError("")
@@ -38,7 +40,7 @@ export default function CourseModulesPage() {
       setSources({
         lesson: (data[2] || []).filter((item) => String(item.course_id) === String(contentId)),
         assignment: (data[3] || []).filter((item) => String(item.class_id || item.course_id) === String(contentId)),
-        resource: data[4] || [],
+        resource: data[4]?.resources || [],
       })
     } catch (loadError) { setError(loadError.message) }
   }, [courseId])
@@ -118,12 +120,26 @@ export default function CourseModulesPage() {
         </div>)}</div>
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #e2e8f0" }}>
           <h3>Add to This Module</h3>
+          <button type="button" style={{ ...primary, marginBottom: 10 }} onClick={() => setRepositoryModuleId(module.id)}>Add File</button>
           <select style={input} value={draft.item_type} onChange={(event) => patchDraft(module.id, { item_type: event.target.value, title: "", description: "", source_id: "" })}><option value="heading">Section heading</option><option value="instruction">Instructions</option><option value="lesson">Existing lesson</option><option value="assignment">Existing assignment</option><option value="resource">Repository file</option></select>
           {["lesson", "assignment", "resource"].includes(draft.item_type) ? <select style={{ ...input, marginTop: 10 }} value={draft.source_id} onChange={(event) => patchDraft(module.id, { source_id: event.target.value })}><option value="">Choose existing {draft.item_type}</option>{options.map((option) => <option key={option.id} value={option.id}>{option.title || option.original_name}</option>)}</select> : draft.item_type === "heading" ? <input style={{ ...input, marginTop: 10 }} value={draft.title} onChange={(event) => patchDraft(module.id, { title: event.target.value })} placeholder="Heading" /> : <div style={{ marginTop: 10 }}><RichTextEditor value={draft.description} onChange={(value) => patchDraft(module.id, { description: value })} placeholder="Instructions for students" /></div>}
           <button type="button" disabled={busy} style={{ ...primary, marginTop: 10 }} onClick={() => addItem(module)}>Add Item</button>
         </div>
       </section>
     })}</div>
+    <RepositoryFilePicker
+      courseId={courseId}
+      open={Boolean(repositoryModuleId)}
+      title="Add a Repository File to This Module"
+      onClose={() => setRepositoryModuleId(null)}
+      onSelect={async (resource) => {
+        const created = await request(`/api/modules/${repositoryModuleId}/items`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item_type: "resource", course_resource_id: Number(resource.id) }),
+        }, "File could not be added to the module")
+        if (created) { setRepositoryModuleId(null); setMessage("File added to the module."); await load() }
+      }}
+    />
     {modules.length ? <section style={{ marginTop: 24 }}><h2>Student Preview</h2><CourseModulesView modules={publishedModules} /></section> : null}
   </div>
 }

@@ -11,6 +11,7 @@ import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
 import TeacherDesignedRubricWorkspace from "../components/rubrics/TeacherDesignedRubricWorkspace.jsx";
+import RepositoryFilePicker from "../components/RepositoryFilePicker.jsx";
 
 
 function formatPercent(value) {
@@ -109,6 +110,7 @@ export default function EditAssignmentPage() {
   const [resourceSaving, setResourceSaving] = useState(false);
   const [resourceMessage, setResourceMessage] = useState("");
   const [resourceError, setResourceError] = useState("");
+  const [repositoryPickerOpen, setRepositoryPickerOpen] = useState(false);
 
   const selectedCategory = useMemo(() => {
     return (
@@ -1298,6 +1300,9 @@ export default function EditAssignmentPage() {
           <div style={{ border: "1px solid #d7dce5", borderRadius: "14px", padding: "18px", background: "#fff" }}>
             <h2 style={{ marginTop: 0 }}>Assignment Resources</h2>
             <p style={{ color: "#4b5563" }}>Add files, website links, or videos students can use with this assignment.</p>
+            <EditAssignmentActionButton type="button" onClick={() => setRepositoryPickerOpen(true)}>
+              Add File
+            </EditAssignmentActionButton>
             <div style={{ display: "grid", gap: "12px" }}>
               <div>
                 <EditAssignmentFieldLabel>Choose resource type</EditAssignmentFieldLabel>
@@ -1964,6 +1969,32 @@ export default function EditAssignmentPage() {
         </div>
       </section>
       </div>
+
+      <RepositoryFilePicker
+        courseId={assignment?.class_id || assignment?.course_id}
+        open={repositoryPickerOpen}
+        title="Add a File to This Assignment"
+        onClose={() => setRepositoryPickerOpen(false)}
+        onSelect={async (resource) => {
+          setResourceSaving(true);
+          setResourceError("");
+          try {
+            const response = await authFetch(`/api/assignments/${assignmentId}/resources/from-repository`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ resource_id: resource.id }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || "File could not be attached");
+            setRepositoryPickerOpen(false);
+            setResourceMessage("File added from the repository.");
+            await loadAssignmentResources();
+          } catch (attachError) {
+            setResourceError(attachError.message);
+          } finally {
+            setResourceSaving(false);
+          }
+        }}
+      />
 
       <FloatingTeacherCoach
         subtitle="Edit Assignment Coach"

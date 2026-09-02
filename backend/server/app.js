@@ -88,6 +88,29 @@ function handleLessonResourceUpload(req, res, next) {
   });
 }
 
+function handleSingleResourceUpload(req, res, next) {
+  lessonResourceUpload.single("attachment")(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "The resource must be 50 MB or smaller" });
+    }
+    return res.status(400).json({ error: error.message || "The resource could not be uploaded" });
+  });
+}
+
+async function saveCourseResource(client, { courseId, originalName, mimeType, fileData, createdBy }) {
+  const extension = path.extname(String(originalName || "")).slice(0, 20);
+  const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
+  const result = await client.query(
+    `INSERT INTO course_resources
+       (course_id, stored_name, original_name, mime_type, file_size, file_data, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, course_id, original_name, mime_type, file_size, created_at`,
+    [courseId, storedName, originalName, mimeType, fileData.length, fileData, createdBy || null]
+  );
+  return { ...result.rows[0], stored_name: storedName, file_path: `/course-resources/${storedName}` };
+}
+
 app.get("/uploads/:storedName", async (req, res, next) => {
   try {
     const storedName = path.basename(String(req.params.storedName || ""));
@@ -2039,16 +2062,10 @@ app.post(
       await client.query("BEGIN");
       const saved = [];
       for (const file of files) {
-        const extension = path.extname(String(file.originalname || "")).slice(0, 20);
-        const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
-        const result = await client.query(
-          `INSERT INTO course_resources
-             (course_id, stored_name, original_name, mime_type, file_size, file_data, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING id, course_id, original_name, mime_type, file_size, created_at`,
-          [courseId, storedName, file.originalname, file.mimetype, file.size, file.buffer, req.user?.id || null]
-        );
-        saved.push({ ...result.rows[0], file_path: `/course-resources/${storedName}` });
+        saved.push(await saveCourseResource(client, {
+          courseId, originalName: file.originalname, mimeType: file.mimetype,
+          fileData: file.buffer, createdBy: req.user?.id,
+        }));
       }
       await client.query("COMMIT");
       return res.status(201).json({ success: true, resources: saved });
@@ -2176,7 +2193,7 @@ app.post(
       if (files.length === 0) return res.status(400).json({ error: "Choose at least one lesson resource" });
 
       const lessonResult = await pool.query({
-        text: `SELECT id FROM lessons WHERE id = $1 LIMIT 1`,
+        text: `SELECT id, course_id FROM lessons WHERE id = $1 LIMIT 1`,
         values: [lessonId],
         query_timeout: 15000,
       });
@@ -2185,6 +2202,7 @@ app.post(
       client = await pool.connect();
       await client.query("BEGIN");
       const savedFiles = [];
+      const contentCourseId = await resolveContentCourseId(lessonResult.rows[0].course_id);
       for (const file of files) {
         const extension = path.extname(String(file.originalname || "")).slice(0, 20);
         const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
@@ -2195,6 +2213,10 @@ app.post(
           [lessonId, storedName, file.originalname, file.mimetype, file.size, file.buffer]
         );
         savedFiles.push({ ...result.rows[0], file_path: `/lesson-resources/${storedName}` });
+        await saveCourseResource(client, {
+          courseId: contentCourseId, originalName: file.originalname,
+          mimeType: file.mimetype, fileData: file.buffer, createdBy: req.user?.id,
+        });
       }
       await client.query("COMMIT");
 
@@ -2215,6 +2237,7 @@ app.post(
   requireRole("admin", "teacher"),
   async (req, res) => {
     let stage = "validating the file";
+    let client;
     try {
       const lessonId = Number(req.params.lessonId || 0);
       const originalName = String(req.body?.name || "").trim();
@@ -2234,20 +2257,28 @@ app.post(
 
       const extension = path.extname(originalName).slice(0, 20);
       const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
+      const lessonResult = await pool.query(`SELECT course_id FROM lessons WHERE id = $1`, [lessonId]);
+      if (!lessonResult.rows.length) return res.status(404).json({ error: "Lesson not found" });
+      const contentCourseId = await resolveContentCourseId(lessonResult.rows[0].course_id);
       stage = "saving the file in the database";
-      const result = await pool.query({
+      client = await pool.connect();
+      await client.query("BEGIN");
+      const result = await client.query({
         text: `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data, file_path)
                VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
         values: [lessonId, storedName, originalName, mimeType, fileData.length, fileData, `/lesson-resources/${storedName}`],
         query_timeout: 20000,
       });
+      await saveCourseResource(client, { courseId: contentCourseId, originalName, mimeType, fileData, createdBy: req.user?.id });
+      await client.query("COMMIT");
 
       return res.status(201).json({
         success: true,
         files: [{ ...result.rows[0], file_path: `/lesson-resources/${storedName}` }],
       });
     } catch (err) {
+      if (client) await client.query("ROLLBACK").catch(() => {});
       console.error(`POST /api/lesson-file-data/:lessonId failed while ${stage}:`, err);
       const reason = err?.code === "57014"
         ? `Timed out while ${stage}`
@@ -2255,9 +2286,34 @@ app.post(
           ? "The lesson no longer exists; refresh the page and try again"
           : `Failed while ${stage}${err?.column ? `: missing ${err.column}` : ""}${err?.code ? ` (${err.code})` : ""}`;
       return res.status(500).json({ error: reason });
+    } finally {
+      if (client) client.release();
     }
   }
 );
+
+app.post("/api/lesson-files/:lessonId/from-repository", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const lessonId = Number(req.params.lessonId || 0);
+    const resourceId = Number(req.body?.resource_id || 0);
+    const lessonResult = await pool.query(`SELECT course_id FROM lessons WHERE id = $1`, [lessonId]);
+    if (!lessonResult.rows.length) return res.status(404).json({ error: "Lesson not found" });
+    const courseId = await resolveContentCourseId(lessonResult.rows[0].course_id);
+    const storedName = `${Date.now()}-${crypto.randomUUID()}`;
+    const result = await pool.query(
+      `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data, file_path)
+       SELECT $1, $2, original_name, mime_type, file_size, file_data, $3
+       FROM course_resources WHERE id = $4 AND course_id = $5
+       RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
+      [lessonId, storedName, `/lesson-resources/${storedName}`, resourceId, courseId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Repository file not found" });
+    return res.status(201).json({ success: true, file: result.rows[0] });
+  } catch (err) {
+    console.error("Attach lesson repository file failed:", err);
+    return res.status(500).json({ error: "Failed to attach repository file" });
+  }
+});
 
 app.post("/api/lessons", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
@@ -5000,23 +5056,59 @@ app.post("/api/assignments/:assignmentId/resources", authenticateJWT, requireRol
   }
 });
 
-app.post("/api/assignments/:assignmentId/resources/file", authenticateJWT, requireRole("admin", "teacher"), upload.single("attachment"), async (req, res) => {
+app.post("/api/assignments/:assignmentId/resources/file", authenticateJWT, requireRole("admin", "teacher"), handleSingleResourceUpload, async (req, res) => {
+  let client;
   try {
     const assignmentId = Number(req.params.assignmentId);
     if (!assignmentId || !req.file) return res.status(400).json({ error: "Choose a file to upload" });
     const title = String(req.body.title || req.file.originalname || "Assignment file").trim();
     await ensureAssignmentResourceTables();
-    const result = await pool.query(
+    const assignmentResult = await pool.query(`SELECT class_id FROM assignments WHERE id = $1`, [assignmentId]);
+    if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found" });
+    const courseId = await resolveContentCourseId(assignmentResult.rows[0].class_id);
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const repositoryFile = await saveCourseResource(client, {
+      courseId, originalName: req.file.originalname, mimeType: req.file.mimetype,
+      fileData: req.file.buffer, createdBy: req.user?.id,
+    });
+    const result = await client.query(
       `INSERT INTO assignment_resources
        (assignment_id, resource_type, title, resource_url, original_name, stored_name, file_path, mime_type, size_bytes)
        VALUES ($1, 'file', $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [assignmentId, title, `/uploads/${req.file.filename}`, req.file.originalname, req.file.filename, req.file.path, req.file.mimetype, req.file.size]
+      [assignmentId, title, repositoryFile.file_path, req.file.originalname, repositoryFile.stored_name, "", req.file.mimetype, req.file.size]
     );
+    await client.query("COMMIT");
     return res.status(201).json(result.rows[0]);
   } catch (err) {
-    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("POST assignment resource file failed:", err);
     return res.status(500).json({ error: "Failed to upload assignment file" });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+app.post("/api/assignments/:assignmentId/resources/from-repository", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const assignmentId = Number(req.params.assignmentId || 0);
+    const resourceId = Number(req.body?.resource_id || 0);
+    const assignmentResult = await pool.query(`SELECT class_id FROM assignments WHERE id = $1`, [assignmentId]);
+    if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found" });
+    const courseId = await resolveContentCourseId(assignmentResult.rows[0].class_id);
+    const result = await pool.query(
+      `INSERT INTO assignment_resources
+         (assignment_id, resource_type, title, resource_url, original_name, stored_name, mime_type, size_bytes)
+       SELECT $1, 'file', original_name, '/course-resources/' || stored_name,
+              original_name, stored_name, mime_type, file_size
+       FROM course_resources WHERE id = $2 AND course_id = $3 RETURNING *`,
+      [assignmentId, resourceId, courseId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Repository file not found" });
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error("Attach assignment repository file failed:", err);
+    return res.status(500).json({ error: "Failed to attach repository file" });
   }
 });
 

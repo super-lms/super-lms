@@ -5,6 +5,7 @@ import { groupCoursesByMaster } from "../services/courseSections"
 import { sanitizeRichText } from "../services/richText"
 import { useAuth } from "../AuthContext.jsx"
 import { FormattedText, RichTextEditor } from "../components/RichText.jsx"
+import RepositoryFilePicker from "../components/RepositoryFilePicker.jsx"
 
 function LessonsPage() {
   const { user } = useAuth()
@@ -31,6 +32,8 @@ function LessonsPage() {
   const [moduleFiles, setModuleFiles] = useState([])
   const [uploadingResources, setUploadingResources] = useState(false)
   const [resourceUploadMessage, setResourceUploadMessage] = useState("")
+  const [repositoryPickerTarget, setRepositoryPickerTarget] = useState(null)
+  const [pendingRepositoryFiles, setPendingRepositoryFiles] = useState([])
   const [message, setMessage] = useState("Loading lessons...")
   const [lessonCreatedMessage, setLessonCreatedMessage] = useState("")
   const courseGroups = useMemo(() => groupCoursesByMaster(courses), [courses])
@@ -239,10 +242,22 @@ function LessonsPage() {
 
       const newLesson = responseData
       await uploadLessonFiles(newLesson.id)
+      for (const resource of pendingRepositoryFiles) {
+        const attachResponse = await authFetch(`${API_BASE}/api/lesson-files/${newLesson.id}/from-repository`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resource_id: resource.id }),
+        })
+        if (!attachResponse.ok) {
+          const data = await attachResponse.json().catch(() => ({}))
+          throw new Error(data.error || `${resource.original_name} could not be attached`)
+        }
+      }
 
       setTitle("")
       setContent("")
       setSelectedFiles([])
+      setPendingRepositoryFiles([])
 
       const fileInput = document.getElementById("lesson-file")
       if (fileInput) {
@@ -956,6 +971,9 @@ function LessonsPage() {
                             <div style={{ fontSize: "16px", fontWeight: 800, marginBottom: "8px" }}>
                               Add Resources to This Lesson Module
                             </div>
+                            <button type="button" style={{ ...primaryButtonStyle, marginBottom: 10 }} onClick={() => setRepositoryPickerTarget(lesson.id)}>
+                              Add File
+                            </button>
                             <input
                               id={`lesson-module-files-${lesson.id}`}
                               type="file"
@@ -1105,6 +1123,13 @@ function LessonsPage() {
               }}
             />
 
+            <button type="button" style={{ ...secondaryButtonStyle, marginTop: 10 }} onClick={() => setRepositoryPickerTarget("new")}>
+              Add File
+            </button>
+            {pendingRepositoryFiles.length ? (
+              <ul style={{ marginBottom: 0 }}>{pendingRepositoryFiles.map((resource) => <li key={resource.id}>{resource.original_name}</li>)}</ul>
+            ) : null}
+
             <p
               style={{
                 marginTop: "8px",
@@ -1146,6 +1171,28 @@ function LessonsPage() {
           </div>
         </form>
       </section>
+      <RepositoryFilePicker
+        courseId={courseId}
+        open={repositoryPickerTarget !== null}
+        title="Add a File to This Lesson"
+        onClose={() => setRepositoryPickerTarget(null)}
+        onSelect={async (resource) => {
+          if (repositoryPickerTarget === "new") {
+            setPendingRepositoryFiles((current) => current.some((item) => item.id === resource.id) ? current : [...current, resource])
+            setRepositoryPickerTarget(null)
+            return
+          }
+          const response = await authFetch(`${API_BASE}/api/lesson-files/${repositoryPickerTarget}/from-repository`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resource_id: resource.id }),
+          })
+          const data = await response.json().catch(() => ({}))
+          if (!response.ok) { setResourceUploadMessage(`Upload failed: ${data.error || "File could not be attached"}`); return }
+          setRepositoryPickerTarget(null)
+          setResourceUploadMessage("File added from the repository.")
+          await loadLessons()
+        }}
+      />
     </div>
   )
 }
