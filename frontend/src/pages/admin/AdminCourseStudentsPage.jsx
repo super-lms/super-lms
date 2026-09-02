@@ -28,15 +28,28 @@ export default function AdminCourseStudentsPage() {
       setLoading(true)
       setError("")
 
-      const response = await authFetch(`/api/admin/courses/${courseId}/students`)
+      const response = await authFetch(`/api/class-roster/${courseId}`)
       const data = await response.json()
 
-      if (!response.ok || data?.success === false) {
+      if (!response.ok) {
         throw new Error(data?.error || "Failed to load course students")
       }
 
       setCourse(data?.course || null)
-      setStudents(Array.isArray(data?.students) ? data.students : [])
+      setStudents(
+        Array.isArray(data?.students)
+          ? data.students.map((student) => ({
+              ...student,
+              student_user_id: student.student_user_id || student.id,
+              student_name:
+                student.student_name ||
+                student.name ||
+                [student.first_name, student.last_name].filter(Boolean).join(" ") ||
+                student.email,
+              student_email: student.student_email || student.email,
+            }))
+          : []
+      )
     } catch (err) {
       setError(err.message || "Failed to load course students")
       setCourse(null)
