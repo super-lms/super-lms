@@ -11108,8 +11108,7 @@ app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("a
             first_name = $3,
             last_name = $4,
             parent_email = COALESCE(NULLIF($5, ''), parent_email),
-            student_id = COALESCE(NULLIF($6, ''), student_id),
-            updated_at = NOW()
+            student_id = COALESCE(NULLIF($6, ''), student_id)
         WHERE id = $1
         RETURNING id, name, email, parent_email, student_id
         `,
