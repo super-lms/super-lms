@@ -11034,6 +11034,8 @@ app.post("/api/classes/:classId/attendance", authenticateJWT, requireRole("admin
 
 /* MANUAL STUDENT ENROLLMENT */
 app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  const client = await pool.connect();
+
   try {
     await ensureStudentInfoColumns();
 
@@ -11055,7 +11057,9 @@ app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("a
       return res.status(400).json({ error: "Student email is required" });
     }
 
-    const courseResult = await pool.query(
+    await client.query("BEGIN");
+
+    const courseResult = await client.query(
       `
       SELECT id, title
       FROM courses
@@ -11066,39 +11070,81 @@ app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("a
     );
 
     if (courseResult.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Course not found" });
     }
 
     const firstName = name.split(/\s+/)[0] || "Student";
     const lastName = name.split(/\s+/).slice(1).join(" ") || "User";
 
-    const userResult = await pool.query(
+    const existingUserResult = await client.query(
       `
-      INSERT INTO users (name, first_name, last_name, email, role, parent_email, student_id, password_hash)
-      VALUES ($1, $2, $3, $4, 'student', $5, $6, 'STUDENT_PENDING_PASSWORD')
-      ON CONFLICT (email) DO UPDATE
-      SET name = EXCLUDED.name,
-          first_name = EXCLUDED.first_name,
-          last_name = EXCLUDED.last_name,
-          role = 'student',
-          parent_email = EXCLUDED.parent_email,
-          student_id = EXCLUDED.student_id,
-          password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash)
-      RETURNING id, name, email, parent_email, student_id
+      SELECT id, name, email, role, parent_email, student_id
+      FROM users
+      WHERE LOWER(BTRIM(email)) = $1
+      ORDER BY CASE WHEN email = $2 THEN 0 ELSE 1 END, id
+      LIMIT 1
+      FOR UPDATE
       `,
-      [
-        name,
-        firstName,
-        lastName,
-        email,
-        parentEmail || null,
-        studentId || null
-      ]
+      [email, email]
     );
 
-    const student = userResult.rows[0];
+    let student;
 
-    await pool.query(
+    if (existingUserResult.rows.length > 0) {
+      const existingUser = existingUserResult.rows[0];
+
+      if (String(existingUser.role || "").trim().toLowerCase() !== "student") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: `The email ${email} belongs to a non-student account and cannot be enrolled as a student.`,
+        });
+      }
+
+      const updatedUserResult = await client.query(
+        `
+        UPDATE users
+        SET name = $2,
+            first_name = $3,
+            last_name = $4,
+            parent_email = COALESCE(NULLIF($5, ''), parent_email),
+            student_id = COALESCE(NULLIF($6, ''), student_id),
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, name, email, parent_email, student_id
+        `,
+        [
+          existingUser.id,
+          name,
+          firstName,
+          lastName,
+          parentEmail,
+          studentId,
+        ]
+      );
+
+      student = updatedUserResult.rows[0];
+    } else {
+      const insertedUserResult = await client.query(
+        `
+        INSERT INTO users (name, first_name, last_name, email, role, parent_email, student_id, password_hash)
+        VALUES ($1, $2, $3, $4, 'student', $5, $6, 'STUDENT_PENDING_PASSWORD')
+        RETURNING id, name, email, parent_email, student_id
+        `,
+        [
+          name,
+          firstName,
+          lastName,
+          email,
+          parentEmail || null,
+          studentId || null,
+        ]
+      );
+
+      student = insertedUserResult.rows[0];
+    }
+
+    const enrollmentResult = await client.query(
       `
       INSERT INTO class_enrollments (class_id, student_user_id)
       SELECT $1, $2
@@ -11112,13 +11158,32 @@ app.post("/api/class-roster/:courseId/students", authenticateJWT, requireRole("a
       [courseId, student.id]
     );
 
+    await client.query("COMMIT");
+
     return res.status(201).json({
-      message: "Student enrolled successfully",
+      message:
+        enrollmentResult.rowCount > 0
+          ? "Student enrolled successfully"
+          : "Student is already enrolled in this course",
+      already_enrolled: enrollmentResult.rowCount === 0,
       student,
     });
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("Manual student enrollment rollback failed:", rollbackErr);
+    }
+
     console.error("POST /api/class-roster/:courseId/students failed:", err);
-    return res.status(500).json({ error: "Failed to enroll student" });
+    return res.status(500).json({
+      error:
+        err?.code === "23505"
+          ? "This student account conflicts with an existing email or student ID. Check the existing Users record and try again."
+          : "Failed to enroll student",
+    });
+  } finally {
+    client.release();
   }
 });
 

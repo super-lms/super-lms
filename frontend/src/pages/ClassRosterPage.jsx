@@ -243,7 +243,11 @@ export default function ClassRosterPage() {
       }
 
       setNewStudent(emptyStudentForm);
-      setEnrollmentMessage("Student added to this course.");
+      setEnrollmentMessage(
+        data?.already_enrolled
+          ? "This student is already enrolled in the selected course."
+          : "Student added to this course."
+      );
       await loadRoster(selectedCourseId);
     } catch (error) {
       console.error(error);
