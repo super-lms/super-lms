@@ -138,15 +138,10 @@ function LessonCard({ lesson }) {
           <div style={{ marginBottom: "8px", fontWeight: 800 }}>Lesson Resources</div>
           <div style={{ display: "grid", gap: "8px" }}>
             {files.map((file) => (
-              <a
-                key={file.id || file.file_path || file.original_name}
-                href={`${API_BASE}${file.file_path}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "#1d4ed8", fontWeight: 700, overflowWrap: "anywhere" }}
-              >
-                {file.original_name || "Download lesson resource"}
-              </a>
+              <div key={file.id || file.file_path || file.original_name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700, overflowWrap: "anywhere" }}>{file.original_name || "Lesson resource"}</span>
+                <a href={`${API_BASE}${file.file_path}`} download={file.original_name || true} style={{ padding: "9px 12px", borderRadius: "8px", background: "#111827", color: "white", fontWeight: 800, textDecoration: "none" }}>Download to Device</a>
+              </div>
             ))}
           </div>
         </div>
@@ -1589,15 +1584,10 @@ export default function StudentDashboardPage() {
           ) : (
             <div style={{ display: "grid", gap: "10px" }}>
               {classResources.map((resource) => (
-                <a
-                  key={resource.id}
-                  href={`${API_BASE}${resource.file_path}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ display: "block", padding: "12px 14px", border: "1px solid #cfd8e3", borderRadius: "10px", fontWeight: 800, color: "#1d4ed8", textDecoration: "none" }}
-                >
-                  {resource.original_name}
-                </a>
+                <div key={resource.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", padding: "12px 14px", border: "1px solid #cfd8e3", borderRadius: "10px" }}>
+                  <span style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{resource.original_name}</span>
+                  <a href={`${API_BASE}${resource.file_path}`} download={resource.original_name || true} style={{ padding: "9px 12px", borderRadius: "8px", background: "#111827", color: "white", fontWeight: 800, textDecoration: "none" }}>Download to Device</a>
+                </div>
               ))}
             </div>
           )}

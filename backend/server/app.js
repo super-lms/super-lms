@@ -2164,13 +2164,13 @@ app.get("/lesson-resources/:storedName", async (req, res, next) => {
     if (!resource.file_data) {
       const legacyPath = path.join(uploadDir, storedName);
       if (!fs.existsSync(legacyPath)) return res.status(404).send("Lesson resource not found");
-      return res.sendFile(legacyPath);
+      return res.download(legacyPath, resource.original_name || "lesson-resource");
     }
 
     const safeName = String(resource.original_name || "lesson-resource")
       .replace(/[\r\n"]/g, "_");
     res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `inline; filename="${safeName}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
     return res.send(resource.file_data);
   } catch (err) {
     console.error("GET /lesson-resources/:storedName failed:", err);
@@ -5709,7 +5709,7 @@ app.get(
   async (req, res) => {
     try {
       const assignmentId = Number(req.params.assignmentId);
-      const studentEmail = String(req.query.student_email || "")
+      const studentEmail = String(req.user?.role === "student" ? req.user.email : req.query.student_email || "")
         .trim()
         .toLowerCase();
 
@@ -5735,6 +5735,12 @@ app.get(
         return res.status(404).json({ error: "Assignment not found" });
       }
 
+      const studentResult = await pool.query(
+        `SELECT id FROM users WHERE LOWER(email) = $1 AND role = 'student' LIMIT 1`,
+        [studentEmail]
+      );
+      const studentUserId = Number(studentResult.rows[0]?.id || 0);
+
       const submissionResult = await pool.query(
         `
         SELECT
@@ -5752,10 +5758,10 @@ app.get(
           rubric_selection
         FROM submissions
         WHERE assignment_id = $1
-          AND LOWER(student_email) = $2
+          AND (student_id = $2 OR LOWER(student_email) = $3)
         LIMIT 1
         `,
-        [assignmentId, studentEmail]
+        [assignmentId, studentUserId, studentEmail]
       );
 
       const submission = submissionResult.rows[0] || null;
@@ -5778,8 +5784,8 @@ app.get(
 app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
-    const studentName = String(req.body.student_name || "").trim();
-    const studentEmail = String(req.body.student_email || "")
+    let studentName = String(req.body.student_name || "").trim();
+    const studentEmail = String(req.user?.role === "student" ? req.user.email : req.body.student_email || "")
       .trim()
       .toLowerCase();
     const content = String(req.body.content || "").trim();
@@ -5796,15 +5802,25 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       return res.status(400).json({ error: "student_email is required" });
     }
 
+    const studentResult = await pool.query(
+      `SELECT id, name FROM users WHERE LOWER(email) = $1 AND role = 'student' LIMIT 1`,
+      [studentEmail]
+    );
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({ error: "Student user account not found" });
+    }
+    const studentUserId = Number(studentResult.rows[0].id);
+    studentName = studentName || studentResult.rows[0].name || studentEmail;
+
     const existingAttachmentSubmissionResult = await pool.query(
       `
       SELECT id
       FROM submissions
       WHERE assignment_id = $1
-        AND LOWER(student_email) = $2
+        AND (student_id = $2 OR LOWER(student_email) = $3)
       LIMIT 1
       `,
-      [assignmentId, studentEmail]
+      [assignmentId, studentUserId, studentEmail]
     );
 
     if (!content && existingAttachmentSubmissionResult.rows.length === 0) {
@@ -5832,10 +5848,11 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
         `
         UPDATE submissions
         SET
-          student_name = $1,
-          student_email = $2,
-          content = $3
-        WHERE id = $4
+          student_id = $1,
+          student_name = $2,
+          student_email = $3,
+          content = $4
+        WHERE id = $5
         RETURNING
           id,
           assignment_id,
@@ -5850,7 +5867,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
           grade,
           rubric_selection
         `,
-        [studentName, studentEmail, content, existingResult.rows[0].id]
+        [studentUserId, studentName, studentEmail, content, existingResult.rows[0].id]
       );
 
       return res.json({
@@ -5861,22 +5878,6 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       });
     }
 
-    const studentResult = await pool.query(
-      `
-      SELECT id
-      FROM users
-      WHERE LOWER(email) = $1
-        AND role = 'student'
-      LIMIT 1
-      `,
-      [studentEmail]
-    );
-
-    if (studentResult.rows.length === 0) {
-      return res.status(404).json({ error: "Student user account not found" });
-    }
-
-    const studentUserId = Number(studentResult.rows[0].id);
     const teacherId = Number(assignmentResult.rows[0].teacher_id || 0);
     const courseId = Number(assignmentResult.rows[0].class_id || 0);
     const assignmentTitle =
@@ -5963,7 +5964,7 @@ app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, r
     await ensureSubmissionAttachmentsTable();
 
     const assignmentId = Number(req.params.assignmentId);
-    const studentEmail = String(req.query.student_email || "").trim().toLowerCase();
+    const studentEmail = String(req.user?.role === "student" ? req.user.email : req.query.student_email || "").trim().toLowerCase();
 
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
@@ -5973,25 +5974,32 @@ app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, r
       return res.status(400).json({ error: "student_email is required" });
     }
 
+    const studentResult = await pool.query(
+      `SELECT id FROM users WHERE LOWER(email) = $1 AND role = 'student' LIMIT 1`,
+      [studentEmail]
+    );
+    const studentUserId = Number(studentResult.rows[0]?.id || 0);
+
     const result = await pool.query(
       `
       SELECT
-        id,
-        submission_id,
-        assignment_id,
-        student_email,
-        original_name,
-        stored_name,
-        file_path,
-        mime_type,
-        size_bytes,
-        created_at
-      FROM submission_attachments
-      WHERE assignment_id = $1
-        AND LOWER(student_email) = $2
-      ORDER BY created_at DESC, id DESC
+        sa.id,
+        sa.submission_id,
+        sa.assignment_id,
+        sa.student_email,
+        sa.original_name,
+        sa.stored_name,
+        sa.file_path,
+        sa.mime_type,
+        sa.size_bytes,
+        sa.created_at
+      FROM submission_attachments sa
+      LEFT JOIN submissions s ON s.id = sa.submission_id
+      WHERE sa.assignment_id = $1
+        AND (s.student_id = $2 OR LOWER(sa.student_email) = $3 OR LOWER(s.student_email) = $3)
+      ORDER BY sa.created_at DESC, sa.id DESC
       `,
-      [assignmentId, studentEmail]
+      [assignmentId, studentUserId, studentEmail]
     );
 
     return res.json({
@@ -6016,7 +6024,7 @@ app.post(
       await ensureSubmissionAttachmentsTable();
 
       const assignmentId = Number(req.params.assignmentId);
-      const studentEmail = String(req.body.student_email || "").trim().toLowerCase();
+      const studentEmail = String(req.user?.role === "student" ? req.user.email : req.body.student_email || "").trim().toLowerCase();
 
       if (!assignmentId) {
         return res.status(400).json({ error: "Valid assignmentId is required" });
@@ -6044,37 +6052,29 @@ app.post(
         return res.status(404).json({ error: "Assignment not found" });
       }
 
+      const userResult = await pool.query(
+        `SELECT id, name FROM users WHERE LOWER(email) = $1 AND role = 'student' LIMIT 1`,
+        [studentEmail]
+      );
+      const studentUserId = Number(userResult.rows[0]?.id || 0);
+      if (!studentUserId) {
+        return res.status(404).json({ error: "Student user account not found" });
+      }
+
       const submissionResult = await pool.query(
         `
         SELECT id
         FROM submissions
         WHERE assignment_id = $1
-          AND LOWER(student_email) = $2
+          AND (student_id = $2 OR LOWER(student_email) = $3)
         LIMIT 1
         `,
-        [assignmentId, studentEmail]
+        [assignmentId, studentUserId, studentEmail]
       );
 
       let submissionId = submissionResult.rows[0]?.id || null;
 
       if (!submissionId) {
-        const userResult = await pool.query(
-          `
-          SELECT id, name
-          FROM users
-          WHERE LOWER(email) = $1
-            AND role = 'student'
-          LIMIT 1
-          `,
-          [studentEmail]
-        );
-
-        const studentUserId = userResult.rows[0]?.id || null;
-
-        if (!studentUserId) {
-          return res.status(404).json({ error: "Student user account not found" });
-        }
-
         const studentName = userResult.rows[0]?.name || studentEmail;
 
         const insertedSubmissionResult = await pool.query(
@@ -6119,6 +6119,11 @@ app.post(
         );
 
         submissionId = insertedSubmissionResult.rows[0].id;
+      } else {
+        await pool.query(
+          `UPDATE submissions SET student_id = $1, student_email = $2 WHERE id = $3`,
+          [studentUserId, studentEmail, submissionId]
+        );
       }
 
       const storedName = req.file.filename;
