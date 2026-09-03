@@ -2,13 +2,27 @@ import { useEffect, useMemo, useState } from "react"
 import authFetch from "../../services/authFetch"
 
 const blocks = ["block1", "block2", "block3", "block4"]
-const emptySlots = () => Object.fromEntries(["semester1", "semester2"].flatMap((semester) => blocks.map((block) => [`${semester}-${block}`, { category: "", courseIds: [] }])))
+const emptySlots = () => Object.fromEntries(["semester1", "semester2"].flatMap((semester) => blocks.map((block) => [`${semester}-${block}`, { category: "", courseName: "", section: "", courseIds: [] }])))
 
 function categoryFor(title = "") {
   const value = title.toLowerCase()
   if (/(english|elsl|efp|social|pgeo|geography|composition|writing|spoken|new media|drama)/.test(value)) return "Humanities"
   if (/(math|fmp|pre-calc|precalc|calculus|physics|chem|science)/.test(value)) return "Math & Science"
   return "Electives / Other"
+}
+
+function courseSection(course, grade) {
+  const explicit = String(course.section_code || "").trim().toUpperCase()
+  if (explicit) return explicit
+  return String(course.title || "").match(new RegExp(`${grade}\\s*([A-D])(?:\\b|$)`, "i"))?.[1]?.toUpperCase() || ""
+}
+
+function courseName(course, grade) {
+  if (course.master_title) return String(course.master_title).trim()
+  return String(course.title || "")
+    .replace(new RegExp(`\\s*${grade}\\s*[A-D](?:\\b|$)`, "i"), ` ${grade}`)
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 export default function AdminQuickEnrollmentPage() {
@@ -29,12 +43,8 @@ export default function AdminQuickEnrollmentPage() {
   const eligible = useMemo(() => courses.filter((course) => {
     const title = String(course.title || "")
     const grade = form.grade
-    const section = form.section
-    const explicitSection = String(course.section_code || "").toUpperCase()
-    const matchesSection = explicitSection ? explicitSection === section : new RegExp(`${grade}\\s*${section}(?:\\b|$)`, "i").test(title)
-    const standalone = !explicitSection && !course.master_course_id && new RegExp(`(?:^|\\D)${grade}(?:\\D|$)`).test(title)
-    return matchesSection || standalone
-  }), [courses, form.grade, form.section])
+    return new RegExp(`(?:^|\\D)${grade}(?:\\D|$)`).test(title) || new RegExp(`(?:^|\\D)${grade}(?:\\D|$)`).test(String(course.master_title || ""))
+  }), [courses, form.grade])
 
   function updateSlot(key, patch) { setSlots((current) => ({ ...current, [key]: { ...current[key], ...patch } })) }
 
@@ -64,13 +74,36 @@ export default function AdminQuickEnrollmentPage() {
     </section>
     {["semester1", "semester2"].map((semester) => <section key={semester} style={card}>
       <h2 style={{ marginTop: 0 }}>{semester === "semester1" ? "Semester 1" : "Semester 2"}</h2>
-      <div style={grid4}>{blocks.map((block, index) => { const key=`${semester}-${block}`; const slot=slots[key]; const choices=eligible.filter((c) => !slot.category || categoryFor(c.title) === slot.category).filter((c) => c.semester === "unassigned" || c.semester === semester || c.semester === "full_year").filter((c) => c.block_key === "unassigned" || c.block_key === block); return <div key={key} style={slotCard}>
+      <div style={grid4}>{blocks.map((block, index) => {
+        const key=`${semester}-${block}`
+        const slot=slots[key]
+        const choices=eligible
+          .filter((c) => !slot.category || categoryFor(`${c.master_title || ""} ${c.title}`) === slot.category)
+          .filter((c) => c.semester === "unassigned" || c.semester === semester || c.semester === "full_year")
+          .filter((c) => c.block_key === "unassigned" || c.block_key === block)
+        const courseNames=[...new Set(choices.map((course) => courseName(course, form.grade)))].sort()
+        const matching=choices.filter((course) => courseName(course, form.grade) === slot.courseName)
+        const sections=[...new Set(matching.map((course) => courseSection(course, form.grade)))].sort()
+        return <div key={key} style={slotCard}>
         <strong>Block {index+1}</strong>
-        <select value={slot.category} onChange={(e)=>updateSlot(key,{category:e.target.value,courseIds:[]})} style={input}><option value="">All departments</option><option>Humanities</option><option>Math & Science</option><option>Electives / Other</option></select>
-        <select multiple value={slot.courseIds.map(String)} onChange={(e)=>updateSlot(key,{courseIds:Array.from(e.target.selectedOptions, (o)=>Number(o.value))})} style={{...input,height:120}}>
-          {choices.map((course)=><option key={course.id} value={course.id}>{course.title}</option>)}
+        <select aria-label={`Block ${index+1} department`} value={slot.category} onChange={(e)=>updateSlot(key,{category:e.target.value,courseName:"",section:"",courseIds:[]})} style={input}><option value="">Choose department</option><option>Humanities</option><option>Math & Science</option><option>Electives / Other</option></select>
+        <select aria-label={`Block ${index+1} course`} disabled={!slot.category} value={slot.courseName} onChange={(e)=>{
+          const selectedName=e.target.value
+          const candidates=choices.filter((course)=>courseName(course,form.grade)===selectedName)
+          const preferred=candidates.find((course)=>courseSection(course,form.grade)===form.section) || (candidates.length===1 ? candidates[0] : null)
+          updateSlot(key,{courseName:selectedName,section:preferred ? courseSection(preferred,form.grade) : "",courseIds:preferred ? [preferred.id] : []})
+        }} style={input}>
+          <option value="">Choose course</option>
+          {courseNames.map((name)=><option key={name} value={name}>{name}</option>)}
         </select>
-        <small>Use Command-click to select two half-semester courses.</small>
+        <select aria-label={`Block ${index+1} section`} disabled={!slot.courseName} value={slot.section} onChange={(e)=>{
+          const selectedSection=e.target.value
+          const selected=matching.find((course)=>courseSection(course,form.grade)===selectedSection)
+          updateSlot(key,{section:selectedSection,courseIds:selected ? [selected.id] : []})
+        }} style={input}>
+          <option value="">Choose section</option>
+          {sections.map((section)=><option key={section || "standalone"} value={section}>{section || "All / Standalone"}</option>)}
+        </select>
       </div> })}</div>
     </section>)}
     {message && <div style={{ ...card, background: message.startsWith("Complete") ? "#ecfdf5" : "#fef2f2" }}>{message}</div>}
