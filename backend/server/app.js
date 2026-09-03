@@ -1762,6 +1762,85 @@ async function ensureCourseResourcesTable() {
   `);
 }
 
+async function backfillLegacyCourseResources() {
+  try {
+    await pool.query(`
+      INSERT INTO course_resources (
+        course_id, stored_name, original_name, mime_type, file_size, file_data, created_by
+      )
+      SELECT
+        COALESCE(c.master_course_id, c.id),
+        'legacy-lesson-' || lf.id || '-' || lf.stored_name,
+        lf.original_name,
+        lf.mime_type,
+        lf.file_size,
+        lf.file_data,
+        NULL
+      FROM lesson_files lf
+      JOIN lessons l ON l.id = lf.lesson_id
+      JOIN courses c ON c.id = l.course_id
+      WHERE lf.file_data IS NOT NULL
+        AND OCTET_LENGTH(lf.file_data) > 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM course_resources cr
+          WHERE cr.course_id = COALESCE(c.master_course_id, c.id)
+            AND LOWER(cr.original_name) = LOWER(lf.original_name)
+            AND cr.file_size = lf.file_size
+        )
+      ON CONFLICT (stored_name) DO NOTHING
+    `);
+
+    const legacyAssignments = await pool.query(`
+      SELECT ar.id, ar.original_name, ar.title, ar.mime_type, ar.file_path,
+             ar.resource_url, a.class_id, a.teacher_id
+      FROM assignment_resources ar
+      JOIN assignments a ON a.id = ar.assignment_id
+      WHERE ar.resource_type = 'file'
+        AND COALESCE(ar.resource_url, '') NOT LIKE '/course-resources/%'
+    `);
+
+    for (const resource of legacyAssignments.rows) {
+      const storedName = path.basename(String(resource.resource_url || resource.file_path || ""));
+      const candidates = [
+        String(resource.file_path || ""),
+        storedName ? path.join(uploadDir, storedName) : "",
+      ].filter(Boolean);
+      const legacyPath = candidates.find((candidate) => fs.existsSync(candidate));
+      if (!legacyPath) continue;
+
+      const fileData = fs.readFileSync(legacyPath);
+      if (!fileData.length) continue;
+      const courseId = await resolveContentCourseId(resource.class_id);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const saved = await saveCourseResource(client, {
+          courseId,
+          originalName: resource.original_name || resource.title || storedName,
+          mimeType: resource.mime_type || "application/octet-stream",
+          fileData,
+          createdBy: resource.teacher_id,
+        });
+        await client.query(
+          `UPDATE assignment_resources
+           SET resource_url = $1, stored_name = $2, file_path = ''
+           WHERE id = $3`,
+          [saved.file_path, saved.stored_name, resource.id]
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.error(`Failed to restore legacy assignment resource ${resource.id}:`, error);
+      } finally {
+        client.release();
+      }
+    }
+  } catch (error) {
+    console.error("Legacy course repository backfill failed:", error);
+  }
+}
+
 let courseModulesReadyPromise = null;
 
 async function ensureCourseModuleTables() {
@@ -12686,6 +12765,7 @@ Promise.all([
   ensureAssessmentTables(),
 ])
   .then(() => ensureCourseSectionStructure())
+  .then(() => backfillLegacyCourseResources())
   .then(() => {
     app.listen(port, () => {
       console.log("Super LMS backend running on port 3000");
