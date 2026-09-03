@@ -146,8 +146,14 @@ export default function EditAssignmentPage() {
     singleScoreUnderstandPercent,
   ]);
 
+  const splitSingleScoreAcrossKdu = [
+    singleScoreKnowPercent,
+    singleScoreDoPercent,
+    singleScoreUnderstandPercent,
+  ].filter((weight) => Number(weight || 0) > 0).length > 1;
+
   const visibleRubricCriteria = useMemo(() => {
-    if (scoringMethod !== "single_score_kdu") {
+    if (scoringMethod !== "single_score_kdu" || splitSingleScoreAcrossKdu) {
       return rubricCriteria;
     }
 
@@ -156,7 +162,7 @@ export default function EditAssignmentPage() {
         String(criterion.competency_bucket || "").trim().toUpperCase() ===
         selectedSingleScoreBucket
     );
-  }, [rubricCriteria, scoringMethod, selectedSingleScoreBucket]);
+  }, [rubricCriteria, scoringMethod, selectedSingleScoreBucket, splitSingleScoreAcrossKdu]);
 
   useEffect(() => {
     loadAssignment();
@@ -1429,11 +1435,30 @@ export default function EditAssignmentPage() {
               {scoringMethod === "single_score_kdu" ? (
                 <div style={{ display: "grid", gap: "12px" }}>
                   <EditAssignmentNoticeBox>
-                    Choose the single KDU area this assignment measures. Enter one overall score
-                    later and SUPER LMS will save it to that KDU area.
+                    Enter one overall score, then choose whether it applies to one KDU area or is
+                    split automatically across KNOW 25%, DO 50%, and UNDERSTAND 25%.
                   </EditAssignmentNoticeBox>
 
-                  <div>
+                  <label style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: 700 }}>
+                    <input
+                      type="checkbox"
+                      checked={splitSingleScoreAcrossKdu}
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          setSingleScoreKnowPercent("25");
+                          setSingleScoreDoPercent("50");
+                          setSingleScoreUnderstandPercent("25");
+                        } else {
+                          setSingleScoreKnowPercent("0");
+                          setSingleScoreDoPercent("100");
+                          setSingleScoreUnderstandPercent("0");
+                        }
+                      }}
+                    />
+                    Split the mark across KDU (KNOW 25%, DO 50%, UNDERSTAND 25%)
+                  </label>
+
+                  {!splitSingleScoreAcrossKdu ? <div>
                     <EditAssignmentFieldLabel>Selected KDU</EditAssignmentFieldLabel>
                     <select
                       value={selectedSingleScoreBucket}
@@ -1451,7 +1476,7 @@ export default function EditAssignmentPage() {
                       <option value="DO">DO</option>
                       <option value="UNDERSTAND">UNDERSTAND</option>
                     </select>
-                  </div>
+                  </div> : null}
                 </div>
               ) : null}
             </div>
