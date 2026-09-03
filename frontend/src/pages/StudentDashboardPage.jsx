@@ -218,10 +218,37 @@ function SubmissionEditor({
   resources = [],
   resourcesLoading = false,
 }) {
+  const [downloadingResourceId, setDownloadingResourceId] = useState("")
+  const [resourceDownloadError, setResourceDownloadError] = useState("")
   const submissionStatusLabel = formatSubmissionStatus(submissionState?.submission_status || "not_submitted")
   const existingFeedback = submissionState?.submission?.feedback || ""
   const existingScore = submissionState?.submission?.score
   const existingContent = submissionState?.submission?.content || ""
+
+  async function downloadAssignmentResource(resource) {
+    const resourceUrl = String(resource?.resource_url || "")
+    const href = resourceUrl.startsWith("/") ? `${API_BASE}${resourceUrl}` : resourceUrl
+    setDownloadingResourceId(String(resource.id))
+    setResourceDownloadError("")
+    try {
+      const response = await authFetch(href)
+      if (!response.ok) throw new Error("This file is unavailable. Ask your teacher to upload it again.")
+      const blob = await response.blob()
+      if (!blob.size) throw new Error("The downloaded file is empty. Ask your teacher to upload it again.")
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = objectUrl
+      link.download = resource.original_name || resource.title || "assignment-resource"
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      setResourceDownloadError(error.message || "Unable to download this file.")
+    } finally {
+      setDownloadingResourceId("")
+    }
+  }
 
   return (
     <div style={submissionEditorStyle}>
@@ -258,19 +285,23 @@ function SubmissionEditor({
         <div style={{ marginBottom: "18px", border: "1px solid #d7dce5", borderRadius: "12px", padding: "14px", background: "#f8fafc" }}>
           <div style={{ fontWeight: 800, marginBottom: "10px" }}>Learning Resources</div>
           <div style={{ display: "grid", gap: "8px" }}>
-            {resources.map((resource) => {
-              const href = resource.resource_url?.startsWith("/")
-                ? `${API_BASE}${resource.resource_url}`
-                : resource.resource_url
-
-              return (
-                <a key={resource.id} href={href} target="_blank" rel="noreferrer" style={{ color: "#111827", fontWeight: 700 }}>
-                  {resource.title || resource.original_name || "Open resource"}
-                  {resource.resource_type ? ` (${resource.resource_type})` : ""}
-                </a>
-              )
-            })}
+            {resources.map((resource) => resource.resource_type === "file" ? (
+              <button
+                key={resource.id}
+                type="button"
+                onClick={() => downloadAssignmentResource(resource)}
+                disabled={downloadingResourceId === String(resource.id)}
+                style={{ justifySelf: "start", padding: "9px 12px", borderRadius: "8px", border: 0, background: "#111827", color: "white", fontWeight: 800, cursor: "pointer" }}
+              >
+                {downloadingResourceId === String(resource.id) ? "Downloading..." : `Download ${resource.title || resource.original_name || "resource"}`}
+              </button>
+            ) : (
+              <a key={resource.id} href={resource.resource_url} target="_blank" rel="noreferrer" style={{ color: "#111827", fontWeight: 700 }}>
+                {resource.title || "Open resource"}
+              </a>
+            ))}
           </div>
+          {resourceDownloadError ? <div style={{ marginTop: "10px" }}><NoticeBox type="error">{resourceDownloadError}</NoticeBox></div> : null}
         </div>
       ) : null}
 

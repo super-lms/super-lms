@@ -2015,9 +2015,18 @@ app.get("/course-resources/:storedName", async (req, res, next) => {
     if (result.rows.length === 0) return next();
     const resource = result.rows[0];
     const safeName = String(resource.original_name || "class-resource").replace(/[\r\n"]/g, "_");
+    const encodedName = encodeURIComponent(safeName).replace(/['()]/g, escape).replace(/\*/g, "%2A");
+    const extension = path.extname(safeName).replace(/[^a-zA-Z0-9.]/g, "");
+    const asciiName = `course-resource${extension}`;
+    const fileData = Buffer.isBuffer(resource.file_data)
+      ? resource.file_data
+      : Buffer.from(resource.file_data || "");
+    if (fileData.length === 0) return res.status(404).send("Course resource is empty");
     res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
-    return res.send(resource.file_data);
+    res.setHeader("Content-Disposition", `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`);
+    res.setHeader("Content-Length", String(fileData.length));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.end(fileData);
   } catch (err) {
     console.error("GET /course-resources/:storedName failed:", err);
     return res.status(500).send("Failed to load class resource");
@@ -5120,11 +5129,35 @@ app.get("/api/assignments/:assignmentId/resources", authenticateJWT, async (req,
     if (!assignmentId) return res.status(400).json({ error: "Valid assignmentId is required" });
 
     await ensureAssignmentResourceTables();
+    await ensureCourseResourcesTable();
+    const assignmentResult = await pool.query(
+      `SELECT class_id FROM assignments WHERE id = $1 LIMIT 1`,
+      [assignmentId]
+    );
+    if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found" });
+    const courseId = await resolveContentCourseId(assignmentResult.rows[0].class_id);
     const result = await pool.query(
       `SELECT * FROM assignment_resources WHERE assignment_id = $1 ORDER BY created_at ASC, id ASC`,
       [assignmentId]
     );
-    return res.json({ resources: result.rows });
+    const resources = await Promise.all(result.rows.map(async (resource) => {
+      if (resource.resource_type !== "file" || String(resource.resource_url || "").startsWith("/course-resources/")) {
+        return resource;
+      }
+      const repositoryResult = await pool.query(
+        `SELECT stored_name
+         FROM course_resources
+         WHERE course_id = $1
+           AND (stored_name = $2 OR LOWER(original_name) = LOWER($3))
+         ORDER BY (stored_name = $2) DESC, created_at DESC, id DESC
+         LIMIT 1`,
+        [courseId, resource.stored_name || "", resource.original_name || resource.title || ""]
+      );
+      return repositoryResult.rows[0]
+        ? { ...resource, resource_url: `/course-resources/${repositoryResult.rows[0].stored_name}` }
+        : resource;
+    }));
+    return res.json({ resources });
   } catch (err) {
     console.error("GET assignment resources failed:", err);
     return res.status(500).json({ error: "Failed to load assignment resources" });
