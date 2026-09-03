@@ -79,8 +79,6 @@ export default function AdminQuickEnrollmentPage() {
         const slot=slots[key]
         const choices=eligible
           .filter((c) => !slot.category || categoryFor(`${c.master_title || ""} ${c.title}`) === slot.category)
-          .filter((c) => c.semester === "unassigned" || c.semester === semester || c.semester === "full_year")
-          .filter((c) => c.block_key === "unassigned" || c.block_key === block)
         const courseNames=[...new Set(choices.map((course) => courseName(course, form.grade)))].sort()
         const matching=choices.filter((course) => courseName(course, form.grade) === slot.courseName)
         const sections=[...new Set(matching.map((course) => courseSection(course, form.grade)))].sort()
