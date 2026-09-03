@@ -2877,6 +2877,101 @@ app.put("/api/admin/student-schedules/courses/:courseId", authenticateJWT, requi
   }
 });
 
+/* QUICK STUDENT REGISTRATION AND SCHEDULE ENROLLMENT */
+app.get("/api/admin/quick-enrollment-options", authenticateJWT, requireRole("admin"), async (req, res) => {
+  try {
+    await ensureCourseScheduleSettingsTable();
+    const result = await pool.query(`
+      SELECT c.id, c.title, c.master_course_id, c.master_title, c.section_code,
+             COALESCE(css.semester, 'unassigned') AS semester,
+             COALESCE(css.block_key, 'unassigned') AS block_key
+      FROM courses c
+      LEFT JOIN course_schedule_settings css ON css.course_id = c.id
+      WHERE NOT EXISTS (SELECT 1 FROM courses child WHERE child.master_course_id = c.id)
+      ORDER BY c.title ASC
+    `);
+    return res.json({ success: true, courses: result.rows });
+  } catch (err) {
+    console.error("GET /api/admin/quick-enrollment-options failed:", err);
+    return res.status(500).json({ error: "Failed to load enrollment choices" });
+  }
+});
+
+app.post("/api/admin/quick-enroll-student", authenticateJWT, requireRole("admin"), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await ensureStudentInfoColumns();
+    const name = String(req.body?.name || "").trim();
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const grade = Number(req.body?.grade);
+    const section = String(req.body?.section || "").trim().toUpperCase();
+    const courseIds = [...new Set((Array.isArray(req.body?.course_ids) ? req.body.course_ids : []).map(Number).filter(Boolean))];
+    if (!name || !email) return res.status(400).json({ error: "Student name and email are required" });
+    if (![10, 11, 12].includes(grade) || !["A", "B", "C", "D"].includes(section)) {
+      return res.status(400).json({ error: "Choose a valid grade and section" });
+    }
+    if (grade !== 10 && section === "D") return res.status(400).json({ error: "Section D is only available for Grade 10" });
+    if (courseIds.length === 0) return res.status(400).json({ error: "Choose at least one course" });
+
+    await client.query("BEGIN");
+    const validCourses = await client.query(
+      `SELECT id FROM courses WHERE id = ANY($1::int[]) AND NOT EXISTS (SELECT 1 FROM courses child WHERE child.master_course_id = courses.id)`,
+      [courseIds]
+    );
+    if (validCourses.rows.length !== courseIds.length) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "One or more selected courses are unavailable" });
+    }
+
+    const parts = name.split(/\s+/);
+    const firstName = parts[0] || "Student";
+    const lastName = parts.slice(1).join(" ") || "User";
+    const existing = await client.query(
+      `SELECT id, role FROM users WHERE LOWER(BTRIM(email)) = $1 ORDER BY id LIMIT 1 FOR UPDATE`,
+      [email]
+    );
+    let studentId;
+    if (existing.rows[0]) {
+      if (String(existing.rows[0].role || "").toLowerCase() !== "student") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "That email belongs to a non-student account" });
+      }
+      studentId = existing.rows[0].id;
+      await client.query(
+        `UPDATE users SET name=$2, first_name=$3, last_name=$4 WHERE id=$1`,
+        [studentId, name, firstName, lastName]
+      );
+    } else {
+      const inserted = await client.query(
+        `INSERT INTO users (name, first_name, last_name, email, role, password_hash)
+         VALUES ($1,$2,$3,$4,'student','STUDENT_PENDING_PASSWORD') RETURNING id`,
+        [name, firstName, lastName, email]
+      );
+      studentId = inserted.rows[0].id;
+    }
+
+    let added = 0;
+    for (const courseId of courseIds) {
+      const result = await client.query(
+        `INSERT INTO class_enrollments (class_id, student_user_id)
+         SELECT $1,$2 WHERE NOT EXISTS (
+           SELECT 1 FROM class_enrollments WHERE class_id=$1 AND student_user_id=$2
+         )`,
+        [courseId, studentId]
+      );
+      added += result.rowCount;
+    }
+    await client.query("COMMIT");
+    return res.status(201).json({ success: true, student_id: studentId, added, already_enrolled: courseIds.length - added });
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch (_) {}
+    console.error("POST /api/admin/quick-enroll-student failed:", err);
+    return res.status(500).json({ error: "Failed to register and enroll student" });
+  } finally {
+    client.release();
+  }
+});
+
 
 
 /* CREATE OBSERVER / PARENT USER - ADMIN USER MANAGEMENT */
