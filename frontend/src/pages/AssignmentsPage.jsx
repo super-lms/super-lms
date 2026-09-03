@@ -894,17 +894,10 @@ export default function AssignmentsPage() {
         return data
       })
       .then((data) => {
-        setTitle("")
-        setDescription("")
-        setDueDate("")
-        setMessage(
-          `Assignment created successfully. Calculated assignment weight: ${formatPercent(
-            data.calculated_weight
-          )}.`
+        if (!data.id) throw new Error("Assignment was created but could not be opened")
+        navigate(
+          `/assignments/${data.id}/edit?sectionId=${encodeURIComponent(selectedClassId)}`
         )
-        return loadAssignments().then(() => {
-          showAssignmentCreatedMessage()
-        })
       })
       .catch((err) => {
         setError(err.message || "Failed to create assignment")
@@ -1938,7 +1931,7 @@ export default function AssignmentsPage() {
 
                           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                             <ActionButton type="submit" disabled={!classHasCategories || assignmentCreating}>
-                              {assignmentCreating ? "Creating..." : "Create Assignment"}
+                              {assignmentCreating ? "Saving..." : "Save & Continue Setup"}
                             </ActionButton>
                             <ActionButton quiet onClick={resetTeacherFormState}>
                               Reset Form
