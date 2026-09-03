@@ -327,7 +327,7 @@ function SubmissionEditor({
 
             {attachmentSuccessText ? (
               <div style={{ marginTop: "10px" }}>
-                <NoticeBox>{attachmentSuccessText}<br />Submission: Draft Saved</NoticeBox>
+                <NoticeBox>{attachmentSuccessText}<br />Submission saved and completed.</NoticeBox>
               </div>
             ) : null}
 
@@ -377,7 +377,7 @@ function SubmissionEditor({
 
           {attachmentSuccessText ? (
             <div style={{ marginTop: "-4px", marginBottom: "16px" }}>
-              <NoticeBox>{attachmentSuccessText}<br />Submission: Draft Saved</NoticeBox>
+              <NoticeBox>{attachmentSuccessText}<br />Submission saved and completed.</NoticeBox>
             </div>
           ) : null}
 
@@ -1052,7 +1052,7 @@ export default function StudentDashboardPage() {
       }))
       setSubmissionDraftText(data?.submission?.content || "")
       setSubmissionHasUnsavedChanges(false)
-      setSubmissionSaveMessage("Submission saved successfully.")
+      setSubmissionSaveMessage("Submission successful.")
     } catch (err) {
       console.error("Error saving student submission:", err)
       setSubmissionErrorText("Failed to save submission.")
