@@ -2888,6 +2888,8 @@ app.get("/api/admin/quick-enrollment-options", authenticateJWT, requireRole("adm
       FROM courses c
       LEFT JOIN course_schedule_settings css ON css.course_id = c.id
       WHERE NOT EXISTS (SELECT 1 FROM courses child WHERE child.master_course_id = c.id)
+         OR UPPER(COALESCE(c.section_code, '')) = 'A'
+         OR c.title ~* '(10|11|12)[[:space:]]*A[[:space:]]*$'
       ORDER BY c.title ASC
     `);
     return res.json({ success: true, courses: result.rows });
@@ -2915,7 +2917,14 @@ app.post("/api/admin/quick-enroll-student", authenticateJWT, requireRole("admin"
 
     await client.query("BEGIN");
     const validCourses = await client.query(
-      `SELECT id FROM courses WHERE id = ANY($1::int[]) AND NOT EXISTS (SELECT 1 FROM courses child WHERE child.master_course_id = courses.id)`,
+      `SELECT id
+       FROM courses
+       WHERE id = ANY($1::int[])
+         AND (
+           NOT EXISTS (SELECT 1 FROM courses child WHERE child.master_course_id = courses.id)
+           OR UPPER(COALESCE(courses.section_code, '')) = 'A'
+           OR courses.title ~* '(10|11|12)[[:space:]]*A[[:space:]]*$'
+         )`,
       [courseIds]
     );
     if (validCourses.rows.length !== courseIds.length) {
