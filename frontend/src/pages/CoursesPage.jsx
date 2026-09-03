@@ -3353,13 +3353,13 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/gradebook?classId=${course.id}&contentClassId=${contentCourseId}`)
+                        navigate(`/gradebook?classId=${course.id}&contentClassId=${contentCourseId}&view=spreadsheet`)
                       }}
                       disabled={isMasterWorkspace}
                       title={isMasterWorkspace ? "Choose a lettered section before opening the gradebook." : ""}
                       style={buttonStyle}
                     >
-                      Gradebook
+                      Spreadsheet Mark Entry
                     </button>
 
                     <button

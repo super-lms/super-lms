@@ -129,6 +129,7 @@ export default function GradebookPage() {
   const [gradebook, setGradebook] = useState(null);
   const [status, setStatus] = useState("Loading classes...");
   const [draftScores, setDraftScores] = useState({});
+  const [spreadsheetMarkDrafts, setSpreadsheetMarkDrafts] = useState({});
   const [savingKey, setSavingKey] = useState("");
   const [cellSaveStatus, setCellSaveStatus] = useState({});
   const [expandedCompetencyStudents, setExpandedCompetencyStudents] = useState({});
@@ -331,6 +332,47 @@ export default function GradebookPage() {
         ...current,
         [key]: "Save failed",
       }));
+    } finally {
+      setSavingKey("");
+    }
+  }
+
+  async function saveSpreadsheetMark(student, assignment, match) {
+    const key = getDraftKey(student.student_email, assignment.id);
+    const rawMark = spreadsheetMarkDrafts[key] ?? match?.score ?? "";
+    const percentage = Number(rawMark);
+
+    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+      setCellSaveStatus((current) => ({ ...current, [key]: "Enter 0 to 100" }));
+      return;
+    }
+
+    setSavingKey(key);
+    setCellSaveStatus((current) => ({ ...current, [key]: "Saving..." }));
+
+    try {
+      const response = await authFetch(`/api/assignments/${assignment.id}/kdu-scores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_email: student.student_email,
+          overallScore: percentage,
+          directPercentage: true,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to save mark");
+
+      setSpreadsheetMarkDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      setCellSaveStatus((current) => ({ ...current, [key]: "Saved ✓" }));
+      await loadKduGradebook(selectedCourseId);
+    } catch (error) {
+      console.error(error);
+      setCellSaveStatus((current) => ({ ...current, [key]: error.message || "Save failed" }));
     } finally {
       setSavingKey("");
     }
@@ -951,7 +993,7 @@ export default function GradebookPage() {
           <section className="panel">
             <h2>Spreadsheet Gradebook</h2>
             <p className="section-subtitle">
-              Scroll horizontally to review assignments. Select an assignment heading to open it in Speed Grading.
+              Enter a percentage mark directly in any assignment cell, then select Save. Assignment headings open Speed Grading.
             </p>
 
             <div style={spreadsheetToolbarStyle}>
@@ -1128,24 +1170,38 @@ export default function GradebookPage() {
                           const match = (student.assignment_scores || []).find(
                             (item) => item.assignment_id === assignment.id
                           );
+                          const markKey = getDraftKey(student.student_email, assignment.id);
 
                           return (
                             <td key={assignment.id} style={spreadsheetScoreCellStyle}>
-                              <div>{formatPercent(match?.score)}</div>
+                              <div style={spreadsheetMarkEntryStyle}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={spreadsheetMarkDrafts[markKey] ?? match?.score ?? ""}
+                                  onChange={(event) => {
+                                    const value = event.target.value;
+                                    setSpreadsheetMarkDrafts((current) => ({ ...current, [markKey]: value }));
+                                    setCellSaveStatus((current) => ({ ...current, [markKey]: "Editing..." }));
+                                  }}
+                                  style={spreadsheetMarkInputStyle}
+                                  aria-label={`${student.student_name} mark for ${assignment.title || "assignment"}`}
+                                />
+                                <span>%</span>
+                              </div>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  const gradingParams = new URLSearchParams({
-                                    sectionId: String(selectedCourseId),
-                                    studentEmail: student.student_email,
-                                  });
-                                  window.location.href = `/assignments/${assignment.id}/grade?${gradingParams.toString()}`;
-                                }}
+                                onClick={() => saveSpreadsheetMark(student, assignment, match)}
+                                disabled={savingKey === markKey}
                                 style={spreadsheetEditMarkButtonStyle}
-                                title={`Edit ${student.student_name}'s mark for ${assignment.title || "this assignment"}`}
                               >
-                                Edit Mark
+                                {savingKey === markKey ? "Saving..." : "Save"}
                               </button>
+                              {cellSaveStatus[markKey] ? (
+                                <div style={spreadsheetMarkStatusStyle}>{cellSaveStatus[markKey]}</div>
+                              ) : null}
                             </td>
                           );
                         })}
@@ -1991,6 +2047,27 @@ const spreadsheetEditMarkButtonStyle = {
   fontSize: "0.78rem",
   fontWeight: 800,
   cursor: "pointer",
+};
+
+const spreadsheetMarkEntryStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "0.25rem",
+};
+
+const spreadsheetMarkInputStyle = {
+  width: "4.5rem",
+  padding: "0.35rem",
+  border: "1px solid #94a3b8",
+  borderRadius: "0.35rem",
+  textAlign: "right",
+};
+
+const spreadsheetMarkStatusStyle = {
+  marginTop: "0.25rem",
+  fontSize: "0.72rem",
+  color: "#475569",
 };
 
 const spreadsheetSummaryHeaderStyle = {

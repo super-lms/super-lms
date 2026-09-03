@@ -6479,6 +6479,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     const overallScore = req.body.overallScore === null || req.body.overallScore === undefined
       ? null
       : Number(req.body.overallScore);
+    const directPercentage = req.body.directPercentage === true;
 
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
@@ -6545,7 +6546,24 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     let saveFeedback;
     let saveContent;
 
-    if (isSingleScoreKdu) {
+    if (directPercentage) {
+      if (!Number.isFinite(overallScore) || overallScore < 0 || overallScore > 100) {
+        return res.status(400).json({ error: "Percentage mark must be between 0 and 100" });
+      }
+
+      const convertedKduLevel = convertPercentToKduLevel(overallScore);
+      rubricSelection = {
+        DO: convertedKduLevel,
+        KNOW: convertedKduLevel,
+        UNDERSTAND: convertedKduLevel,
+        overallScore: Number(overallScore),
+        directPercentage: true,
+      };
+      weightedScore = convertedKduLevel;
+      percentScore = Number(Number(overallScore).toFixed(2));
+      saveFeedback = `Direct spreadsheet mark: ${percentScore}%.`;
+      saveContent = `Teacher-entered percentage mark: ${percentScore}%.`;
+    } else if (isSingleScoreKdu) {
       const convertedKduLevel = convertPercentToKduLevel(overallScore);
 
       const knowSplit = Number(assignment.single_score_know_percent || 0);
