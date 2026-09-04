@@ -99,6 +99,7 @@ function UsersPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [editingUser, setEditingUser] = useState(null);
+  const [deletingUserId, setDeletingUserId] = useState("");
 
   const [teacherForm, setTeacherForm] = useState(emptyTeacherForm);
   const [teacherMessage, setTeacherMessage] = useState("");
@@ -373,6 +374,10 @@ function UsersPage() {
       const searchableText = [
         getDisplayName(user),
         user.email,
+        user.student_id,
+        user.parent_email,
+        user.first_name,
+        user.last_name,
         user.role,
         getUserTypeLabel(user),
         user.observer_relationship,
@@ -448,6 +453,29 @@ function UsersPage() {
   async function handleUserDeleted() {
     await loadUsers();
     closeEditDrawer();
+  }
+
+  async function deleteUser(user) {
+    const role = getUserRole(user);
+    if (!["student", "observer", "parent"].includes(role)) return;
+
+    const displayName = getDisplayName(user);
+    if (!window.confirm(`Delete ${displayName}? This removes the account and cannot be undone.`)) return;
+
+    setDeletingUserId(normalizeId(user.id));
+    setStatus(`Deleting ${displayName}...`);
+    try {
+      const response = await authFetch(`/api/users/${user.id}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not delete user");
+      await loadUsers();
+      setStatus(`${displayName} deleted successfully.`);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "Could not delete user");
+    } finally {
+      setDeletingUserId("");
+    }
   }
 
   function updateObserverDraft(field, value) {
@@ -859,7 +887,7 @@ function UsersPage() {
             className="form-input"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search by name, email, role, or status..."
+            placeholder="Search by name, email, student ID, role, or status..."
           />
         </div>
 
@@ -904,13 +932,25 @@ function UsersPage() {
                     <td>{getUserTypeLabel(user)}</td>
                     <td>{getUserStatus(user)}</td>
                     <td>
-                      <button
-                        type="button"
-                        style={smallActionButtonStyle}
-                        onClick={() => openEditDrawer(user)}
-                      >
-                        Edit
-                      </button>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          style={smallActionButtonStyle}
+                          onClick={() => openEditDrawer(user)}
+                        >
+                          Edit
+                        </button>
+                        {["student", "observer", "parent"].includes(getUserRole(user)) ? (
+                          <button
+                            type="button"
+                            style={{ ...smallActionButtonStyle, color: "#991b1b", borderColor: "#dc2626" }}
+                            onClick={() => deleteUser(user)}
+                            disabled={deletingUserId === normalizeId(user.id)}
+                          >
+                            {deletingUserId === normalizeId(user.id) ? "Deleting..." : "Delete"}
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))
