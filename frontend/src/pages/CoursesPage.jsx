@@ -768,6 +768,8 @@ export default function CoursesPage() {
 
     if (!confirmed) return
 
+    const savedScrollTop = window.scrollY
+
     try {
       setDeletingLearningCategoryId(category.id)
       setError("")
@@ -785,8 +787,10 @@ export default function CoursesPage() {
 
       setMessage(`Assessment pathway deleted: ${data.deleted?.name || categoryName}`)
 
-      setActiveCompetencyCourseId(null)
-      await loadCompetencies(courseId)
+      await loadCompetencies(courseId, { forceOpen: true, scrollIntoView: false })
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: savedScrollTop, behavior: "auto" })
+      })
     } catch (err) {
       setError(err.message || "Failed to delete grading pathway")
     } finally {
@@ -1002,6 +1006,8 @@ export default function CoursesPage() {
 
     if (!confirmed) return
 
+    const savedScrollTop = window.scrollY
+
     try {
       setDeletingEvidenceTierId(tier.id)
       setError("")
@@ -1019,7 +1025,10 @@ export default function CoursesPage() {
 
       setMessage(`Evidence tier deleted: ${data.deleted?.name || tierName}`)
 
-      await loadCompetencies(courseId, { forceOpen: true })
+      await loadCompetencies(courseId, { forceOpen: true, scrollIntoView: false })
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: savedScrollTop, behavior: "auto" })
+      })
     } catch (err) {
       setError(err.message || "Failed to delete evidence tier")
     } finally {
@@ -1191,6 +1200,7 @@ export default function CoursesPage() {
 
   async function loadCompetencies(courseId, options = {}) {
     const forceOpen = Boolean(options.forceOpen)
+    const scrollIntoView = options.scrollIntoView !== false
 
     if (!forceOpen && activeCompetencyCourseId === courseId) {
       setActiveCompetencyCourseId(null)
@@ -1243,13 +1253,15 @@ export default function CoursesPage() {
       }))
       setActiveCompetencyCourseId(courseId)
 
-      window.requestAnimationFrame(() => {
-        window.setTimeout(() => {
-          document
-            .getElementById(`grading-pathways-${courseId}`)
-            ?.scrollIntoView({ behavior: "smooth", block: "start" })
-        }, 50)
-      })
+      if (scrollIntoView) {
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            document
+              .getElementById(`grading-pathways-${courseId}`)
+              ?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }, 50)
+        })
+      }
     } catch (err) {
       setError(err.message || "Failed to load competencies")
     } finally {
