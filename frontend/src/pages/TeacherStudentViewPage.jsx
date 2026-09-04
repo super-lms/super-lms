@@ -25,6 +25,7 @@ export default function TeacherStudentViewPage() {
   const [studentEmail, setStudentEmail] = useState("")
   const [dashboard, setDashboard] = useState(null)
   const [modules, setModules] = useState([])
+  const [classResources, setClassResources] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
@@ -64,10 +65,29 @@ export default function TeacherStudentViewPage() {
     )
   }, [students, courseId])
 
+  const selectedCourse = courses.find((course) => String(course.id) === String(courseId))
+  const contentCourseId = selectedCourse?.content_course_id || selectedCourse?.master_course_id || courseId
+
   useEffect(() => {
     setStudentEmail(courseStudents[0]?.email || "")
     setDashboard(null)
   }, [courseId, courseStudents])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!contentCourseId) {
+      setClassResources([])
+      return undefined
+    }
+    authFetch(`/api/courses/${contentCourseId}/resources`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data.error || "Could not load class resources")
+        if (!cancelled) setClassResources(Array.isArray(data.resources) ? data.resources : [])
+      })
+      .catch((err) => { if (!cancelled) setError(err.message || "Could not load class resources") })
+    return () => { cancelled = true }
+  }, [contentCourseId])
 
   useEffect(() => {
     if (!courseId || !studentEmail) return
@@ -78,12 +98,18 @@ export default function TeacherStudentViewPage() {
         setError("")
         const [response, modulesResponse] = await Promise.all([
           authFetch(`/api/students/${encodeURIComponent(studentEmail)}/courses/${courseId}/dashboard`),
-          authFetch(`/api/courses/${courseId}/modules`),
+          authFetch(`/api/courses/${contentCourseId}/modules`),
         ])
-        const [data, modulesData] = await Promise.all([response.json().catch(() => ({})), modulesResponse.json().catch(() => ([]))])
+        const [data, modulesData] = await Promise.all([
+          response.json().catch(() => ({})),
+          modulesResponse.json().catch(() => ([])),
+        ])
         if (!response.ok) throw new Error(data.error || "Could not load this student preview")
         if (!modulesResponse.ok) throw new Error(modulesData.error || "Could not load module preview")
-        if (!cancelled) { setDashboard(data); setModules((modulesData || []).filter((module) => module.is_published)) }
+        if (!cancelled) {
+          setDashboard(data)
+          setModules((modulesData || []).filter((module) => module.is_published))
+        }
       } catch (err) {
         if (!cancelled) {
           setDashboard(null)
@@ -95,7 +121,7 @@ export default function TeacherStudentViewPage() {
     }
     loadPreview()
     return () => { cancelled = true }
-  }, [courseId, studentEmail])
+  }, [courseId, contentCourseId, studentEmail])
 
   const selectedStudent = courseStudents.find((student) => student.email === studentEmail)
   const assignments = Array.isArray(dashboard?.assignments) ? dashboard.assignments : []
@@ -186,6 +212,22 @@ export default function TeacherStudentViewPage() {
                 ))}
               </section>
             </div>
+
+            <section style={{ ...cardStyle, marginTop: "18px" }}>
+              <h2>Class Resources</h2>
+              {classResources.length === 0 ? <p>No general class resources have been posted yet.</p> : (
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {classResources.map((resource) => (
+                    <div key={resource.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "12px 14px", border: "1px solid #d9e0ea", borderRadius: "10px", flexWrap: "wrap" }}>
+                      <strong>{resource.original_name || "Class resource"}</strong>
+                      <a href={`${API_BASE}${resource.file_path}`} download={resource.original_name || true} style={{ padding: "9px 12px", borderRadius: "8px", background: "#172033", color: "white", fontWeight: 800, textDecoration: "none" }}>
+                        Download to Device
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
             <section style={{ ...cardStyle, marginTop: "18px" }}>
               <h2>Course Modules</h2>
