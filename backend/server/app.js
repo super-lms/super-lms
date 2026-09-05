@@ -2967,6 +2967,98 @@ app.put("/api/admin/student-schedules/courses/:courseId", authenticateJWT, requi
   }
 });
 
+app.post("/api/admin/student-schedules/courses/:courseId/merge-delete", authenticateJWT, requireRole("admin"), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const courseId = Number(req.params.courseId);
+    const replacementCourseId = Number(req.body?.replacement_course_id);
+
+    if (!courseId || !replacementCourseId || courseId === replacementCourseId) {
+      return res.status(400).json({ error: "A valid different replacement course is required" });
+    }
+
+    await client.query("BEGIN");
+    const coursesResult = await client.query(
+      `
+      SELECT id, title, master_course_id, master_title, section_code
+      FROM courses
+      WHERE id = ANY($1::int[])
+      FOR UPDATE
+      `,
+      [[courseId, replacementCourseId]]
+    );
+    const source = coursesResult.rows.find((course) => Number(course.id) === courseId);
+    const replacement = coursesResult.rows.find((course) => Number(course.id) === replacementCourseId);
+
+    if (!source || !replacement) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Course or replacement course not found" });
+    }
+
+    const familyTitle = String(source.master_title || replacement.master_title || source.title || replacement.title)
+      .replace(/\s*([A-D])$/i, "")
+      .trim();
+
+    await client.query(
+      `
+      INSERT INTO class_enrollments (class_id, student_user_id)
+      SELECT $1, source_enrollment.student_user_id
+      FROM class_enrollments source_enrollment
+      WHERE source_enrollment.class_id = $2
+        AND NOT EXISTS (
+          SELECT 1
+          FROM class_enrollments existing
+          WHERE existing.class_id = $1
+            AND existing.student_user_id = source_enrollment.student_user_id
+        )
+      `,
+      [replacementCourseId, courseId]
+    );
+
+    await client.query(
+      `UPDATE courses SET master_course_id = $1 WHERE master_course_id = $2 AND id <> $1`,
+      [replacementCourseId, courseId]
+    );
+    await client.query(
+      `
+      UPDATE courses
+      SET title = $1,
+          course_name = $1,
+          master_course_id = NULL,
+          master_title = NULL,
+          section_code = NULL
+      WHERE id = $2
+      `,
+      [familyTitle, replacementCourseId]
+    );
+
+    await client.query(`DELETE FROM class_enrollments WHERE class_id = $1`, [courseId]);
+    await client.query(`DELETE FROM course_categories WHERE course_id = $1`, [courseId]);
+    const deletedResult = await client.query(
+      `DELETE FROM courses WHERE id = $1 RETURNING id, title`,
+      [courseId]
+    );
+
+    await client.query("COMMIT");
+    return res.json({
+      success: true,
+      deleted: deletedResult.rows[0],
+      replacement: { id: replacementCourseId, title: familyTitle },
+    });
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      console.error("Student schedule course merge rollback failed:", rollbackErr);
+    }
+    console.error("POST /api/admin/student-schedules/courses/:courseId/merge-delete failed:", err);
+    return res.status(500).json({ error: "Failed to remove the duplicate course safely" });
+  } finally {
+    client.release();
+  }
+});
+
 /* QUICK STUDENT REGISTRATION AND SCHEDULE ENROLLMENT */
 app.get("/api/admin/quick-enrollment-options", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {

@@ -284,6 +284,10 @@ export default function AdminStudentSchedulePrinterPage() {
     return courses.filter((course) => !query || course.title.toLowerCase().includes(query))
   }, [courses, courseSearch])
 
+  function courseFamilyKey(title) {
+    return compactCourseTitle(title).replace(/([0-9])([a-d])$/, "$1")
+  }
+
   const unassignedCount = courses.filter(
     (course) => course.semester === "unassigned" || course.block_key === "unassigned"
   ).length
@@ -368,13 +372,29 @@ export default function AdminStudentSchedulePrinterPage() {
       setDeletingCourseId(course.id)
       setError("")
       setMessage("")
-      const response = await authFetch(`/api/courses/${course.id}`, { method: "DELETE" })
+      const replacement = courses.find((candidate) =>
+        candidate.id !== course.id
+        && courseFamilyKey(candidate.title) === courseFamilyKey(course.title)
+      )
+      const response = replacement
+        ? await authFetch(`/api/admin/student-schedules/courses/${course.id}/merge-delete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ replacement_course_id: replacement.id }),
+          })
+        : await authFetch(`/api/courses/${course.id}`, { method: "DELETE" })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data?.error || "Failed to delete course")
-      setMessage(`${course.title} was deleted and removed from student schedules.`)
+      const successMessage = replacement
+        ? `${course.title} was removed. Its students were kept in ${data?.replacement?.title || replacement.title}.`
+        : `${course.title} was deleted and removed from student schedules.`
+      setMessage(successMessage)
+      window.alert(successMessage)
       await loadSchedules()
     } catch (err) {
-      setError(err.message || "Failed to delete course")
+      const errorMessage = err.message || "Failed to delete course"
+      setError(errorMessage)
+      window.alert(errorMessage)
     } finally {
       setDeletingCourseId(null)
     }
