@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Printer, RefreshCw, Save } from "lucide-react"
+import { Pencil, Printer, RefreshCw, Save, Trash2 } from "lucide-react"
 import authFetch from "../../services/authFetch"
 
 const BLOCKS = [
@@ -118,6 +118,9 @@ function buildData(rows) {
         id: courseId,
         title: row.course_title || `Course ${courseId}`,
         teacher: timetableTeacherName(row.teacher_name),
+        teacherEmail: row.teacher_email || "",
+        description: row.course_description || "",
+        enrolledStudentCount: 0,
         semester: storedSemester === "unassigned" && screenshotDefault ? screenshotDefault.semester : storedSemester,
         block_key: storedBlock === "unassigned" && screenshotDefault ? screenshotDefault.block_key : storedBlock,
         room: row.room || "TBA",
@@ -138,6 +141,7 @@ function buildData(rows) {
     }
 
     studentMap.get(studentId).courseIds.push(courseId)
+    courseMap.get(courseId).enrolledStudentCount += 1
   })
 
   const courses = Array.from(courseMap.values()).sort((a, b) => a.title.localeCompare(b.title))
@@ -236,6 +240,8 @@ export default function AdminStudentSchedulePrinterPage() {
   const [studentId, setStudentId] = useState("all")
   const [courseSearch, setCourseSearch] = useState("")
   const [savingCourseId, setSavingCourseId] = useState(null)
+  const [editingCourseId, setEditingCourseId] = useState(null)
+  const [deletingCourseId, setDeletingCourseId] = useState(null)
 
   const { courses, students } = useMemo(() => buildData(rows), [rows])
   const courseById = useMemo(() => new Map(courses.map((course) => [course.id, course])), [courses])
@@ -314,6 +320,66 @@ export default function AdminStudentSchedulePrinterPage() {
     }
   }
 
+  async function editCourse(course) {
+    const title = window.prompt("Course name:", course.title)
+    if (title === null) return
+    if (!title.trim()) {
+      setError("Course name cannot be blank.")
+      return
+    }
+
+    const teacherEmail = window.prompt(
+      "Teacher email (leave blank to make the teacher unassigned):",
+      course.teacherEmail
+    )
+    if (teacherEmail === null) return
+
+    try {
+      setEditingCourseId(course.id)
+      setError("")
+      setMessage("")
+      const response = await authFetch(`/api/courses/${course.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: course.description,
+          teacher_email: teacherEmail.trim(),
+        }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data?.error || "Failed to edit course")
+      setMessage(`${title.trim()} was updated.`)
+      await loadSchedules()
+    } catch (err) {
+      setError(err.message || "Failed to edit course")
+    } finally {
+      setEditingCourseId(null)
+    }
+  }
+
+  async function deleteCourse(course) {
+    const enrollmentNote = course.enrolledStudentCount
+      ? ` This will also remove it from ${course.enrolledStudentCount} student schedule${course.enrolledStudentCount === 1 ? "" : "s"}.`
+      : ""
+    if (!window.confirm(`Delete “${course.title}” and its schedule setting?${enrollmentNote}`)) return
+
+    try {
+      setDeletingCourseId(course.id)
+      setError("")
+      setMessage("")
+      const response = await authFetch(`/api/courses/${course.id}`, { method: "DELETE" })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data?.error || "Failed to delete course")
+      setMessage(`${course.title} was deleted and removed from student schedules.`)
+      await loadSchedules()
+    } catch (err) {
+      setError(err.message || "Failed to delete course")
+    } finally {
+      setDeletingCourseId(null)
+    }
+  }
+
   function scheduleForStudent(student) {
     const enrolledEntries = student.courseIds
       .map((courseId) => courseById.get(courseId))
@@ -379,7 +445,7 @@ export default function AdminStudentSchedulePrinterPage() {
               />
               <div style={courseTableStyle}>
                 <div style={courseHeaderStyle}>
-                  <div>Course and Teacher</div><div>Semester</div><div>Block</div><div>Room</div><div>Status</div>
+                  <div>Course and Teacher</div><div>Semester</div><div>Block</div><div>Room</div><div>Status and Actions</div>
                 </div>
                 {visibleCourses.map((course) => (
                   <div key={course.id} style={courseRowStyle}>
@@ -400,7 +466,17 @@ export default function AdminStudentSchedulePrinterPage() {
                       placeholder="TBA"
                       style={selectStyle}
                     />
-                    <div style={mutedStyle}>{savingCourseId === course.id ? "Saving…" : <><Save size={15} /> Saved</>}</div>
+                    <div style={actionColumnStyle}>
+                      <div style={mutedStyle}>{savingCourseId === course.id ? "Saving…" : <><Save size={15} /> Saved</>}</div>
+                      <div style={actionRowStyle}>
+                        <button type="button" onClick={() => editCourse(course)} disabled={editingCourseId === course.id || deletingCourseId === course.id} style={smallButtonStyle}>
+                          <Pencil size={14} /> {editingCourseId === course.id ? "Editing…" : "Edit"}
+                        </button>
+                        <button type="button" onClick={() => deleteCourse(course)} disabled={deletingCourseId === course.id || editingCourseId === course.id} style={deleteButtonStyle}>
+                          <Trash2 size={14} /> {deletingCourseId === course.id ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -506,10 +582,14 @@ const setupStyle = { background: "white", border: "1px solid #d7d7d7", borderRad
 const setupSummaryStyle = { fontSize: "22px", fontWeight: 800, cursor: "pointer" }
 const searchStyle = { width: "min(520px, 100%)", boxSizing: "border-box", padding: "11px", border: "1px solid #d1d5db", borderRadius: "9px", fontSize: "15px", marginBottom: "12px" }
 const courseTableStyle = { border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden" }
-const courseHeaderStyle = { display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr .8fr .7fr", gap: "10px", padding: "11px", background: "#f9fafb", fontWeight: 800 }
+const courseHeaderStyle = { display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr .8fr 1.35fr", gap: "10px", padding: "11px", background: "#f9fafb", fontWeight: 800 }
 const courseRowStyle = { ...courseHeaderStyle, background: "white", fontWeight: 400, borderTop: "1px solid #f1f5f9", alignItems: "center" }
 const selectStyle = { width: "100%", boxSizing: "border-box", padding: "10px", border: "1px solid #d1d5db", borderRadius: "8px", background: "white", fontSize: "14px" }
 const mutedStyle = { color: "#6b7280", fontSize: "13px", display: "flex", gap: "5px", alignItems: "center" }
+const actionColumnStyle = { display: "grid", gap: "8px" }
+const actionRowStyle = { display: "flex", flexWrap: "wrap", gap: "6px" }
+const smallButtonStyle = { display: "inline-flex", alignItems: "center", gap: "5px", padding: "7px 9px", border: "1px solid #9ca3af", borderRadius: "7px", background: "white", color: "#111827", fontWeight: 700, cursor: "pointer" }
+const deleteButtonStyle = { ...smallButtonStyle, borderColor: "#fca5a5", color: "#991b1b", background: "#fff7f7" }
 const printSetupStyle = { background: "white", border: "1px solid #d7d7d7", borderRadius: "14px", padding: "20px", marginBottom: "18px" }
 const filterGridStyle = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "14px", margin: "16px 0" }
 const labelStyle = { display: "grid", gap: "7px", fontWeight: 700, color: "#374151" }

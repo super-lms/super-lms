@@ -2896,6 +2896,8 @@ app.get("/api/admin/student-schedules", authenticateJWT, requireRole("admin"), a
           t.email,
           'Teacher TBA'
         ) AS teacher_name,
+        t.email AS teacher_email,
+        COALESCE(c.description, '') AS course_description,
         COALESCE(
           css.semester,
           CASE WHEN LOWER(c.title) LIKE 'bc calculus%' THEN 'semester2' ELSE 'unassigned' END
