@@ -79,6 +79,59 @@ function DetailCard({ title, children }) {
   )
 }
 
+function StudentHelpPanel() {
+  const helpItems = [
+    {
+      title: "See Assignments",
+      steps: ["Choose your course.", "Open Current Assignments Due or All Assignments.", "Select Open Assignment to see the directions and due date."],
+    },
+    {
+      title: "Download Assignments and Resources",
+      steps: ["Open the assignment, Course Modules, or Class Resources.", "Select Download to Device beside the file.", "Open the downloaded file from your device's Downloads folder."],
+    },
+    {
+      title: "Upload Assignments",
+      steps: ["Open the assignment.", "Choose your completed file in the attachment area.", "Upload the file, then save your submission.", "Wait for the Submission successful message before leaving the page."],
+    },
+    {
+      title: "Check Marks",
+      steps: ["Choose your course.", "Open Marks to Date.", "Review the score and KDU evidence for each assignment."],
+    },
+    {
+      title: "Review Teacher Feedback",
+      steps: ["Open Teacher Feedback.", "Find the assignment you want to review.", "Select View Submission for the full score, feedback, and submitted work."],
+    },
+    {
+      title: "Communicate with Your Teacher",
+      steps: ["Review Teacher Announcements and feedback first.", "Use your school's approved email or classroom communication method to contact your teacher.", "Include the course and assignment name so your teacher can help quickly."],
+    },
+    {
+      title: "Replace or Continue a Submission",
+      steps: ["Open All Assignments and select Continue Work.", "Update your response or attachment.", "Save again and wait for the success message."],
+    },
+    {
+      title: "Report a Safety Concern",
+      steps: ["Open Safe Report from the menu.", "Describe what happened and add evidence if available.", "Submit the report to the school."],
+    },
+  ]
+
+  return (
+    <section className="panel">
+      <SectionHeader title="Help" subtitle="Choose a topic for step-by-step instructions." />
+      <div style={{ display: "grid", gap: "10px" }}>
+        {helpItems.map((item) => (
+          <details key={item.title} style={helpItemStyle}>
+            <summary style={helpSummaryStyle}>{item.title}</summary>
+            <ol style={{ margin: "12px 0 2px 22px", padding: 0, lineHeight: 1.7, color: "#374151" }}>
+              {item.steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+          </details>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function CourseOverviewCard({ course, isSelected, onSelect, onOpenResources }) {
   return (
     <StudentCourseCard
@@ -546,8 +599,21 @@ export default function StudentDashboardPage() {
   const [courseModules, setCourseModules] = useState([])
   const [courseModulesLoading, setCourseModulesLoading] = useState(false)
   const [courseModulesError, setCourseModulesError] = useState("")
+  const [portalViewMode, setPortalViewMode] = useState(() => {
+    return window.localStorage.getItem("super-lms-student-portal-view") || "menu"
+  })
+  const [activePortalSection, setActivePortalSection] = useState("dashboard")
 
   const selectedContentCourseId = selectedCourse?.content_course_id || selectedCourseId
+  const showPortalSection = (...sections) => {
+    if (portalViewMode === "complete") return true
+    return sections.includes(activePortalSection)
+  }
+
+  function changePortalViewMode(mode) {
+    setPortalViewMode(mode)
+    window.localStorage.setItem("super-lms-student-portal-view", mode)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -849,6 +915,7 @@ export default function StudentDashboardPage() {
     const studentEmail = String(user?.email || "").trim().toLowerCase()
 
     setSelectedSubmissionAssignmentId(assignmentId)
+    setActivePortalSection("submission")
     setSubmissionErrorText("")
     setSubmissionSaveMessage("")
     setAttachmentErrorText("")
@@ -1104,10 +1171,14 @@ export default function StudentDashboardPage() {
     setAttachmentSuccessText("")
     setAttachmentLoadingId("")
     setAttachmentUploadingId("")
+    if (portalViewMode === "menu" && activePortalSection === "submission") {
+      setActivePortalSection("assignments")
+    }
   }
 
   async function handleOpenCourse(courseId) {
     closeSubmissionEditor()
+    if (portalViewMode === "menu") setActivePortalSection("dashboard")
     const dashboardPromise = selectCourse(courseId)
     window.requestAnimationFrame(() => {
       courseWorkspaceRef.current?.scrollIntoView({
@@ -1126,6 +1197,7 @@ export default function StudentDashboardPage() {
 
   async function handleOpenClassResources(courseId) {
     closeSubmissionEditor()
+    if (portalViewMode === "menu") setActivePortalSection("resources")
     const dashboardPromise = selectCourse(courseId)
     window.requestAnimationFrame(() => {
       classResourcesRef.current?.scrollIntoView({
@@ -1356,11 +1428,49 @@ export default function StudentDashboardPage() {
           </div>
         </section>
 
+        <section className="panel" style={viewChooserStyle}>
+          <div>
+            <strong>Student Portal View</strong>
+            <div style={{ marginTop: "4px", color: "#4b5563" }}>Choose a focused menu or the complete page.</div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => changePortalViewMode("menu")} style={viewChoiceButtonStyle(portalViewMode === "menu")}>Menu View</button>
+            <button type="button" onClick={() => changePortalViewMode("complete")} style={viewChoiceButtonStyle(portalViewMode === "complete")}>Complete Page</button>
+          </div>
+        </section>
+
+        <div style={portalViewMode === "menu" ? portalMenuLayoutStyle : undefined}>
+          {portalViewMode === "menu" ? (
+            <aside style={portalSidebarStyle} aria-label="Student portal menu">
+              <div style={{ fontSize: "0.8rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: "8px" }}>Portal Menu</div>
+              {[
+                ["dashboard", "Dashboard"],
+                ["due", "Current Assignments Due"],
+                ["missing", "What Needs to Be Submitted"],
+                ["marks", "Marks to Date"],
+                ["feedback", "Teacher Feedback"],
+                ["courses", "My Courses"],
+                ["modules", "Course Modules"],
+                ["resources", "Class Resources"],
+                ["lessons", "Lessons"],
+                ["assignments", "All Assignments"],
+                ["assessments", "Tests & Assessments"],
+                ["help", "Help"],
+                ["safe", "Safe Report"],
+              ].map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setActivePortalSection(key)} style={portalMenuButtonStyle(activePortalSection === key)}>{label}</button>
+              ))}
+            </aside>
+          ) : null}
+          <main style={{ minWidth: 0 }}>
+            {showPortalSection("help") ? <StudentHelpPanel /> : null}
+
         <section
           className="panel"
           style={{
             border: "2px solid #b91c1c",
             background: "#fff7f7",
+            display: showPortalSection("safe") ? undefined : "none",
           }}
         >
           <SectionHeader
@@ -1504,6 +1614,7 @@ export default function StudentDashboardPage() {
           style={{
             border: "2px solid #2563eb",
             background: "#eff6ff",
+            display: showPortalSection("assessments") ? undefined : "none",
           }}
         >
           <SectionHeader
@@ -1523,7 +1634,7 @@ export default function StudentDashboardPage() {
           </section>
         ) : null}
 
-        <section className="panel">
+        <section className="panel" style={{ display: showPortalSection("courses") ? undefined : "none" }}>
           <SectionHeader
             title="My Courses"
             subtitle="Choose a course to open its learning workspace."
@@ -1551,7 +1662,7 @@ export default function StudentDashboardPage() {
             <section
               className="panel"
               ref={courseWorkspaceRef}
-              style={{ scrollMarginTop: "18px" }}
+              style={{ scrollMarginTop: "18px", display: showPortalSection("courses") ? undefined : "none" }}
             >
               <SectionHeader
                 title="Course Workspace"
@@ -1564,44 +1675,44 @@ export default function StudentDashboardPage() {
               />
             </section>
 
-            <StudentCourseProgressPanel
+            <div style={{ display: showPortalSection("dashboard", "marks", "feedback") ? undefined : "none" }}><StudentCourseProgressPanel
               courseProgressLoading={courseProgressLoading}
               proficiencyLabel={getProficiencyLabel(gradedAverage)}
               standing={formatAverage(gradedAverage)}
               latestResultTitle={latestResultAssignment?.title || "No graded result yet"}
               latestResultScore={formatAverage(latestResultState?.submission?.score)}
               latestResultFeedback={latestResultState?.submission?.feedback || ""}
-            />
+            /></div>
 
-        <StudentSummaryCards
+        <div style={{ display: showPortalSection("dashboard") ? undefined : "none" }}><StudentSummaryCards
           selectedCourse={selectedCourse}
           selectedCourseId={selectedCourseId}
           dueSoonCount={dueSoonCount}
           submittedCount={submittedCount}
           gradedCount={gradedCount}
           lessonsCount={selectedCourseId ? filteredLessons.length : lessons.length}
-        />
+        /></div>
 
-        <StudentMissingWorkPanel missingAssignments={missingAssignments} />
+        <div style={{ display: showPortalSection("dashboard", "missing") ? undefined : "none" }}><StudentMissingWorkPanel missingAssignments={missingAssignments} /></div>
 
-        <StudentUpcomingDueDatesPanel
+        <div style={{ display: showPortalSection("dashboard", "due") ? undefined : "none" }}><StudentUpcomingDueDatesPanel
           selectedCourseId={selectedCourseId}
           upcomingAssignments={upcomingAssignments}
           onOpenAssignment={openSubmissionEditor}
-        />
+        /></div>
 
-        <StudentGoalsGrowthPanel
+        <div style={{ display: showPortalSection("dashboard") ? undefined : "none" }}><StudentGoalsGrowthPanel
           gradedAverage={gradedAverage}
-        />
+        /></div>
 
-        <StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} />
+        <div style={{ display: showPortalSection("dashboard", "feedback") ? undefined : "none" }}><StudentTeacherAnnouncementsPanel selectedCourse={selectedCourse} /></div>
 
-        <section className="panel">
+        <section className="panel" style={{ display: showPortalSection("modules") ? undefined : "none" }}>
           <SectionHeader title="Course Modules" subtitle="Follow your teacher's recommended learning sequence from top to bottom." />
           {courseModulesLoading ? <NoticeBox>Loading course modules...</NoticeBox> : courseModulesError ? <NoticeBox type="error">{courseModulesError}</NoticeBox> : <CourseModulesView modules={courseModules} onOpenAssignment={(assignmentId) => { const assignment = assignments.find((item) => String(item.id) === String(assignmentId)); if (assignment) openSubmissionEditor(assignment) }} />}
         </section>
 
-        <section className="panel" ref={classResourcesRef} style={{ scrollMarginTop: "18px" }}>
+        <section className="panel" ref={classResourcesRef} style={{ scrollMarginTop: "18px", display: showPortalSection("resources") ? undefined : "none" }}>
           <SectionHeader
             title="Class Resources"
             subtitle="General files your teacher has shared for this class."
@@ -1624,10 +1735,10 @@ export default function StudentDashboardPage() {
           )}
         </section>
 
-        <StudentNextStepsPanel />
+        <div style={{ display: showPortalSection("dashboard") ? undefined : "none" }}><StudentNextStepsPanel /></div>
 
         {selectedSubmissionAssignment ? (
-          <section className="panel" ref={submissionEditorRef}>
+          <section className="panel" ref={submissionEditorRef} style={{ display: showPortalSection("submission") ? undefined : "none" }}>
             <SubmissionEditor
               assignment={selectedSubmissionAssignment}
               submissionState={selectedSubmissionState}
@@ -1658,7 +1769,7 @@ export default function StudentDashboardPage() {
           </section>
         ) : null}
 
-        <section className="panel">
+        <section className="panel" style={{ display: showPortalSection("dashboard", "marks", "feedback") ? undefined : "none" }}>
           <SectionHeader title="My Results" subtitle="See returned scores and teacher feedback for your visible assignments." />
 
           {!selectedCourseId ? (
@@ -1765,7 +1876,7 @@ export default function StudentDashboardPage() {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel" style={{ display: showPortalSection("lessons") ? undefined : "none" }}>
           <SectionHeader title="Recent Lessons" subtitle="Lessons available for the currently selected course." />
 
           {!selectedCourseId ? (
@@ -1781,7 +1892,7 @@ export default function StudentDashboardPage() {
           )}
         </section>
 
-        <section className="panel">
+        <section className="panel" style={{ display: showPortalSection("assignments") ? undefined : "none" }}>
           <SectionHeader title="All Course Assignments" subtitle="A complete list of assignments for the currently selected course." />
 
           {!selectedCourseId ? (
@@ -1856,6 +1967,8 @@ export default function StudentDashboardPage() {
             <NoticeBox>Your dashboard is ready. Choose a course above to continue.</NoticeBox>
           </section>
         )}
+          </main>
+        </div>
       </div>
       <FloatingTeacherCoach
         title="Student Coach"
@@ -1883,6 +1996,73 @@ const summaryCardStyle = {
   padding: "18px",
   background: "#ffffff",
   boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+}
+
+const viewChooserStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "16px",
+  flexWrap: "wrap",
+}
+
+const portalMenuLayoutStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(210px, 250px) minmax(0, 1fr)",
+  gap: "18px",
+  alignItems: "start",
+}
+
+const portalSidebarStyle = {
+  position: "sticky",
+  top: "16px",
+  display: "grid",
+  gap: "7px",
+  padding: "16px",
+  border: "1px solid #d7dce5",
+  borderRadius: "14px",
+  background: "#ffffff",
+}
+
+function portalMenuButtonStyle(isActive) {
+  return {
+    width: "100%",
+    padding: "11px 12px",
+    border: isActive ? "1px solid #1d4ed8" : "1px solid transparent",
+    borderRadius: "9px",
+    background: isActive ? "#eff6ff" : "transparent",
+    color: isActive ? "#1d4ed8" : "#111827",
+    font: "inherit",
+    fontWeight: isActive ? 800 : 700,
+    textAlign: "left",
+    cursor: "pointer",
+  }
+}
+
+function viewChoiceButtonStyle(isActive) {
+  return {
+    padding: "10px 14px",
+    border: isActive ? "2px solid #2563eb" : "1px solid #cbd5e1",
+    borderRadius: "10px",
+    background: isActive ? "#eff6ff" : "#ffffff",
+    color: "#111827",
+    font: "inherit",
+    fontWeight: 800,
+    cursor: "pointer",
+  }
+}
+
+const helpItemStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "10px",
+  padding: "12px 14px",
+  background: "#ffffff",
+}
+
+const helpSummaryStyle = {
+  cursor: "pointer",
+  fontWeight: 800,
+  color: "#111827",
 }
 
 const summaryLabelStyle = {
