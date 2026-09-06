@@ -602,7 +602,7 @@ export default function StudentDashboardPage() {
   const [portalViewMode, setPortalViewMode] = useState(() => {
     return window.localStorage.getItem("super-lms-student-portal-view") || "menu"
   })
-  const [activePortalSection, setActivePortalSection] = useState("dashboard")
+  const [activePortalSection, setActivePortalSection] = useState("courses")
 
   const selectedContentCourseId = selectedCourse?.content_course_id || selectedCourseId
   const showPortalSection = (...sections) => {
