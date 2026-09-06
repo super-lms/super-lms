@@ -6651,6 +6651,7 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         u.id AS student_user_id,
         CONCAT(u.first_name, ' ', u.last_name) AS student_name,
         u.email AS student_email,
+        s.content,
         s.score,
         s.feedback,
         s.rubric_selection,

@@ -1533,6 +1533,30 @@ export default function AssignmentSpeedGradingPage() {
                     <div>{selectedRow.feedback || "No feedback yet."}</div>
                   </div>
 
+                  <div
+                    style={{
+                      marginBottom: "20px",
+                      padding: "16px",
+                      border: "1px solid #d7dce5",
+                      borderRadius: "12px",
+                      background: "#ffffff",
+                    }}
+                  >
+                    <h3 style={{ marginTop: 0, marginBottom: "8px" }}>
+                      Student Written Response
+                    </h3>
+                    <div
+                      style={{
+                        color: selectedRow.content ? "#111827" : "#6b7280",
+                        lineHeight: 1.6,
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {selectedRow.content || "No written response was submitted."}
+                    </div>
+                  </div>
+
                   <div style={teacherAttachmentViewerStyle}>
                     <div
                       style={{
