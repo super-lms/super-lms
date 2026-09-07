@@ -615,34 +615,10 @@ export default function AssignmentsPage() {
       })
       .then((data) => {
         const safeClasses = Array.isArray(data) ? data : []
-        const normalizedUserId = String(user?.id || "").trim()
-        const normalizedUserEmail = String(user?.email || "").trim().toLowerCase()
-
-        const visibleClasses =
-          normalizedRole === "teacher"
-            ? safeClasses.filter((classItem) => {
-                const classTeacherId = String(
-                  classItem?.teacher_id ?? classItem?.assigned_teacher_id ?? classItem?.teacherId ?? ""
-                ).trim()
-
-                const classTeacherEmail = String(
-                  classItem?.teacher_email ??
-                    classItem?.assigned_teacher_email ??
-                    classItem?.teacherEmail ??
-                    ""
-                )
-                  .trim()
-                  .toLowerCase()
-
-                const sharedTeacherIds = Array.isArray(classItem?.shared_teacher_ids)
-                  ? classItem.shared_teacher_ids.map((id) => String(id))
-                  : []
-                if (normalizedUserId && sharedTeacherIds.includes(normalizedUserId)) return true
-                if (normalizedUserId && classTeacherId) return classTeacherId === normalizedUserId
-                if (normalizedUserEmail && classTeacherEmail) return classTeacherEmail === normalizedUserEmail
-                return false
-              })
-            : safeClasses
+        // The authenticated /api/classes endpoint already applies the complete
+        // teacher-course visibility rules. Trust that server-filtered list so
+        // approved courses are not removed again by a narrower browser check.
+        const visibleClasses = safeClasses
 
         setClasses(visibleClasses)
 
