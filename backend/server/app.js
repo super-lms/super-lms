@@ -2101,8 +2101,12 @@ app.get("/course-resources/:storedName", async (req, res, next) => {
       ? resource.file_data
       : Buffer.from(resource.file_data || "");
     if (fileData.length === 0) return res.status(404).send("Course resource is empty");
-    res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${asciiName}"; filename*=UTF-8''${encodedName}`);
+    const isPdf =
+      String(resource.mime_type || "").toLowerCase() === "application/pdf" ||
+      String(safeName).toLowerCase().endsWith(".pdf");
+    const disposition = isPdf && String(req.query.view || "") === "1" ? "inline" : "attachment";
+    res.setHeader("Content-Type", isPdf ? "application/pdf" : resource.mime_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodedName}`);
     res.setHeader("Content-Length", String(fileData.length));
     res.setHeader("X-Content-Type-Options", "nosniff");
     return res.end(fileData);
@@ -2257,8 +2261,12 @@ app.get("/lesson-resources/:storedName", async (req, res, next) => {
 
     const safeName = String(resource.original_name || "lesson-resource")
       .replace(/[\r\n"]/g, "_");
-    res.setHeader("Content-Type", resource.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+    const isPdf =
+      String(resource.mime_type || "").toLowerCase() === "application/pdf" ||
+      String(safeName).toLowerCase().endsWith(".pdf");
+    const disposition = isPdf && String(req.query.view || "") === "1" ? "inline" : "attachment";
+    res.setHeader("Content-Type", isPdf ? "application/pdf" : resource.mime_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${safeName}"`);
     return res.send(resource.file_data);
   } catch (err) {
     console.error("GET /lesson-resources/:storedName failed:", err);

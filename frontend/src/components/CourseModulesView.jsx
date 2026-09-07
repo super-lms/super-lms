@@ -18,7 +18,18 @@ export default function CourseModulesView({ modules = [], onOpenAssignment }) {
           const borderTop = itemIndex ? "1px solid #e5e7eb" : "none"
           if (item.item_type === "heading") return <h4 key={item.id} style={{ margin: 0, padding: "16px 20px", borderTop, fontSize: 18 }}>{item.title}</h4>
           if (item.item_type === "instruction") return <div key={item.id} style={{ padding: "16px 20px", borderTop, background: "#fffbeb" }}><FormattedText value={item.description || item.title} /></div>
-          if (item.item_type === "resource") return <div key={item.id} style={{ padding: "16px 20px", borderTop, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}><span style={{ fontWeight: 800 }}>📎 {item.title || item.resource_name}</span><a href={`${API_BASE}${item.resource_path}`} download={item.resource_name || true} style={{ padding: "9px 12px", borderRadius: "8px", background: "#111827", color: "white", fontWeight: 800, textDecoration: "none" }}>Download to Device</a></div>
+          if (item.item_type === "resource") {
+            const resourceName = item.resource_name || item.title || "Class resource"
+            const resourceUrl = `${API_BASE}${item.resource_path}`
+            const isPdf = String(resourceName || item.resource_path || "").toLowerCase().endsWith(".pdf")
+            return <div key={item.id} style={{ padding: "16px 20px", borderTop, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 800 }}>📎 {item.title || item.resource_name}</span>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {isPdf ? <a href={`${resourceUrl}?view=1`} target="_blank" rel="noreferrer" style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #111827", background: "#ffffff", color: "#111827", fontWeight: 800, textDecoration: "none" }}>Open PDF</a> : null}
+                <a href={resourceUrl} download={resourceName} style={{ padding: "9px 12px", borderRadius: "8px", background: "#111827", color: "white", fontWeight: 800, textDecoration: "none" }}>Download</a>
+              </div>
+            </div>
+          }
           if (item.item_type === "assignment") return <div key={item.id} style={{ padding: "16px 20px", borderTop, display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
             <div><strong>Assignment: {item.title || item.assignment_title}</strong><FormattedText value={item.description || item.assignment_description} style={{ marginTop: 6 }} /></div>
             {onOpenAssignment ? <button type="button" onClick={() => onOpenAssignment(item.assignment_id)} style={{ padding: "10px 14px", borderRadius: 9, border: "1px solid #111827", background: "#111827", color: "white", fontWeight: 800 }}>Open Assignment</button> : null}
@@ -26,7 +37,11 @@ export default function CourseModulesView({ modules = [], onOpenAssignment }) {
           return <div key={item.id} style={{ padding: "16px 20px", borderTop }}>
             <strong>Lesson: {item.title || item.lesson_title}</strong>
             <FormattedText value={item.description || item.lesson_content} style={{ marginTop: 6 }} />
-            {(item.lesson_files || []).length ? <div style={{ display: "grid", gap: 6, marginTop: 10 }}>{item.lesson_files.map((file) => <a key={file.id} href={`${API_BASE}${file.file_path}`} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>📄 {file.original_name}</a>)}</div> : null}
+            {(item.lesson_files || []).length ? <div style={{ display: "grid", gap: 6, marginTop: 10 }}>{item.lesson_files.map((file) => {
+              const isPdf = String(file.original_name || file.file_path || "").toLowerCase().endsWith(".pdf")
+              const href = `${API_BASE}${file.file_path}${isPdf ? "?view=1" : ""}`
+              return <a key={file.id} href={href} target="_blank" rel="noreferrer" style={{ color: "#1d4ed8", fontWeight: 700 }}>📄 {isPdf ? "Open PDF: " : "Open File: "}{file.original_name}</a>
+            })}</div> : null}
           </div>
         })}
       </div>
