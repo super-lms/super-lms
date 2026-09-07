@@ -6635,6 +6635,8 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         id,
         class_id,
         title,
+        description,
+        due_date,
         scoring_method,
         single_score_know_percent,
         single_score_do_percent,

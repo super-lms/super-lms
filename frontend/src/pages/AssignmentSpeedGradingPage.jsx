@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import RawMarkEntryPanel from "./RawMarkEntryPanel";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
+import { FormattedText } from "../components/RichText.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
 
@@ -252,6 +253,25 @@ export default function AssignmentSpeedGradingPage() {
   const [studentAttachmentsLoading, setStudentAttachmentsLoading] = useState(false);
   const [studentAttachmentsMessage, setStudentAttachmentsMessage] = useState("");
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("");
+  const [graderLayout, setGraderLayout] = useState(() => {
+    try {
+      return window.localStorage.getItem("super-lms-speedgrader-layout") === "side-by-side"
+        ? "side-by-side"
+        : "detailed";
+    } catch {
+      return "detailed";
+    }
+  });
+
+  function selectGraderLayout(nextLayout) {
+    setGraderLayout(nextLayout);
+
+    try {
+      window.localStorage.setItem("super-lms-speedgrader-layout", nextLayout);
+    } catch {
+      // The layout still changes for this visit if browser storage is unavailable.
+    }
+  }
 
   function backToAssignmentsPage() {
     const classId = assignment?.class_id || assignment?.course_id || assignment?.classId || "";
@@ -1076,9 +1096,27 @@ export default function AssignmentSpeedGradingPage() {
         >
           <h1 style={{ marginTop: 0, marginBottom: 0 }}>Speed Grading</h1>
 
-          <ActionButton quiet onClick={() => setShowQuickDemo(true)}>
-            ▶ Quick Demo
-          </ActionButton>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => selectGraderLayout("detailed")}
+              aria-pressed={graderLayout === "detailed"}
+              style={graderLayout === "detailed" ? activeLayoutButtonStyle : layoutButtonStyle}
+            >
+              Detailed View
+            </button>
+            <button
+              type="button"
+              onClick={() => selectGraderLayout("side-by-side")}
+              aria-pressed={graderLayout === "side-by-side"}
+              style={graderLayout === "side-by-side" ? activeLayoutButtonStyle : layoutButtonStyle}
+            >
+              Side-by-Side View
+            </button>
+            <ActionButton quiet onClick={() => setShowQuickDemo(true)}>
+              ▶ Quick Demo
+            </ActionButton>
+          </div>
         </div>
 
         <div
@@ -1483,6 +1521,9 @@ export default function AssignmentSpeedGradingPage() {
                     </div>
                   </div>
 
+                  <div style={graderLayout === "side-by-side" ? sideBySideGraderStyle : undefined}>
+                    <div style={{ minWidth: 0 }}>
+
                   <div
                     style={{
                       display: "flex",
@@ -1533,7 +1574,7 @@ export default function AssignmentSpeedGradingPage() {
                     <div>{selectedRow.feedback || "No feedback yet."}</div>
                   </div>
 
-                  <div
+                  {graderLayout === "detailed" ? <div
                     style={{
                       marginBottom: "20px",
                       padding: "16px",
@@ -1555,9 +1596,9 @@ export default function AssignmentSpeedGradingPage() {
                     >
                       {selectedRow.content || "No written response was submitted."}
                     </div>
-                  </div>
+                  </div> : null}
 
-                  <div style={teacherAttachmentViewerStyle}>
+                  {graderLayout === "detailed" ? <div style={teacherAttachmentViewerStyle}>
                     <div
                       style={{
                         display: "flex",
@@ -1691,7 +1732,7 @@ export default function AssignmentSpeedGradingPage() {
                         })}
                       </div>
                     ) : null}
-                  </div>
+                  </div> : null}
 
                   {!isOneScoreAssignment ? (
                     <>
@@ -2079,6 +2120,19 @@ export default function AssignmentSpeedGradingPage() {
                   <ActionButton quiet onClick={() => backToAssignmentsPage()}>
                     ← Back to Assignments
                   </ActionButton>
+                    </div>
+
+                    {graderLayout === "side-by-side" ? (
+                      <SubmissionPreviewPanel
+                        assignment={assignment}
+                        selectedRow={selectedRow}
+                        studentAttachments={studentAttachments}
+                        studentAttachmentsLoading={studentAttachmentsLoading}
+                        studentAttachmentsMessage={studentAttachmentsMessage}
+                        onRefresh={() => loadStudentAttachments(selectedRow.student_email)}
+                      />
+                    ) : null}
+                  </div>
                 </>
               )}
             </div>
@@ -2127,6 +2181,114 @@ function formatAttachmentSize(sizeBytes) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function SubmissionPreviewPanel({
+  assignment,
+  selectedRow,
+  studentAttachments,
+  studentAttachmentsLoading,
+  studentAttachmentsMessage,
+  onRefresh,
+}) {
+  return (
+    <aside style={submissionPreviewPanelStyle}>
+      <div style={submissionPreviewHeaderStyle}>
+        <div>
+          <div style={{ fontSize: "0.85rem", color: "#4b5563", fontWeight: 900 }}>
+            SIDE-BY-SIDE VIEW
+          </div>
+          <h2 style={{ margin: "4px 0 0" }}>Student Submission Preview</h2>
+        </div>
+        <ActionButton quiet onClick={onRefresh} disabled={studentAttachmentsLoading}>
+          {studentAttachmentsLoading ? "Refreshing..." : "Refresh"}
+        </ActionButton>
+      </div>
+
+      <section style={submissionPreviewSectionStyle}>
+        <h3 style={{ margin: "0 0 8px" }}>Assignment Instructions</h3>
+        <FormattedText
+          value={assignment?.description || assignment?.instructions}
+          fallback="No assignment instructions were provided."
+          style={submissionTextStyle}
+        />
+      </section>
+
+      <section style={submissionPreviewSectionStyle}>
+        <h3 style={{ margin: "0 0 8px" }}>Written Response</h3>
+        <div style={submissionTextStyle}>
+          {selectedRow?.content || "No written response was submitted."}
+        </div>
+      </section>
+
+      <section style={submissionPreviewSectionStyle}>
+        <h3 style={{ margin: "0 0 8px" }}>Uploaded Work</h3>
+        {studentAttachmentsLoading ? <div>Loading uploaded files...</div> : null}
+        {!studentAttachmentsLoading && studentAttachmentsMessage ? (
+          <div style={{ color: "#4b5563" }}>{studentAttachmentsMessage}</div>
+        ) : null}
+        {!studentAttachmentsLoading && studentAttachments.length > 0 ? (
+          <div style={{ display: "grid", gap: "14px" }}>
+            {studentAttachments.map((file, index) => {
+              const fileName =
+                file.original_name || file.file_name || file.filename || file.stored_name ||
+                `Uploaded file ${index + 1}`;
+              const filePath = file.file_path || file.url || "";
+              const href = filePath.startsWith("http")
+                ? filePath
+                : filePath
+                  ? `${API_BASE}${filePath}`
+                  : "";
+              const mimeType = String(file.mime_type || "").toLowerCase();
+              const extension = fileName.split(".").pop()?.toLowerCase() || "";
+              const isPdf = mimeType === "application/pdf" || extension === "pdf";
+              const isImage = mimeType.startsWith("image/");
+              const isAudio = mimeType.startsWith("audio/");
+              const isVideo = mimeType.startsWith("video/");
+              const canFrameText = mimeType.startsWith("text/") || ["txt", "html", "htm"].includes(extension);
+
+              return (
+                <div key={file.id || `${fileName}-${index}`} style={submissionFileCardStyle}>
+                  <div style={{ fontWeight: 900, overflowWrap: "anywhere" }}>{fileName}</div>
+                  <div style={{ color: "#4b5563", fontSize: "0.9rem" }}>
+                    {file.mime_type || "File"}
+                    {formatAttachmentSize(file.size_bytes || file.size)
+                      ? ` · ${formatAttachmentSize(file.size_bytes || file.size)}`
+                      : ""}
+                  </div>
+
+                  {href && isPdf ? (
+                    <iframe src={href} title={`Preview ${fileName}`} style={submissionDocumentFrameStyle} />
+                  ) : null}
+                  {href && canFrameText ? (
+                    <iframe src={href} title={`Preview ${fileName}`} style={submissionDocumentFrameStyle} />
+                  ) : null}
+                  {href && isImage ? (
+                    <img src={href} alt={fileName} style={submissionImageStyle} />
+                  ) : null}
+                  {href && isAudio ? <audio controls preload="metadata" src={href} style={{ width: "100%" }} /> : null}
+                  {href && isVideo ? <video controls preload="metadata" src={href} style={submissionVideoStyle} /> : null}
+
+                  {href ? (
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <a href={href} target="_blank" rel="noreferrer" style={teacherAttachmentLinkStyle}>
+                        Open File
+                      </a>
+                      <a href={href} download={fileName} style={teacherAttachmentLinkStyle}>
+                        Download
+                      </a>
+                    </div>
+                  ) : (
+                    <div style={{ color: "#4b5563", fontWeight: 800 }}>No file link</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+    </aside>
+  );
+}
+
 
 const inputStyle = {
   width: "100%",
@@ -2135,6 +2297,101 @@ const inputStyle = {
   borderRadius: "10px",
   fontSize: "1rem",
   boxSizing: "border-box",
+};
+
+const layoutButtonStyle = {
+  padding: "10px 14px",
+  borderRadius: "10px",
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#111827",
+  font: "inherit",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const activeLayoutButtonStyle = {
+  ...layoutButtonStyle,
+  border: "2px solid #111827",
+  background: "#111827",
+  color: "#ffffff",
+};
+
+const sideBySideGraderStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 440px), 1fr))",
+  gap: "20px",
+  alignItems: "start",
+};
+
+const submissionPreviewPanelStyle = {
+  minWidth: 0,
+  maxHeight: "calc(100vh - 32px)",
+  overflow: "auto",
+  position: "sticky",
+  top: "16px",
+  border: "2px solid #111827",
+  borderRadius: "16px",
+  padding: "16px",
+  background: "#f8fafc",
+  display: "grid",
+  gap: "14px",
+};
+
+const submissionPreviewHeaderStyle = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "start",
+  gap: "12px",
+  flexWrap: "wrap",
+};
+
+const submissionPreviewSectionStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: "12px",
+  padding: "14px",
+  background: "#ffffff",
+};
+
+const submissionTextStyle = {
+  color: "#111827",
+  lineHeight: 1.6,
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+};
+
+const submissionFileCardStyle = {
+  border: "1px solid #d7dce5",
+  borderRadius: "12px",
+  padding: "12px",
+  background: "#f8fafc",
+  display: "grid",
+  gap: "10px",
+};
+
+const submissionDocumentFrameStyle = {
+  width: "100%",
+  height: "min(58vh, 680px)",
+  minHeight: "420px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+};
+
+const submissionImageStyle = {
+  display: "block",
+  width: "100%",
+  maxHeight: "680px",
+  objectFit: "contain",
+  borderRadius: "10px",
+  background: "#ffffff",
+};
+
+const submissionVideoStyle = {
+  width: "100%",
+  maxHeight: "560px",
+  borderRadius: "10px",
+  background: "#000000",
 };
 
 const contextPillStyle = {
