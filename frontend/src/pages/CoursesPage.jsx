@@ -3120,14 +3120,32 @@ export default function CoursesPage() {
                       <div style={{ marginTop: "14px", display: "grid", gap: "8px" }}>
                         {(classResourcesByCourseId[contentCourseId] || []).length === 0 ? (
                           <div style={{ color: "#64748b" }}>No general class resources uploaded yet. Select Refresh Resources to check.</div>
-                        ) : (classResourcesByCourseId[contentCourseId] || []).map((resource) => (
-                          <div key={resource.id} style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", padding: "10px", border: "1px solid #d7dce5", borderRadius: "10px" }}>
-                            <a href={`${API_BASE}${resource.file_path}`} target="_blank" rel="noreferrer" style={{ fontWeight: 800 }}>{resource.original_name}</a>
-                            <button type="button" onClick={() => deleteClassResource(contentCourseId, resource.id)} disabled={deletingClassResourceId === resource.id} style={buttonStyle}>
-                              {deletingClassResourceId === resource.id ? "Removing..." : "Remove"}
-                            </button>
-                          </div>
-                        ))}
+                        ) : (classResourcesByCourseId[contentCourseId] || []).map((resource) => {
+                          const resourceName = resource.original_name || "Class resource"
+                          const resourceUrl = `${API_BASE}${resource.file_path}`
+                          const isPdf =
+                            String(resource.mime_type || "").toLowerCase() === "application/pdf" ||
+                            String(resourceName).toLowerCase().endsWith(".pdf")
+
+                          return (
+                            <div key={resource.id} style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center", padding: "10px", border: "1px solid #d7dce5", borderRadius: "10px", flexWrap: "wrap" }}>
+                              <div style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{resourceName}</div>
+                              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                                {isPdf ? (
+                                  <a href={`${resourceUrl}?view=1`} target="_blank" rel="noreferrer" style={{ ...buttonStyle, textDecoration: "none" }}>
+                                    Open PDF
+                                  </a>
+                                ) : null}
+                                <a href={resourceUrl} download={resourceName} style={{ ...buttonStyle, textDecoration: "none" }}>
+                                  Download
+                                </a>
+                                <button type="button" onClick={() => deleteClassResource(contentCourseId, resource.id)} disabled={deletingClassResourceId === resource.id} style={buttonStyle}>
+                                  {deletingClassResourceId === resource.id ? "Removing..." : "Remove"}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
 
