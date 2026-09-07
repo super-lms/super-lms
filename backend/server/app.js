@@ -5860,7 +5860,12 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         s.score,
         s.feedback,
         s.grade,
-        s.rubric_selection
+        s.rubric_selection,
+        EXISTS (
+          SELECT 1
+          FROM submission_attachments sa
+          WHERE sa.submission_id = s.id
+        ) AS has_attachment
       FROM submissions s
       INNER JOIN assignments a
         ON a.id = s.assignment_id
@@ -5901,8 +5906,10 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
     assignmentsResult.rows.forEach((assignment) => {
       const assignmentId = String(assignment.id);
       const submission = submissionsByAssignmentId[assignmentId] || null;
-      const hasSubmittedContent =
-        submission && String(submission.content || "").trim() !== "";
+      const hasSubmittedContent = Boolean(
+        submission &&
+          (String(submission.content || "").trim() || submission.has_attachment)
+      );
 
       submissionStatesByAssignmentId[assignmentId] = {
         assignment,
@@ -5978,7 +5985,12 @@ app.get(
           score,
           feedback,
           grade,
-          rubric_selection
+          rubric_selection,
+          EXISTS (
+            SELECT 1
+            FROM submission_attachments sa
+            WHERE sa.submission_id = submissions.id
+          ) AS has_attachment
         FROM submissions
         WHERE assignment_id = $1
           AND (student_id = $2 OR LOWER(student_email) = $3)
@@ -5988,8 +6000,10 @@ app.get(
       );
 
       const submission = submissionResult.rows[0] || null;
-      const hasSubmittedContent =
-        submission && String(submission.content || "").trim() !== "";
+      const hasSubmittedContent = Boolean(
+        submission &&
+          (String(submission.content || "").trim() || submission.has_attachment)
+      );
 
       return res.json({
         assignment: assignmentResult.rows[0],
@@ -6665,7 +6679,14 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         s.rubric_selection,
         CASE
           WHEN s.id IS NULL THEN 'None'
-          ELSE 'Submitted'
+          WHEN NULLIF(TRIM(s.content), '') IS NOT NULL
+            OR EXISTS (
+              SELECT 1
+              FROM submission_attachments sa
+              WHERE sa.submission_id = s.id
+            )
+          THEN 'Submitted'
+          ELSE 'None'
         END AS submission_status
       FROM assignments a
       JOIN class_enrollments ce
