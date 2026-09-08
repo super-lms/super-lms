@@ -108,6 +108,7 @@ export default function TeacherStudentViewPage() {
         if (!modulesResponse.ok) throw new Error(modulesData.error || "Could not load module preview")
         if (!cancelled) {
           setDashboard(data)
+          setClassResources(Array.isArray(data.class_resources) ? data.class_resources : [])
           setModules((modulesData || []).filter((module) => module.is_published))
         }
       } catch (err) {

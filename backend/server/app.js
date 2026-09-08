@@ -5897,6 +5897,17 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       [contentCourseId]
     );
 
+    const classResourcesResult = await pool.query(
+      `
+      SELECT id, course_id, original_name, mime_type, file_size, created_at,
+             '/course-resources/' || stored_name AS file_path
+      FROM course_resources
+      WHERE course_id = $1
+      ORDER BY created_at DESC, id DESC
+      `,
+      [contentCourseId]
+    );
+
     const submissionsByAssignmentId = {};
     submissionsResult.rows.forEach((submission) => {
       submissionsByAssignmentId[String(submission.assignment_id)] = submission;
@@ -5922,6 +5933,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       course: courseResult.rows[0],
       assignments: assignmentsResult.rows,
       lessons: lessonsResult.rows,
+      class_resources: classResourcesResult.rows,
       content_course_id: contentCourseId,
       submissionStatesByAssignmentId,
     });
@@ -10529,9 +10541,12 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
     );
 
     const teacher = teacherResult.rows[0];
-    coursesResult.rows = coursesResult.rows.filter((course) =>
-      shouldShowCourseForTeacher({ email: teacher.email, teacherId, course })
-    );
+    const viewerRole = String(req.user?.role || "").trim().toLowerCase();
+    if (viewerRole === "teacher") {
+      coursesResult.rows = coursesResult.rows.filter((course) =>
+        shouldShowCourseForTeacher({ email: teacher.email, teacherId, course })
+      );
+    }
 
     const teacherCourseIds = coursesResult.rows.map((course) => Number(course.id)).filter(Boolean);
 
