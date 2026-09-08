@@ -6,5 +6,11 @@ export async function openRtiStudentSupport() {
   const rtiUrl = import.meta.env.DEV && configuredUrl ? configuredUrl : productionUrl
   const popup = window.open(rtiUrl, "_blank", "noopener,noreferrer")
 
-  if (!popup) window.location.assign(rtiUrl)
+  if (popup) {
+    window.alert(
+      "RTI opened in a separate window. Please log out of RTI and close that window when finished."
+    )
+  } else {
+    window.location.assign(rtiUrl)
+  }
 }
