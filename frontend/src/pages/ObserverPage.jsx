@@ -206,7 +206,7 @@ export default function ObserverPage() {
 
   async function openRtiStudentSupport() {
     try {
-      await openRtiLogin()
+      await openRtiLogin("/observer")
     } catch (error) {
       window.alert(error.message)
     }

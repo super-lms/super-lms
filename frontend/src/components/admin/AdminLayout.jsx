@@ -31,7 +31,7 @@ export default function AdminLayout() {
 
   async function handleOpenRti() {
     try {
-      await openRtiStudentSupport()
+      await openRtiStudentSupport("/admin")
     } catch (error) {
       window.alert(error.message)
     }

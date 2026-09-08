@@ -41,7 +41,7 @@ export default function Layout() {
 
   async function handleOpenRti() {
     try {
-      await openRtiStudentSupport()
+      await openRtiStudentSupport("/dashboard")
     } catch (error) {
       window.alert(error.message)
     }
