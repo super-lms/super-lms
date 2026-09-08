@@ -64,16 +64,21 @@ function ObserverPermissionsPanel({
     );
 
     return sortedStudents.filter((student) => {
-      if (groupType === "grade" && groupValue) {
+      // A direct search by name, email, or student identifier should find any
+      // registered student, even when the student's directory grade/group data
+      // is missing or a group filter was left selected from an earlier search.
+      const applyGroupFilter = !cleanSearch;
+
+      if (applyGroupFilter && groupType === "grade" && groupValue) {
         const grade = student.current_grade ?? student.grade;
         if (String(grade ?? "") !== groupValue) return false;
       }
 
-      if (groupType === "homeroom" && groupValue) {
+      if (applyGroupFilter && groupType === "homeroom" && groupValue) {
         if (String(student.current_homeform || "") !== groupValue) return false;
       }
 
-      if (groupType === "course" && groupValue) {
+      if (applyGroupFilter && groupType === "course" && groupValue) {
         const matchesCourse = (Array.isArray(student.courses) ? student.courses : [])
           .some((course) => String(course?.id ?? "") === groupValue);
         if (!matchesCourse) return false;
