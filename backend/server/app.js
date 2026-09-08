@@ -2537,10 +2537,6 @@ app.delete("/api/lessons/:lessonId", authenticateJWT, requireRole("admin", "teac
 app.get("/api/rti/sso", authenticateJWT, async (req, res) => {
   try {
     const secret = getRtiSsoSecret();
-    if (!secret) {
-      return res.status(503).json({ error: "RTI single sign-on is not configured." });
-    }
-
     const result = await pool.query(
       `SELECT id, name, email, role, observer_relationship
        FROM users
@@ -2557,6 +2553,13 @@ app.get("/api/rti/sso", authenticateJWT, async (req, res) => {
       user.role === "observer" && user.observer_relationship === "chinese_homeroom_teacher";
     if (!isAdmin && !isTeacher && !isHomeroomTeacher) {
       return res.status(403).json({ error: "RTI access is limited to administrators and teachers." });
+    }
+
+    if (!secret) {
+      return res.json({
+        url: RTI_APP_URL,
+        authentication: "rti_staff_login",
+      });
     }
 
     const now = Math.floor(Date.now() / 1000);
