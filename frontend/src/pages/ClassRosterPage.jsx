@@ -80,7 +80,7 @@ export default function ClassRosterPage() {
     setStatusMessage("Loading class roster...");
 
     try {
-      const response = await authFetch(`/api/class-roster/${courseId}`);
+      const response = await authFetch(`/api/class-roster/${courseId}?scope=section`);
 
       if (!response.ok) {
         throw new Error("Failed to load class roster");
@@ -293,7 +293,7 @@ export default function ClassRosterPage() {
         let selectableCourses = visibleCourses;
         if (!requestedCourseMatch && preferredCourseId) {
           const rosterResponse = await authFetch(
-            `/api/class-roster/${preferredCourseId}`
+            `/api/class-roster/${preferredCourseId}?scope=section`
           );
 
           if (rosterResponse.ok) {

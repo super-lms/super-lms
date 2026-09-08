@@ -11106,6 +11106,7 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
 
     const course = courseResult.rows[0];
     const isMasterCourse = !course.master_course_id;
+    const exactSectionRoster = String(req.query.scope || "").toLowerCase() === "section";
     const sectionsResult = isMasterCourse
       ? await pool.query(
           `
@@ -11117,7 +11118,7 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
           [courseId]
         )
       : { rows: [] };
-    const rosterCourseIds = isMasterCourse && sectionsResult.rows.length > 0
+    const rosterCourseIds = isMasterCourse && !exactSectionRoster && sectionsResult.rows.length > 0
       ? [courseId, ...sectionsResult.rows.map((section) => Number(section.id))]
       : [courseId];
 
@@ -11153,7 +11154,7 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
 
     return res.json({
       course,
-      is_master_roster: isMasterCourse,
+      is_master_roster: isMasterCourse && !exactSectionRoster,
       sections: sectionsResult.rows,
       students: studentsResult.rows,
     });
