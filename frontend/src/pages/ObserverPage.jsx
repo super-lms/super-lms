@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
 import API_BASE from "../apiBase"
+import { openRtiStudentSupport as openRtiLogin } from "../services/openRti.js"
 
 function toArray(value) {
   return Array.isArray(value) ? value : []
@@ -189,13 +190,6 @@ export default function ObserverPage() {
   const [viewMode, setViewMode] = useState("dashboard")
   const [language, setLanguage] = useState("en")
   const t = translations[language] || translations.en
-  const rtiAppUrl = String(
-    import.meta.env.VITE_RTI_APP_URL ||
-      (import.meta.env.DEV
-        ? "http://localhost:5050"
-        : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
-  ).trim()
-
   const [homeroomRoster, setHomeroomRoster] = useState([])
   const [homeroomSearch, setHomeroomSearch] = useState("")
   const [homeroomGrade, setHomeroomGrade] = useState("")
@@ -210,8 +204,12 @@ export default function ObserverPage() {
     navigate("/login", { replace: true })
   }
 
-  function openRtiStudentSupport() {
-    window.open(rtiAppUrl, "_blank", "noopener,noreferrer")
+  async function openRtiStudentSupport() {
+    try {
+      await openRtiLogin()
+    } catch (error) {
+      window.alert(error.message)
+    }
   }
 
   useEffect(() => {

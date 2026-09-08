@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
+import { openRtiStudentSupport } from "../services/openRti.js"
 import { setWorkspaceMode } from "../services/workspaceMode"
 import {
   LayoutDashboard,
@@ -28,12 +29,6 @@ export default function Layout() {
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase()
   const dashboardPath = "/dashboard"
-  const rtiAppUrl = String(
-    import.meta.env.VITE_RTI_APP_URL ||
-      (import.meta.env.DEV
-        ? "http://localhost:5050"
-        : "https://repository-name-cbc-rti-paper-trail-production.up.railway.app")
-  ).trim()
   const canAccessRti = normalizedRole === "teacher" || normalizedRole === "admin"
   const currentCourseId = new URLSearchParams(location.search).get("courseId") || ""
   const courseContextQuery = currentCourseId
@@ -43,6 +38,14 @@ export default function Layout() {
   const isStudentRoute =
     location.pathname.startsWith("/student") &&
     !location.pathname.startsWith("/student-import")
+
+  async function handleOpenRti() {
+    try {
+      await openRtiStudentSupport()
+    } catch (error) {
+      window.alert(error.message)
+    }
+  }
 
   useEffect(() => {
     if (normalizedRole === "admin" && !isStudentRoute) {
@@ -264,14 +267,16 @@ export default function Layout() {
               Reports
             </NavItem>
 
-            {canAccessRti && rtiAppUrl ? (
-              <ExternalNavItem
-                href={rtiAppUrl}
-                style={getNavLinkStyle("__rti_external__")}
-                icon={ClipboardCheck}
+            {canAccessRti ? (
+              <button
+                type="button"
+                onClick={handleOpenRti}
+                style={{ ...getNavLinkStyle("__rti_external__"), width: "100%", cursor: "pointer", fontFamily: "inherit" }}
+                title="Open RTI / Student Support"
               >
-                RTI / Student Support
-              </ExternalNavItem>
+                <ClipboardCheck size={18} />
+                <span>RTI / Student Support</span>
+              </button>
             ) : null}
 
             <div
@@ -457,21 +462,6 @@ function NavItem({ to, style, icon: Icon, children }) {
       <Icon size={18} />
       <span>{children}</span>
     </Link>
-  )
-}
-
-function ExternalNavItem({ href, style, icon: Icon, children }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      title={typeof children === "string" ? `${children} (opens in a new tab)` : ""}
-      style={style}
-    >
-      <Icon size={18} />
-      <span>{children}</span>
-    </a>
   )
 }
 

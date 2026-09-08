@@ -1,24 +1,10 @@
-import authFetch from "./authFetch"
+const LIVE_RTI_URL = "https://repository-name-cbc-rti-paper-trail-production.up.railway.app"
 
 export async function openRtiStudentSupport() {
-  const popup = window.open("about:blank", "_blank")
+  const configuredUrl = String(import.meta.env.VITE_RTI_APP_URL || "").trim()
+  const productionUrl = configuredUrl.startsWith("https://") ? configuredUrl : LIVE_RTI_URL
+  const rtiUrl = import.meta.env.DEV && configuredUrl ? configuredUrl : productionUrl
+  const popup = window.open(rtiUrl, "_blank", "noopener,noreferrer")
 
-  try {
-    const response = await authFetch("/api/rti/sso")
-    const data = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      throw new Error(data.error || "Unable to open RTI / Student Support.")
-    }
-
-    if (!data.url) {
-      throw new Error("RTI / Student Support did not return a sign-in link.")
-    }
-
-    if (popup) popup.location.href = data.url
-    else window.location.assign(data.url)
-  } catch (error) {
-    if (popup) popup.close()
-    throw error
-  }
+  if (!popup) window.location.assign(rtiUrl)
 }
