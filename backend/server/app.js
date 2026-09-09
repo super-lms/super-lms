@@ -24,6 +24,7 @@ const {
 const {
   ensureCourseSectionStructure: ensureCourseSectionStructureWithPool,
   resolveContentCourseId: resolveContentCourseIdWithPool,
+  getApprovedSectionIdentity,
 } = require("./courseSections");
 const { shouldShowCourseForTeacher } = require("./teacherCourseVisibility");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
@@ -292,6 +293,45 @@ async function ensureAttendanceTables() {
 const ensureCourseSectionStructure = () => ensureCourseSectionStructureWithPool(pool);
 const resolveContentCourseId = (courseId, queryable = pool) =>
   resolveContentCourseIdWithPool(pool, courseId, queryable);
+
+async function studentHasLiveCourseAccess(studentUserId, contentCourseId) {
+  const result = await pool.query(
+    `SELECT 1
+     FROM class_enrollments ce
+     JOIN courses section_course ON section_course.id = ce.class_id
+     WHERE ce.student_user_id = $1
+       AND COALESCE(section_course.master_course_id, section_course.id) = $2
+       AND section_course.is_live = TRUE
+     LIMIT 1`,
+    [Number(studentUserId), Number(contentCourseId)]
+  );
+  return result.rows.length > 0;
+}
+
+async function learnerCanAccessCourse(req, requestedCourseId) {
+  const role = String(req.user?.role || "").toLowerCase();
+  if (["admin", "teacher"].includes(role)) return true;
+  const contentCourseId = await resolveContentCourseId(requestedCourseId);
+  if (!contentCourseId) return false;
+  if (role === "student") {
+    return studentHasLiveCourseAccess(req.user?.id, contentCourseId);
+  }
+  if (role === "observer") {
+    const result = await pool.query(
+      `SELECT 1
+       FROM observer_student_links osl
+       JOIN class_enrollments ce ON ce.student_user_id = osl.student_user_id
+       JOIN courses section_course ON section_course.id = ce.class_id
+       WHERE osl.observer_user_id = $1
+         AND section_course.is_live = TRUE
+         AND COALESCE(section_course.master_course_id, section_course.id) = $2
+       LIMIT 1`,
+      [Number(req.user?.id), contentCourseId]
+    );
+    return result.rows.length > 0;
+  }
+  return false;
+}
 
 async function ensureRubricFrameworkTables() {
   await pool.query(`
@@ -1944,6 +1984,7 @@ async function authorizeCourseModuleAccess(req, requestedCourseId) {
        JOIN courses c ON c.id = ce.class_id
        WHERE ce.student_user_id = $1
          AND (c.id = $2 OR COALESCE(c.master_course_id, c.id) = $3)
+         AND c.is_live = TRUE
        LIMIT 1`,
       [Number(req.user?.id), requestedId, contentCourseId]
     );
@@ -2122,7 +2163,11 @@ app.get(
   requireRole("admin", "teacher", "student", "observer"),
   async (req, res) => {
     try {
-      const courseId = await resolveContentCourseId(Number(req.params.courseId || 0));
+      const requestedCourseId = Number(req.params.courseId || 0);
+      if (!(await learnerCanAccessCourse(req, requestedCourseId))) {
+        return res.status(403).json({ error: "This course section is not live yet" });
+      }
+      const courseId = await resolveContentCourseId(requestedCourseId);
       if (!courseId) return res.status(400).json({ error: "Valid courseId is required" });
       const result = await pool.query(
         `SELECT id, course_id, original_name, mime_type, file_size, created_at,
@@ -2195,6 +2240,26 @@ app.delete(
 /* LESSONS API */
 app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
+    const viewerRole = String(req.user?.role || "").toLowerCase();
+    const learnerFilter = viewerRole === "student"
+      ? `WHERE EXISTS (
+           SELECT 1 FROM class_enrollments ce
+           JOIN courses section_course ON section_course.id = ce.class_id
+           WHERE ce.student_user_id = $1
+             AND section_course.is_live = TRUE
+             AND COALESCE(section_course.master_course_id, section_course.id) = l.course_id
+         )`
+      : viewerRole === "observer"
+        ? `WHERE EXISTS (
+             SELECT 1 FROM observer_student_links osl
+             JOIN class_enrollments ce ON ce.student_user_id = osl.student_user_id
+             JOIN courses section_course ON section_course.id = ce.class_id
+             WHERE osl.observer_user_id = $1
+               AND section_course.is_live = TRUE
+               AND COALESCE(section_course.master_course_id, section_course.id) = l.course_id
+           )`
+        : "";
+    const learnerParams = ["student", "observer"].includes(viewerRole) ? [Number(req.user.id)] : [];
     const result = await pool.query(`
       SELECT
         l.id,
@@ -2226,8 +2291,9 @@ app.get("/api/lessons", authenticateJWT, requireRole("admin", "teacher", "studen
       FROM lessons l
       LEFT JOIN courses c
         ON c.id = l.course_id
+      ${learnerFilter}
       ORDER BY c.title ASC NULLS LAST, l.order_index ASC, l.id ASC
-    `);
+    `, learnerParams);
 
     return res.json(result.rows);
   } catch (err) {
@@ -2654,6 +2720,15 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         c.master_course_id,
         c.master_title,
         c.section_code,
+        c.is_live,
+        c.access_updated_at,
+        c.access_updated_by,
+        COALESCE((
+          SELECT NULLIF(TRIM(CONCAT(access_user.first_name, ' ', access_user.last_name)), '')
+          FROM users access_user
+          WHERE access_user.id = c.access_updated_by
+          LIMIT 1
+        ), '') AS access_updated_by_name,
         COALESCE(c.master_course_id, c.id) AS content_course_id,
         c.created_at,
         ${teacherNameSql} AS teacher_name,
@@ -2680,6 +2755,9 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         c.master_course_id,
         c.master_title,
         c.section_code,
+        c.is_live,
+        c.access_updated_at,
+        c.access_updated_by,
         c.created_at,
         u.email${teacherGroupBySql}
       ORDER BY c.id ASC
@@ -3405,6 +3483,15 @@ app.get("/api/classes", authenticateJWT, requireRole("admin", "teacher"), async 
         c.master_course_id,
         c.master_title,
         c.section_code,
+        c.is_live,
+        c.access_updated_at,
+        c.access_updated_by,
+        COALESCE((
+          SELECT NULLIF(TRIM(CONCAT(access_user.first_name, ' ', access_user.last_name)), '')
+          FROM users access_user
+          WHERE access_user.id = c.access_updated_by
+          LIMIT 1
+        ), '') AS access_updated_by_name,
         COALESCE(c.master_course_id, c.id) AS content_course_id,
         c.created_at,
         COALESCE((
@@ -3517,6 +3604,7 @@ app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "s
       LEFT JOIN course_schedule_settings master_schedule
         ON master_schedule.course_id = c.master_course_id
       WHERE LOWER(u.email) = $1
+        AND c.is_live = TRUE
       ORDER BY c.title ASC, c.id ASC
       `,
       [studentEmail]
@@ -3529,6 +3617,80 @@ app.get("/api/students/:email/classes", authenticateJWT, requireRole("admin", "s
   }
 });
 
+/* CONTROL STUDENT ACCESS FOR ONE COURSE SECTION */
+app.put("/api/courses/:courseId/live-status", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    const isLive = req.body?.is_live;
+
+    if (!courseId) return res.status(400).json({ error: "Valid courseId is required" });
+    if (typeof isLive !== "boolean") return res.status(400).json({ error: "is_live must be true or false" });
+
+    const courseResult = await pool.query(
+      `SELECT id, title, teacher_id, master_course_id, section_code, is_live FROM courses WHERE id = $1 LIMIT 1`,
+      [courseId]
+    );
+    const course = courseResult.rows[0];
+    if (!course) return res.status(404).json({ error: "Course section not found" });
+
+    if (String(req.user?.role || "").toLowerCase() === "teacher") {
+      const accessResult = await pool.query(
+        `SELECT 1
+         FROM courses section_course
+         LEFT JOIN course_teachers direct_teacher
+           ON direct_teacher.course_id = section_course.id AND direct_teacher.teacher_id = $2
+         LEFT JOIN course_teachers master_teacher
+           ON master_teacher.course_id = COALESCE(section_course.master_course_id, section_course.id)
+          AND master_teacher.teacher_id = $2
+         WHERE section_course.id = $1
+           AND (section_course.teacher_id = $2 OR direct_teacher.id IS NOT NULL OR master_teacher.id IS NOT NULL)
+         LIMIT 1`,
+        [courseId, Number(req.user.id)]
+      );
+      if (accessResult.rows.length === 0) {
+        return res.status(403).json({ error: "You are not assigned to this course section" });
+      }
+    }
+
+    const activityResult = !isLive
+      ? await pool.query(
+          `SELECT COUNT(*)::int AS count
+           FROM submissions s
+           JOIN assignments a ON a.id = s.assignment_id
+           JOIN class_enrollments ce ON ce.student_user_id = s.student_id AND ce.class_id = $1
+           WHERE a.class_id = COALESCE((SELECT master_course_id FROM courses WHERE id = $1), $1)`,
+          [courseId]
+        )
+      : { rows: [{ count: 0 }] };
+
+    const result = await pool.query(
+      `UPDATE courses
+       SET is_live = $2, access_updated_at = NOW(), access_updated_by = $3, updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, title, master_course_id, section_code, is_live, access_updated_at, access_updated_by`,
+      [courseId, isLive, Number(req.user.id)]
+    );
+
+    const updaterResult = await pool.query(
+      `SELECT COALESCE(NULLIF(TRIM(CONCAT(first_name, ' ', last_name)), ''), email, '') AS name
+       FROM users WHERE id = $1 LIMIT 1`,
+      [Number(req.user.id)]
+    );
+
+    return res.json({
+      success: true,
+      course: {
+        ...result.rows[0],
+        access_updated_by_name: updaterResult.rows[0]?.name || "Current user",
+      },
+      existing_activity_count: Number(activityResult.rows[0]?.count || 0),
+    });
+  } catch (err) {
+    console.error("PUT /api/courses/:courseId/live-status failed:", err);
+    return res.status(500).json({ error: "Failed to update section availability" });
+  }
+});
+
 /* GET KDU CATEGORIES FOR COURSE */
 app.get("/api/courses/:courseId/categories", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
@@ -3536,6 +3698,9 @@ app.get("/api/courses/:courseId/categories", authenticateJWT, requireRole("admin
 
     if (!requestedCourseId) {
       return res.status(400).json({ error: "Valid courseId required" });
+    }
+    if (!(await learnerCanAccessCourse(req, requestedCourseId))) {
+      return res.status(403).json({ error: "This course section is not live yet" });
     }
     const courseId = await resolveContentCourseId(requestedCourseId);
     if (!courseId) return res.status(404).json({ error: "Course not found" });
@@ -4272,6 +4437,28 @@ app.get("/api/categories/:categoryId/subcategories", authenticateJWT, requireRol
 /* GET ASSIGNMENTS */
 app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "student", "observer"), async (req, res) => {
   try {
+    const viewerRole = String(req.user?.role || "").toLowerCase();
+    const learnerFilter = viewerRole === "student"
+      ? `AND a.is_published = TRUE
+         AND EXISTS (
+           SELECT 1 FROM class_enrollments ce
+           JOIN courses section_course ON section_course.id = ce.class_id
+           WHERE ce.student_user_id = $1
+             AND section_course.is_live = TRUE
+             AND COALESCE(section_course.master_course_id, section_course.id) = a.class_id
+         )`
+      : viewerRole === "observer"
+        ? `AND a.is_published = TRUE
+           AND EXISTS (
+             SELECT 1 FROM observer_student_links osl
+             JOIN class_enrollments ce ON ce.student_user_id = osl.student_user_id
+             JOIN courses section_course ON section_course.id = ce.class_id
+             WHERE osl.observer_user_id = $1
+               AND section_course.is_live = TRUE
+               AND COALESCE(section_course.master_course_id, section_course.id) = a.class_id
+           )`
+        : "";
+    const learnerParams = ["student", "observer"].includes(viewerRole) ? [Number(req.user.id)] : [];
     await pool.query(`
       ALTER TABLE assignments
       ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
@@ -4335,6 +4522,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
       LEFT JOIN submissions s
         ON s.assignment_id = a.id
       WHERE COALESCE(a.source_type, 'assignment') <> 'assessment'
+      ${learnerFilter}
       GROUP BY
         a.id,
         cs.name,
@@ -4342,7 +4530,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
         cc.weight_percent,
         cs.weight_percent_of_parent
       ORDER BY a.class_id ASC, a.sort_order ASC, a.id ASC
-    `);
+    `, learnerParams);
 
     return res.json(
       result.rows.map((assignment) => ({
@@ -4396,6 +4584,7 @@ async function getObserverStudents(observerEmail) {
       ON course_teacher.id = c.teacher_id
     WHERE LOWER(observer_user.email) = $1
       AND LOWER(COALESCE(u.role, '')) = 'student'
+      AND c.is_live = TRUE
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC
     `,
     [observerEmail]
@@ -4436,6 +4625,7 @@ async function getObserverStudents(observerEmail) {
       ON course_teacher.id = c.teacher_id
     WHERE LOWER(COALESCE(u.parent_email, '')) = $1
       AND LOWER(COALESCE(u.role, '')) = 'student'
+      AND c.is_live = TRUE
     ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, c.title ASC
     `,
     [observerEmail]
@@ -4756,6 +4946,14 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
           ON sa.submission_id = s.id
         WHERE u.id = ANY($1::int[])
           AND LOWER(COALESCE(u.role, '')) = 'student'
+          AND EXISTS (
+            SELECT 1
+            FROM class_enrollments live_enrollment
+            JOIN courses live_section ON live_section.id = live_enrollment.class_id
+            WHERE live_enrollment.student_user_id = u.id
+              AND live_section.is_live = TRUE
+              AND COALESCE(live_section.master_course_id, live_section.id) = a.class_id
+          )
         GROUP BY
           s.id,
           s.assignment_id,
@@ -4810,6 +5008,14 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
           ON sa.submission_id = s.id
         WHERE TRIM(ms.current_grade::TEXT) = '11'
           AND COALESCE(ms.student_email, '') <> ''
+          AND EXISTS (
+            SELECT 1
+            FROM class_enrollments live_enrollment
+            JOIN courses live_section ON live_section.id = live_enrollment.class_id
+            WHERE live_enrollment.student_user_id = u.id
+              AND live_section.is_live = TRUE
+              AND COALESCE(live_section.master_course_id, live_section.id) = a.class_id
+          )
         GROUP BY
           s.id,
           s.assignment_id,
@@ -5784,6 +5990,10 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       return res.status(404).json({ error: "Course not found" });
     }
 
+    if (viewerRole === "student" && courseResult.rows[0].is_live !== true) {
+      return res.status(403).json({ error: "This course section is not live yet" });
+    }
+
     if (viewerRole === "teacher") {
       const teacherCanViewCourse = shouldShowCourseForTeacher({
         email: viewerEmail,
@@ -5986,6 +6196,13 @@ app.get(
       );
       const studentUserId = Number(studentResult.rows[0]?.id || 0);
 
+      if (
+        String(req.user?.role || "").toLowerCase() === "student" &&
+        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+      ) {
+        return res.status(403).json({ error: "This course section is not live yet" });
+      }
+
       const submissionResult = await pool.query(
         `
         SELECT
@@ -6091,6 +6308,13 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
     if (assignmentResult.rows.length === 0) {
       return res.status(404).json({ error: "Assignment not found" });
+    }
+
+    if (
+      String(req.user?.role || "").toLowerCase() === "student" &&
+      !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+    ) {
+      return res.status(403).json({ error: "This course section is not live yet" });
     }
 
     const existingResult = existingAttachmentSubmissionResult;
@@ -6232,6 +6456,19 @@ app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, r
     );
     const studentUserId = Number(studentResult.rows[0]?.id || 0);
 
+    if (String(req.user?.role || "").toLowerCase() === "student") {
+      const assignmentResult = await pool.query(
+        `SELECT class_id FROM assignments WHERE id = $1 LIMIT 1`,
+        [assignmentId]
+      );
+      if (
+        !assignmentResult.rows[0] ||
+        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+      ) {
+        return res.status(403).json({ error: "This course section is not live yet" });
+      }
+    }
+
     const result = await pool.query(
       `
       SELECT
@@ -6311,6 +6548,14 @@ app.post(
       const studentUserId = Number(userResult.rows[0]?.id || 0);
       if (!studentUserId) {
         return res.status(404).json({ error: "Student user account not found" });
+      }
+
+      if (
+        String(req.user?.role || "").toLowerCase() === "student" &&
+        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+      ) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(403).json({ error: "This course section is not live yet" });
       }
 
       const submissionResult = await pool.query(
@@ -9631,6 +9876,7 @@ app.post("/api/courses", authenticateJWT, requireRole("admin", "teacher"), async
     const description = String(req.body.description || "").trim();
     const teacherEmail = String(req.body.teacher_email || "").trim().toLowerCase();
     const requestedCourseType = String(req.body.course_type || "custom_competency").trim();
+    const startsAsLive = !getApprovedSectionIdentity(title);
 
     const allowedCourseTypes = new Set([
       "english_11_template",
@@ -9676,11 +9922,11 @@ app.post("/api/courses", authenticateJWT, requireRole("admin", "teacher"), async
 
     const result = await client.query(
       `
-      INSERT INTO courses (course_name, title, description, teacher_id, course_type)
-      VALUES ($1, $1, $2, $3, $4)
-      RETURNING id, course_name, title, description, teacher_id, course_type, school_id, term_id, created_at
+      INSERT INTO courses (course_name, title, description, teacher_id, course_type, is_live)
+      VALUES ($1, $1, $2, $3, $4, $5)
+      RETURNING id, course_name, title, description, teacher_id, course_type, school_id, term_id, is_live, created_at
       `,
-      [title, description, teacherId, courseType]
+      [title, description, teacherId, courseType, startsAsLive]
     );
 
     const course = result.rows[0];
@@ -9788,9 +10034,9 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
 
     const newCourseResult = await client.query(
       `
-      INSERT INTO courses (title, description, teacher_id, course_type, school_id, term_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, title, description, teacher_id, course_type, school_id, term_id, created_at
+      INSERT INTO courses (title, description, teacher_id, course_type, school_id, term_id, is_live)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, title, description, teacher_id, course_type, school_id, term_id, is_live, created_at
       `,
       [
         newTitle,
@@ -9799,6 +10045,7 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
         sourceCourse.course_type || "custom_competency",
         sourceCourse.school_id || null,
         sourceCourse.term_id || null,
+        !getApprovedSectionIdentity(newTitle),
       ]
     );
 

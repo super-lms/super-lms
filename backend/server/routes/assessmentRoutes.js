@@ -498,6 +498,7 @@ async function isStudentEnrolled(studentUserId, courseId) {
     JOIN courses c ON c.id = ce.class_id
     WHERE ce.student_user_id = $1
       AND COALESCE(c.master_course_id, c.id) = $2
+      AND c.is_live = TRUE
     LIMIT 1
     `,
     [studentUserId, courseId]
@@ -730,6 +731,7 @@ router.get(
                FROM class_enrollments ce
                JOIN courses enrolled_course ON enrolled_course.id = ce.class_id
                WHERE ce.student_user_id = $1
+                 AND enrolled_course.is_live = TRUE
                  AND COALESCE(enrolled_course.master_course_id, enrolled_course.id) = a.course_id
              )`
           : role === "teacher"

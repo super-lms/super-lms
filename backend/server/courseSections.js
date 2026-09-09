@@ -40,6 +40,12 @@ async function ensureCourseSectionStructure(pool) {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS courses_master_course_id_idx ON courses(master_course_id)`);
   await pool.query(`
+    ALTER TABLE courses
+      ADD COLUMN IF NOT EXISTS is_live BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS access_updated_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS access_updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS course_teachers (
       id SERIAL PRIMARY KEY,
       course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,

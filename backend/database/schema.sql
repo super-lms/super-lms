@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS courses (
   master_course_id INTEGER REFERENCES courses(id) ON DELETE RESTRICT,
   master_title TEXT,
   section_code TEXT,
+  is_live BOOLEAN NOT NULL DEFAULT true,
+  access_updated_at TIMESTAMP,
+  access_updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -81,6 +81,7 @@ export default function CoursesPage() {
   const [savingCourseId, setSavingCourseId] = useState(null)
   const [duplicatingCourseId, setDuplicatingCourseId] = useState(null)
   const [savingTemplateCourseId, setSavingTemplateCourseId] = useState(null)
+  const [updatingLiveSectionId, setUpdatingLiveSectionId] = useState(null)
 
   const [showBulkRosterImport, setShowBulkRosterImport] = useState(false)
   const [bulkCsvText, setBulkCsvText] = useState(buildSampleCsv())
@@ -292,6 +293,47 @@ export default function CoursesPage() {
       setCourses([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function updateSectionLiveStatus(section, nextIsLive) {
+    const sectionName = section?.normalized_title || section?.title || "this section"
+    const activityWarning = nextIsLive
+      ? "Students in this section will be able to see all published Master Course content."
+      : "Students and observers will lose access, but enrollments, submissions, grades, feedback, and attendance will be preserved."
+    const confirmed = window.confirm(
+      `${nextIsLive ? "Make" : "Turn off"} ${sectionName}${nextIsLive ? " live" : ""}?\n\n${activityWarning}`
+    )
+
+    if (!confirmed) return
+
+    try {
+      setUpdatingLiveSectionId(section.id)
+      setMessage("")
+      setError("")
+      const res = await authFetch(`${API_BASE}/api/courses/${section.id}/live-status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_live: nextIsLive }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to update section availability")
+
+      setCourses((current) => current.map((course) =>
+        Number(course.id) === Number(section.id)
+          ? { ...course, ...data.course }
+          : course
+      ))
+      setMessage(
+        `${sectionName} is now ${nextIsLive ? "live for students" : "not live"}.` +
+        (!nextIsLive && Number(data.existing_activity_count || 0) > 0
+          ? " Existing student work and grades were preserved."
+          : "")
+      )
+    } catch (err) {
+      setError(err.message || "Failed to update section availability")
+    } finally {
+      setUpdatingLiveSectionId(null)
     }
   }
 
@@ -2985,9 +3027,65 @@ export default function CoursesPage() {
                       <div style={{ marginTop: "8px", color: "#334155", lineHeight: 1.45 }}>
                         The selected lettered section does not create a separate copy of the course content. It only chooses which students and records you are working with.
                       </div>
+                      <div style={{ marginTop: "14px", display: "grid", gap: "8px" }}>
+                        <div style={{ fontWeight: 900 }}>Student access by section</div>
+                        {(availableSections.length > 0 ? availableSections : [course]).map((section) => {
+                          const sectionIsLive = section.is_live !== false
+                          return (
+                            <div
+                              key={`live-status-${section.id}`}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "12px",
+                                flexWrap: "wrap",
+                                padding: "10px 12px",
+                                border: "1px solid #bfd2e4",
+                                borderRadius: "10px",
+                                background: "#ffffff",
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: 900 }}>{section.normalized_title || section.title}</div>
+                                <div style={{ color: sectionIsLive ? "#166534" : "#64748b", fontWeight: 800 }}>
+                                  {sectionIsLive ? "● Live for students" : "○ Not live — teacher access only"}
+                                </div>
+                                {section.access_updated_at ? (
+                                  <div style={{ marginTop: "3px", color: "#64748b", fontSize: "12px" }}>
+                                    Last changed {new Date(section.access_updated_at).toLocaleString()}
+                                    {section.access_updated_by_name ? ` by ${section.access_updated_by_name}` : ""}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => updateSectionLiveStatus(section, !sectionIsLive)}
+                                disabled={Number(updatingLiveSectionId) === Number(section.id)}
+                                style={{
+                                  ...buttonStyle,
+                                  background: sectionIsLive ? "#ffffff" : "#166534",
+                                  color: sectionIsLive ? "#111827" : "#ffffff",
+                                }}
+                              >
+                                {Number(updatingLiveSectionId) === Number(section.id)
+                                  ? "Updating..."
+                                  : sectionIsLive
+                                    ? "Turn Off"
+                                    : "Make Live"}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
                       {isMasterWorkspace ? (
                         <div style={{ marginTop: "8px", color: "#7a5a00", fontWeight: 800, lineHeight: 1.45 }}>
                           Choose a lettered section before using attendance, rosters, grading, submissions, or reports.
+                        </div>
+                      ) : null}
+                      {!isMasterWorkspace && course.is_live === false ? (
+                        <div style={{ marginTop: "12px", padding: "10px 12px", borderRadius: "10px", background: "#fff7d6", color: "#7a5a00", fontWeight: 900 }}>
+                          {course.normalized_title || course.title} is not live for students. You can continue building and previewing shared content.
                         </div>
                       ) : null}
                     </div>
