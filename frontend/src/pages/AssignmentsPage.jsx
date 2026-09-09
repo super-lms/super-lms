@@ -260,6 +260,7 @@ export default function AssignmentsPage() {
   const [description, setDescription] = useState("")
   const [availableFrom, setAvailableFrom] = useState("")
   const [dueDate, setDueDate] = useState("")
+  const [isPublished, setIsPublished] = useState(false)
 
   const [submissionText, setSubmissionText] = useState("")
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("")
@@ -299,6 +300,7 @@ export default function AssignmentsPage() {
   const [editDescription, setEditDescription] = useState("")
   const [editAvailableFrom, setEditAvailableFrom] = useState("")
   const [editDueDate, setEditDueDate] = useState("")
+  const [editIsPublished, setEditIsPublished] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
 
   const [classStudents, setClassStudents] = useState([])
@@ -336,6 +338,7 @@ export default function AssignmentsPage() {
     setDescription("")
     setAvailableFrom("")
     setDueDate("")
+    setIsPublished(false)
     setCsvImportText("")
     setCsvImportResult(null)
   }
@@ -346,6 +349,7 @@ export default function AssignmentsPage() {
     setEditDescription("")
     setEditAvailableFrom("")
     setEditDueDate("")
+    setEditIsPublished(false)
     setEditSaving(false)
   }
 
@@ -871,6 +875,7 @@ export default function AssignmentsPage() {
         description: sanitizeRichText(description),
         available_from: availableFrom || null,
         due_date: dueDate || null,
+        is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
       }),
     })
@@ -1001,6 +1006,7 @@ export default function AssignmentsPage() {
     setEditDescription(assignment.description || "")
     setEditAvailableFrom(assignment.available_from ? String(assignment.available_from).slice(0, 10) : "")
     setEditDueDate(assignment.due_date ? String(assignment.due_date).slice(0, 10) : "")
+    setEditIsPublished(assignment.is_published === true)
     setError("")
     setMessage("")
     setDeleteTargetAssignment(null)
@@ -1131,6 +1137,7 @@ export default function AssignmentsPage() {
         description: sanitizeRichText(editDescription),
         available_from: editAvailableFrom || null,
         due_date: editDueDate || null,
+        is_published: editIsPublished,
       }),
     })
       .then(async (res) => {
@@ -1927,6 +1934,18 @@ export default function AssignmentsPage() {
                             </InputBlock>
                           </div>
 
+                          <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "14px", border: "1px solid #d7dce5", borderRadius: "12px", background: isPublished ? "#f0fdf4" : "#f8fafc", cursor: "pointer" }}>
+                            <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} style={{ marginTop: "3px" }} />
+                            <span>
+                              <strong>Publish to Students</strong>
+                              <span style={{ display: "block", marginTop: "4px", color: "#4b5563", lineHeight: 1.4 }}>
+                                {isPublished
+                                  ? availableFrom ? "Students will see this assignment on the Available From date." : "Students can see this assignment immediately after it is saved."
+                                  : "This assignment will be saved as a draft and hidden from students."}
+                              </span>
+                            </span>
+                          </label>
+
                           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                             <ActionButton type="submit" disabled={!classHasCategories || assignmentCreating}>
                               {assignmentCreating ? "Saving..." : "Save & Continue Setup"}
@@ -2091,6 +2110,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                             <DetailCard key={assignment.id} title={assignment.title}>
                               <div style={{ display: "grid", gap: "8px" }}>
                                 <StatusPill label={statusLabel} />
+                                <StatusPill label={assignment.is_published === true ? "Published" : "Draft — Hidden from Students"} />
                                 <div>
                                   <strong>Due:</strong> {formatDate(assignment.due_date)}
                                 </div>
@@ -2152,6 +2172,10 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                     <InputBlock label="Due Date">
                                       <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} min={editAvailableFrom || undefined} />
                                     </InputBlock>
+                                    <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                                      <input type="checkbox" checked={editIsPublished} onChange={(e) => setEditIsPublished(e.target.checked)} />
+                                      <strong>Publish to Students</strong>
+                                    </label>
                                     <ActionButton onClick={() => saveEditedAssignment(assignment.id)} disabled={editSaving}>
                                       {editSaving ? "Saving..." : "Save Changes"}
                                     </ActionButton>

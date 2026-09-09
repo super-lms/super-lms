@@ -72,6 +72,7 @@ export default function EditAssignmentPage() {
   const [description, setDescription] = useState("");
   const [availableFrom, setAvailableFrom] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [isPublished, setIsPublished] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
 
@@ -239,6 +240,7 @@ export default function EditAssignmentPage() {
           ? String(foundAssignment.due_date).slice(0, 10)
           : ""
       );
+      setIsPublished(foundAssignment.is_published === true);
       setGeneratedRubricTitle(`${foundAssignment.title || "Assignment"} KDU Rubric`);
       setScoringMethod(foundAssignment.scoring_method || "rubric");
       setSingleScoreKnowPercent(String(foundAssignment.single_score_know_percent ?? 25));
@@ -710,6 +712,7 @@ export default function EditAssignmentPage() {
           description: cleanDescription,
           available_from: cleanAvailableFrom,
           due_date: cleanDueDate,
+          is_published: isPublished,
           subcategory_id: Number(selectedSubcategoryId),
           scoring_method: scoringMethod,
           single_score_know_percent: Number(singleScoreKnowPercent || 0),
@@ -732,6 +735,7 @@ export default function EditAssignmentPage() {
         description: cleanDescription,
         available_from: cleanAvailableFrom,
         due_date: cleanDueDate,
+        is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
         category_name: selectedCategory
           ? selectedCategory.name
@@ -1327,6 +1331,23 @@ export default function EditAssignmentPage() {
                   />
                 </div>
               </div>
+
+              <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "14px", border: "1px solid #d7dce5", borderRadius: "12px", background: isPublished ? "#f0fdf4" : "#f8fafc", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={isPublished}
+                  onChange={(e) => setIsPublished(e.target.checked)}
+                  style={{ marginTop: "3px" }}
+                />
+                <span>
+                  <strong>Publish to Students</strong>
+                  <span style={{ display: "block", marginTop: "4px", color: "#4b5563", lineHeight: 1.4 }}>
+                    {isPublished
+                      ? availableFrom ? "Students will see this assignment on the Available From date." : "Students can see this assignment once you save."
+                      : "Draft — hidden from students until you publish it."}
+                  </span>
+                </span>
+              </label>
             </div>
           </WorkflowStep>
 

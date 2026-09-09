@@ -5079,6 +5079,7 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
     `);
 
     const { class_id, teacher_id, title, description, available_from, due_date, subcategory_id } = req.body;
+    const isPublished = req.body.is_published === true;
 
     if (!class_id || !title || !subcategory_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -5108,9 +5109,9 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
 
     const result = await pool.query(
       `INSERT INTO assignments (class_id, teacher_id, title, description, available_from, due_date, subcategory_id, is_published, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING *`,
-      [contentCourseId, teacher_id, title, description, available_from || null, due_date || null, subcategory_id, sortOrder]
+      [contentCourseId, teacher_id, title, description, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder]
     );
 
     return res.json(result.rows[0]);
@@ -5417,6 +5418,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
     const description = String(req.body.description || "").trim();
     const availableFrom = req.body.available_from || null;
     const dueDate = req.body.due_date || null;
+    const isPublished = typeof req.body.is_published === "boolean" ? req.body.is_published : null;
     const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
 
     const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu"];
@@ -5495,8 +5497,9 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
           single_score_know_percent = $7,
           single_score_do_percent = $8,
           single_score_understand_percent = $9,
+          is_published = COALESCE($10, is_published),
           updated_at = NOW()
-      WHERE id = $10
+      WHERE id = $11
       RETURNING *
       `,
       [
@@ -5509,6 +5512,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
         singleScoreKnowPercent,
         singleScoreDoPercent,
         singleScoreUnderstandPercent,
+        isPublished,
         assignmentId,
       ]
     );
