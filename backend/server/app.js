@@ -6730,6 +6730,90 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
   }
 });
 
+/* SAVE TEACHER FEEDBACK */
+app.post("/api/assignments/:assignmentId/teacher-feedback", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const assignmentId = Number(req.params.assignmentId);
+    const studentEmail = String(req.body.student_email || "").trim().toLowerCase();
+    const feedback = String(req.body.feedback || "").trim();
+
+    if (!assignmentId) {
+      return res.status(400).json({ error: "Valid assignmentId is required" });
+    }
+
+    if (!studentEmail) {
+      return res.status(400).json({ error: "student_email is required" });
+    }
+
+    if (feedback.length > 5000) {
+      return res.status(400).json({ error: "Feedback must be 5000 characters or fewer" });
+    }
+
+    const assignmentResult = await pool.query(
+      `SELECT id, title, class_id, teacher_id FROM assignments WHERE id = $1 LIMIT 1`,
+      [assignmentId]
+    );
+
+    if (assignmentResult.rows.length === 0) {
+      return res.status(404).json({ error: "Assignment not found" });
+    }
+
+    const studentResult = await pool.query(
+      `SELECT id, name FROM users WHERE LOWER(email) = $1 AND role = 'student' LIMIT 1`,
+      [studentEmail]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(400).json({ error: "Student user account not found for this email" });
+    }
+
+    const assignment = assignmentResult.rows[0];
+    const existingResult = await pool.query(
+      `SELECT id FROM submissions WHERE assignment_id = $1 AND LOWER(student_email) = $2 LIMIT 1`,
+      [assignmentId, studentEmail]
+    );
+
+    let result;
+
+    if (existingResult.rows.length > 0) {
+      result = await pool.query(
+        `UPDATE submissions SET feedback = $1 WHERE id = $2 RETURNING *`,
+        [feedback, existingResult.rows[0].id]
+      );
+    } else {
+      result = await pool.query(
+        `
+        INSERT INTO submissions (
+          assignment_id, assignment_title, course_id, teacher_id, student_id,
+          student_name, student_email, original_file_name, stored_file_name,
+          file_path, content, feedback
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '', $11)
+        RETURNING *
+        `,
+        [
+          assignmentId,
+          String(assignment.title || "Untitled Assignment"),
+          Number(assignment.class_id),
+          Number(assignment.teacher_id),
+          studentResult.rows[0].id,
+          studentResult.rows[0].name || studentEmail,
+          studentEmail,
+          "Teacher feedback",
+          "Teacher feedback",
+          "teacher-feedback",
+          feedback,
+        ]
+      );
+    }
+
+    return res.json({ success: true, submission: result.rows[0] });
+  } catch (err) {
+    console.error("POST /api/assignments/:assignmentId/teacher-feedback failed:", err);
+    return res.status(500).json({ error: "Failed to save teacher feedback" });
+  }
+});
+
 /* SAVE KDU SCORES */
 app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
@@ -6742,6 +6826,8 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       ? null
       : Number(req.body.overallScore);
     const directPercentage = req.body.directPercentage === true;
+    const hasTeacherFeedback = Object.prototype.hasOwnProperty.call(req.body, "feedback");
+    const teacherFeedback = hasTeacherFeedback ? String(req.body.feedback || "").trim() : null;
 
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
@@ -6749,6 +6835,10 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
 
     if (!studentEmail) {
       return res.status(400).json({ error: "student_email is required" });
+    }
+
+    if (teacherFeedback !== null && teacherFeedback.length > 5000) {
+      return res.status(400).json({ error: "Feedback must be 5000 characters or fewer" });
     }
 
     const assignmentResult = await pool.query(
@@ -6894,7 +6984,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
 
     const existingResult = await pool.query(
       `
-      SELECT id
+      SELECT id, feedback
       FROM submissions
       WHERE assignment_id = $1
         AND LOWER(student_email) = $2
@@ -6904,6 +6994,9 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     );
 
     let result;
+    const feedbackToSave = hasTeacherFeedback
+      ? teacherFeedback
+      : existingResult.rows[0]?.feedback || saveFeedback;
 
     if (existingResult.rows.length > 0) {
       result = await pool.query(
@@ -6919,7 +7012,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
         [
           percentScore,
           `${percentScore}%`,
-          saveFeedback,
+          feedbackToSave,
           rubricSelection,
           existingResult.rows[0].id,
         ]
@@ -6961,7 +7054,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
           saveContent,
           percentScore,
           `${percentScore}%`,
-          saveFeedback,
+          feedbackToSave,
           rubricSelection,
         ]
       );

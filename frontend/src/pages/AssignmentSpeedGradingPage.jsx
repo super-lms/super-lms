@@ -232,6 +232,9 @@ export default function AssignmentSpeedGradingPage() {
   const [knowScore, setKnowScore] = useState("");
   const [understandScore, setUnderstandScore] = useState("");
   const [overallScore, setOverallScore] = useState("");
+  const [teacherFeedback, setTeacherFeedback] = useState("");
+  const [savingFeedback, setSavingFeedback] = useState(false);
+  const [feedbackSaveMessage, setFeedbackSaveMessage] = useState("");
   const [savingKduScores, setSavingKduScores] = useState(false);
   const [kduSaveMessage, setKduSaveMessage] = useState("");
   const [kduLastSavedAt, setKduLastSavedAt] = useState("");
@@ -637,7 +640,54 @@ export default function AssignmentSpeedGradingPage() {
       "";
 
     setOverallScore(savedOverallScore === null || savedOverallScore === undefined ? "" : String(savedOverallScore));
+    setTeacherFeedback(String(row?.feedback || ""));
+    setFeedbackSaveMessage("");
     setKduSaveMessage("");
+  }
+
+  async function saveTeacherFeedback(options = {}) {
+    if (!selectedRow?.student_email) {
+      setFeedbackSaveMessage("Select a student before saving feedback.");
+      return false;
+    }
+
+    try {
+      setSavingFeedback(true);
+      setFeedbackSaveMessage("Saving feedback...");
+
+      const res = await authFetch(
+        `${API_BASE}/api/assignments/${assignmentId}/teacher-feedback`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            student_email: selectedRow.student_email,
+            feedback: teacherFeedback,
+          }),
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save feedback");
+      }
+
+      setFeedbackSaveMessage(
+        String(teacherFeedback).trim() ? "Feedback saved ✓" : "Feedback cleared ✓"
+      );
+      await loadGradebook(
+        options.advanceToNextStudent
+          ? getNextUngradedStudentEmail() || getNextStudentEmail()
+          : selectedRow.student_email
+      );
+      return true;
+    } catch (error) {
+      console.error("Failed to save teacher feedback:", error);
+      setFeedbackSaveMessage(error.message || "Failed to save feedback.");
+      return false;
+    } finally {
+      setSavingFeedback(false);
+    }
   }
 
   useEffect(() => {
@@ -831,7 +881,7 @@ export default function AssignmentSpeedGradingPage() {
   async function saveKduScores(scoreOverrides = {}, toastTarget = null, options = {}) {
     if (!selectedRow?.student_email) {
       setKduSaveMessage("Select a student before saving KDU scores.");
-      return;
+      return false;
     }
 
     const nextDoScore = scoreOverrides.doScore ?? doScore;
@@ -849,7 +899,7 @@ export default function AssignmentSpeedGradingPage() {
       setKduSaveMessage(
         "Enter DO, KNOW, and UNDERSTAND scores before saving."
       );
-      return;
+      return false;
     }
 
     try {
@@ -864,6 +914,7 @@ export default function AssignmentSpeedGradingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           student_email: selectedRow.student_email,
+          feedback: teacherFeedback,
           doScore: toSafeScore(nextDoScore),
           knowScore: toSafeScore(nextKnowScore),
           understandScore: toSafeScore(nextUnderstandScore),
@@ -907,21 +958,36 @@ export default function AssignmentSpeedGradingPage() {
       if (options.goToDashboard) {
         navigate("/dashboard");
       }
+      return true;
     } catch (error) {
       console.error("Failed to save KDU scores:", error);
       setKduSaveMessage(error.message || "Failed to save KDU scores.");
+      return false;
     } finally {
       setSavingKduScores(false);
     }
   }
 
-  async function saveAndBackToDashboard() {
-    if (!selectedRow?.student_email) {
-      navigate("/dashboard");
+  async function saveAndBackToAssignments() {
+    const feedbackSaved = await saveTeacherFeedback();
+
+    if (!feedbackSaved) {
       return;
     }
 
-    await saveKduScores({}, null, { goToDashboard: true });
+    const scoresAreComplete = [doScore, knowScore, understandScore].every(
+      (value) => String(value ?? "").trim() !== ""
+    );
+
+    if (scoresAreComplete) {
+      const scoresSaved = await saveKduScores();
+
+      if (!scoresSaved) {
+        return;
+      }
+    }
+
+    backToAssignmentsPage();
   }
 
   const doCriterionText = getRubricCriterion(
@@ -1052,10 +1118,10 @@ export default function AssignmentSpeedGradingPage() {
     <div className="content-area">
       <div style={floatingDashboardButtonWrapStyle}>
         <ActionButton
-          onClick={async () => { await saveKduScores(); backToAssignmentsPage(); }}
-          disabled={savingKduScores}
+          onClick={saveAndBackToAssignments}
+          disabled={savingKduScores || savingFeedback}
         >
-          {savingKduScores ? "Saving..." : "Save & Back to Assignments"}
+          {savingKduScores || savingFeedback ? "Saving..." : "Save & Back to Assignments"}
         </ActionButton>
       </div>
 
@@ -1572,6 +1638,40 @@ export default function AssignmentSpeedGradingPage() {
                   <div style={{ marginBottom: "20px", fontSize: "1rem" }}>
                     <strong>Existing Feedback:</strong>
                     <div>{selectedRow.feedback || "No feedback yet."}</div>
+                  </div>
+
+                  <div style={teacherFeedbackPanelStyle}>
+                    <div>
+                      <h3 style={{ margin: "0 0 6px" }}>Teacher Feedback</h3>
+                      <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+                        Add a note the student can review—for example, explain that the uploaded document is incomplete or contains no completed work.
+                      </div>
+                    </div>
+
+                    <textarea
+                      value={teacherFeedback}
+                      onChange={(event) => {
+                        setTeacherFeedback(event.target.value);
+                        setFeedbackSaveMessage("");
+                      }}
+                      maxLength={5000}
+                      rows={5}
+                      placeholder="Example: The uploaded file appears to be the original document and does not contain completed work. Please finish the assignment and resubmit it."
+                      aria-label="Teacher feedback for this student"
+                      style={teacherFeedbackTextareaStyle}
+                    />
+
+                    <div style={teacherFeedbackActionsStyle}>
+                      <ActionButton
+                        onClick={() => saveTeacherFeedback()}
+                        disabled={savingFeedback}
+                      >
+                        {savingFeedback ? "Saving Feedback..." : "Save Feedback"}
+                      </ActionButton>
+                      <span style={{ color: "#4b5563", fontWeight: 700 }}>
+                        {feedbackSaveMessage || `${teacherFeedback.length}/5000 characters`}
+                      </span>
+                    </div>
                   </div>
 
                   {graderLayout === "detailed" ? <div
@@ -2297,6 +2397,31 @@ const inputStyle = {
   borderRadius: "10px",
   fontSize: "1rem",
   boxSizing: "border-box",
+};
+
+const teacherFeedbackPanelStyle = {
+  border: "2px solid #111827",
+  borderRadius: "14px",
+  padding: "16px",
+  background: "#f8fafc",
+  marginBottom: "20px",
+  display: "grid",
+  gap: "12px",
+};
+
+const teacherFeedbackTextareaStyle = {
+  ...inputStyle,
+  minHeight: "120px",
+  resize: "vertical",
+  lineHeight: 1.5,
+  background: "#ffffff",
+};
+
+const teacherFeedbackActionsStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  flexWrap: "wrap",
 };
 
 const layoutButtonStyle = {
