@@ -333,6 +333,12 @@ async function learnerCanAccessCourse(req, requestedCourseId) {
   return false;
 }
 
+function assignmentIsAvailableToStudents(assignment) {
+  if (!assignment || assignment.is_published !== true) return false;
+  if (!assignment.available_from) return true;
+  return new Date(assignment.available_from).getTime() <= Date.now();
+}
+
 async function ensureRubricFrameworkTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS main_competencies (
@@ -1055,6 +1061,7 @@ async function seedRubricDemoForClass(classId) {
         teacher_id,
         title,
         description,
+        available_from,
         due_date,
         subcategory_id,
         is_published
@@ -1432,6 +1439,8 @@ async function ensureCourseStructureTemplateTables() {
 
 
 async function ensureAssignmentSectionTables() {
+  await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS available_from TIMESTAMP`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assignment_sections (
       id SERIAL PRIMARY KEY,
@@ -4440,6 +4449,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
     const viewerRole = String(req.user?.role || "").toLowerCase();
     const learnerFilter = viewerRole === "student"
       ? `AND a.is_published = TRUE
+         AND (a.available_from IS NULL OR a.available_from <= NOW())
          AND EXISTS (
            SELECT 1 FROM class_enrollments ce
            JOIN courses section_course ON section_course.id = ce.class_id
@@ -4449,6 +4459,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
          )`
       : viewerRole === "observer"
         ? `AND a.is_published = TRUE
+           AND (a.available_from IS NULL OR a.available_from <= NOW())
            AND EXISTS (
              SELECT 1 FROM observer_student_links osl
              JOIN class_enrollments ce ON ce.student_user_id = osl.student_user_id
@@ -4465,7 +4476,8 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
       ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment'
+      ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment',
+      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP
     `);
 
     await pool.query(`
@@ -4946,6 +4958,7 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
           ON sa.submission_id = s.id
         WHERE u.id = ANY($1::int[])
           AND LOWER(COALESCE(u.role, '')) = 'student'
+          AND (a.available_from IS NULL OR a.available_from <= NOW())
           AND EXISTS (
             SELECT 1
             FROM class_enrollments live_enrollment
@@ -5008,6 +5021,7 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
           ON sa.submission_id = s.id
         WHERE TRIM(ms.current_grade::TEXT) = '11'
           AND COALESCE(ms.student_email, '') <> ''
+          AND (a.available_from IS NULL OR a.available_from <= NOW())
           AND EXISTS (
             SELECT 1
             FROM class_enrollments live_enrollment
@@ -5060,13 +5074,22 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
       ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
-      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25
+      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
+      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP
     `);
 
-    const { class_id, teacher_id, title, description, due_date, subcategory_id } = req.body;
+    const { class_id, teacher_id, title, description, available_from, due_date, subcategory_id } = req.body;
 
     if (!class_id || !title || !subcategory_id) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if ((available_from && Number.isNaN(Date.parse(available_from))) || (due_date && Number.isNaN(Date.parse(due_date)))) {
+      return res.status(400).json({ error: "Available From and Due Date must be valid dates" });
+    }
+
+    if (available_from && due_date && new Date(available_from) > new Date(due_date)) {
+      return res.status(400).json({ error: "Available From must be on or before the Due Date" });
     }
 
     const contentCourseId = await resolveContentCourseId(class_id);
@@ -5084,10 +5107,10 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
     const sortOrder = Number(sortResult.rows[0]?.next_sort_order || 1);
 
     const result = await pool.query(
-      `INSERT INTO assignments (class_id, teacher_id, title, description, due_date, subcategory_id, is_published, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,true,$7)
+      `INSERT INTO assignments (class_id, teacher_id, title, description, available_from, due_date, subcategory_id, is_published, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8)
        RETURNING *`,
-      [contentCourseId, teacher_id, title, description, due_date, subcategory_id, sortOrder]
+      [contentCourseId, teacher_id, title, description, available_from || null, due_date || null, subcategory_id, sortOrder]
     );
 
     return res.json(result.rows[0]);
@@ -5121,6 +5144,7 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         teacher_id,
         title,
         description,
+        available_from,
         due_date,
         subcategory_id,
         is_published
@@ -5147,11 +5171,12 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         teacher_id,
         title,
         description,
+        available_from,
         due_date,
         subcategory_id,
         is_published
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
       `,
       [
@@ -5159,6 +5184,7 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         source.teacher_id || null,
         newTitle,
         source.description || "",
+        source.available_from || null,
         source.due_date || null,
         source.subcategory_id || null,
         source.is_published === false ? false : true,
@@ -5389,6 +5415,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
     const assignmentId = Number(req.params.assignmentId);
     const title = String(req.body.title || "").trim();
     const description = String(req.body.description || "").trim();
+    const availableFrom = req.body.available_from || null;
     const dueDate = req.body.due_date || null;
     const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
 
@@ -5410,6 +5437,14 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
 
     if (!title) {
       return res.status(400).json({ error: "Assignment title is required" });
+    }
+
+    if ((availableFrom && Number.isNaN(Date.parse(availableFrom))) || (dueDate && Number.isNaN(Date.parse(dueDate)))) {
+      return res.status(400).json({ error: "Available From and Due Date must be valid dates" });
+    }
+
+    if (availableFrom && dueDate && new Date(availableFrom) > new Date(dueDate)) {
+      return res.status(400).json({ error: "Available From must be on or before the Due Date" });
     }
 
     if (
@@ -5453,19 +5488,21 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
       UPDATE assignments
       SET title = $1,
           description = $2,
-          due_date = $3,
-          subcategory_id = $4,
-          scoring_method = $5,
-          single_score_know_percent = $6,
-          single_score_do_percent = $7,
-          single_score_understand_percent = $8,
+          available_from = $3,
+          due_date = $4,
+          subcategory_id = $5,
+          scoring_method = $6,
+          single_score_know_percent = $7,
+          single_score_do_percent = $8,
+          single_score_understand_percent = $9,
           updated_at = NOW()
-      WHERE id = $9
+      WHERE id = $10
       RETURNING *
       `,
       [
         title,
         description,
+        availableFrom,
         dueDate,
         finalSubcategoryId,
         scoringMethod,
@@ -5752,9 +5789,10 @@ app.get(
           LEFT JOIN course_categories cc ON cc.id = cs.course_category_id
           WHERE a.class_id = $1
             AND COALESCE(a.source_type, 'assignment') <> 'assessment'
+            AND ($2::boolean OR (a.is_published = TRUE AND (a.available_from IS NULL OR a.available_from <= NOW())))
           ORDER BY COALESCE(a.sort_order, a.id), a.id
           `,
-          [contentCourseId]
+          [contentCourseId, String(req.user?.role || "").toLowerCase() === "admin"]
         ),
         pool.query(
           `
@@ -6057,9 +6095,10 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         ON cc.id = cs.course_category_id
       WHERE a.class_id = $1
         AND COALESCE(a.source_type, 'assignment') <> 'assessment'
+        AND ($2::boolean OR (a.is_published = TRUE AND (a.available_from IS NULL OR a.available_from <= NOW())))
       ORDER BY COALESCE(a.sort_order, a.id), a.id
       `,
-      [contentCourseId]
+      [contentCourseId, viewerRole !== "student"]
     );
 
     const submissionsResult = await pool.query(
@@ -6178,7 +6217,7 @@ app.get(
 
       const assignmentResult = await pool.query(
         `
-        SELECT id, class_id, title, description, due_date, subcategory_id
+        SELECT id, class_id, title, description, available_from, due_date, subcategory_id, is_published
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -6188,6 +6227,13 @@ app.get(
 
       if (assignmentResult.rows.length === 0) {
         return res.status(404).json({ error: "Assignment not found" });
+      }
+
+      if (
+        String(req.user?.role || "").toLowerCase() === "student" &&
+        !assignmentIsAvailableToStudents(assignmentResult.rows[0])
+      ) {
+        return res.status(403).json({ error: "This assignment is not available yet" });
       }
 
       const studentResult = await pool.query(
@@ -6298,7 +6344,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
     const assignmentResult = await pool.query(
       `
-      SELECT id, teacher_id, class_id, title, description, due_date, subcategory_id
+      SELECT id, teacher_id, class_id, title, description, available_from, due_date, subcategory_id, is_published
       FROM assignments
       WHERE id = $1
       LIMIT 1
@@ -6308,6 +6354,13 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
     if (assignmentResult.rows.length === 0) {
       return res.status(404).json({ error: "Assignment not found" });
+    }
+
+    if (
+      String(req.user?.role || "").toLowerCase() === "student" &&
+      !assignmentIsAvailableToStudents(assignmentResult.rows[0])
+    ) {
+      return res.status(403).json({ error: "This assignment is not available yet" });
     }
 
     if (
@@ -6458,11 +6511,11 @@ app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, r
 
     if (String(req.user?.role || "").toLowerCase() === "student") {
       const assignmentResult = await pool.query(
-        `SELECT class_id FROM assignments WHERE id = $1 LIMIT 1`,
+        `SELECT class_id, available_from, is_published FROM assignments WHERE id = $1 LIMIT 1`,
         [assignmentId]
       );
       if (
-        !assignmentResult.rows[0] ||
+        !assignmentIsAvailableToStudents(assignmentResult.rows[0]) ||
         !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
       ) {
         return res.status(403).json({ error: "This course section is not live yet" });
@@ -6529,7 +6582,7 @@ app.post(
 
       const assignmentResult = await pool.query(
         `
-        SELECT id, teacher_id, class_id, title
+        SELECT id, teacher_id, class_id, title, available_from, is_published
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -6552,7 +6605,8 @@ app.post(
 
       if (
         String(req.user?.role || "").toLowerCase() === "student" &&
-        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+        (!assignmentIsAvailableToStudents(assignmentResult.rows[0]) ||
+          !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id))))
       ) {
         fs.unlink(req.file.path, () => {});
         return res.status(403).json({ error: "This course section is not live yet" });
@@ -10129,7 +10183,7 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
 
     const assignmentResult = await client.query(
       `
-      SELECT id, teacher_id, title, description, due_date, subcategory_id, is_published
+      SELECT id, teacher_id, title, description, available_from, due_date, subcategory_id, is_published
       FROM assignments
       WHERE class_id = $1
       ORDER BY id ASC
@@ -10148,11 +10202,12 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
           teacher_id,
           title,
           description,
+          available_from,
           due_date,
           subcategory_id,
           is_published
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id
         `,
         [
@@ -10160,6 +10215,7 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
           assignment.teacher_id || sourceCourse.teacher_id || null,
           assignment.title,
           assignment.description || "",
+          assignment.available_from || null,
           assignment.due_date || null,
           newSubcategoryId,
           assignment.is_published === false ? false : true,

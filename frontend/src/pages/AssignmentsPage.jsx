@@ -258,6 +258,7 @@ export default function AssignmentsPage() {
 
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
+  const [availableFrom, setAvailableFrom] = useState("")
   const [dueDate, setDueDate] = useState("")
 
   const [submissionText, setSubmissionText] = useState("")
@@ -296,6 +297,7 @@ export default function AssignmentsPage() {
   const [editingAssignmentId, setEditingAssignmentId] = useState("")
   const [editTitle, setEditTitle] = useState("")
   const [editDescription, setEditDescription] = useState("")
+  const [editAvailableFrom, setEditAvailableFrom] = useState("")
   const [editDueDate, setEditDueDate] = useState("")
   const [editSaving, setEditSaving] = useState(false)
 
@@ -332,6 +334,7 @@ export default function AssignmentsPage() {
     setSelectedSubcategoryId("")
     setTitle("")
     setDescription("")
+    setAvailableFrom("")
     setDueDate("")
     setCsvImportText("")
     setCsvImportResult(null)
@@ -341,6 +344,7 @@ export default function AssignmentsPage() {
     setEditingAssignmentId("")
     setEditTitle("")
     setEditDescription("")
+    setEditAvailableFrom("")
     setEditDueDate("")
     setEditSaving(false)
   }
@@ -848,6 +852,11 @@ export default function AssignmentsPage() {
       return
     }
 
+    if (availableFrom && dueDate && availableFrom > dueDate) {
+      setError("Available From must be on or before the Due Date")
+      return
+    }
+
     setError("")
     setMessage("")
     setAssignmentCreating(true)
@@ -860,6 +869,7 @@ export default function AssignmentsPage() {
         teacher_id: user.id,
         title: title.trim(),
         description: sanitizeRichText(description),
+        available_from: availableFrom || null,
         due_date: dueDate || null,
         subcategory_id: Number(selectedSubcategoryId),
       }),
@@ -989,6 +999,7 @@ export default function AssignmentsPage() {
     setEditingAssignmentId(String(assignment.id))
     setEditTitle(assignment.title || "")
     setEditDescription(assignment.description || "")
+    setEditAvailableFrom(assignment.available_from ? String(assignment.available_from).slice(0, 10) : "")
     setEditDueDate(assignment.due_date ? String(assignment.due_date).slice(0, 10) : "")
     setError("")
     setMessage("")
@@ -1103,6 +1114,11 @@ export default function AssignmentsPage() {
       return
     }
 
+    if (editAvailableFrom && editDueDate && editAvailableFrom > editDueDate) {
+      setError("Available From must be on or before the Due Date")
+      return
+    }
+
     setEditSaving(true)
     setError("")
     setMessage("")
@@ -1113,6 +1129,7 @@ export default function AssignmentsPage() {
       body: JSON.stringify({
         title: String(editTitle || "").trim(),
         description: sanitizeRichText(editDescription),
+        available_from: editAvailableFrom || null,
         due_date: editDueDate || null,
       }),
     })
@@ -1901,9 +1918,14 @@ export default function AssignmentsPage() {
                             <RichTextEditor value={description} onChange={setDescription} placeholder="Enter assignment description." />
                           </InputBlock>
 
-                          <InputBlock label="Due Date">
-                            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                          </InputBlock>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                            <InputBlock label="Available From">
+                              <input type="date" value={availableFrom} onChange={(e) => setAvailableFrom(e.target.value)} />
+                            </InputBlock>
+                            <InputBlock label="Due Date">
+                              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} min={availableFrom || undefined} />
+                            </InputBlock>
+                          </div>
 
                           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                             <ActionButton type="submit" disabled={!classHasCategories || assignmentCreating}>
@@ -2083,6 +2105,9 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   <FormattedText value={assignment.description} fallback="No description" style={{ marginTop: "6px" }} />
                                 </div>
                                 <div>
+                                  <strong>Available:</strong> {assignment.available_from ? formatDate(assignment.available_from) : "Immediately"}
+                                </div>
+                                <div>
                                   <strong>Weight:</strong>{" "}
                                   {assignment.calculated_weight !== null && assignment.calculated_weight !== undefined
                                     ? formatPercent(assignment.calculated_weight)
@@ -2121,8 +2146,11 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                     <InputBlock label="Description">
                                       <RichTextEditor value={editDescription} onChange={setEditDescription} placeholder="Enter assignment description." />
                                     </InputBlock>
+                                    <InputBlock label="Available From">
+                                      <input type="date" value={editAvailableFrom} onChange={(e) => setEditAvailableFrom(e.target.value)} />
+                                    </InputBlock>
                                     <InputBlock label="Due Date">
-                                      <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                                      <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} min={editAvailableFrom || undefined} />
                                     </InputBlock>
                                     <ActionButton onClick={() => saveEditedAssignment(assignment.id)} disabled={editSaving}>
                                       {editSaving ? "Saving..." : "Save Changes"}

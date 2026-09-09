@@ -70,6 +70,7 @@ export default function EditAssignmentPage() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [availableFrom, setAvailableFrom] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
@@ -228,6 +229,11 @@ export default function EditAssignmentPage() {
       setAssignment(foundAssignment);
       setTitle(foundAssignment.title || "");
       setDescription(foundAssignment.description || "");
+      setAvailableFrom(
+        foundAssignment.available_from
+          ? String(foundAssignment.available_from).slice(0, 10)
+          : ""
+      );
       setDueDate(
         foundAssignment.due_date
           ? String(foundAssignment.due_date).slice(0, 10)
@@ -681,6 +687,11 @@ export default function EditAssignmentPage() {
       return;
     }
 
+    if (availableFrom && dueDate && availableFrom > dueDate) {
+      setError("Available From must be on or before the Due Date");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -688,6 +699,7 @@ export default function EditAssignmentPage() {
 
       const cleanTitle = String(title || "").trim();
       const cleanDescription = String(description || "").trim();
+      const cleanAvailableFrom = availableFrom || null;
       const cleanDueDate = dueDate || null;
 
       const res = await authFetch(`/api/assignments/${assignmentId}`, {
@@ -696,6 +708,7 @@ export default function EditAssignmentPage() {
         body: JSON.stringify({
           title: cleanTitle,
           description: cleanDescription,
+          available_from: cleanAvailableFrom,
           due_date: cleanDueDate,
           subcategory_id: Number(selectedSubcategoryId),
           scoring_method: scoringMethod,
@@ -717,6 +730,7 @@ export default function EditAssignmentPage() {
         id: assignment?.id || Number(assignmentId),
         title: cleanTitle,
         description: cleanDescription,
+        available_from: cleanAvailableFrom,
         due_date: cleanDueDate,
         subcategory_id: Number(selectedSubcategoryId),
         category_name: selectedCategory
@@ -730,6 +744,7 @@ export default function EditAssignmentPage() {
       setAssignment(refreshedAssignment);
       setTitle(cleanTitle);
       setDescription(cleanDescription);
+      setAvailableFrom(cleanAvailableFrom ? String(cleanAvailableFrom).slice(0, 10) : "");
       setDueDate(cleanDueDate ? String(cleanDueDate).slice(0, 10) : "");
       setGeneratedRubricTitle(`${cleanTitle || "Assignment"} KDU Rubric`);
       setMessage("Assignment updated successfully.");
@@ -1291,14 +1306,26 @@ export default function EditAssignmentPage() {
                 />
               </div>
 
-              <div>
-                <EditAssignmentFieldLabel>Due Date</EditAssignmentFieldLabel>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  style={inputStyle}
-                />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                <div>
+                  <EditAssignmentFieldLabel>Available From</EditAssignmentFieldLabel>
+                  <input
+                    type="date"
+                    value={availableFrom}
+                    onChange={(e) => setAvailableFrom(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <EditAssignmentFieldLabel>Due Date</EditAssignmentFieldLabel>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    min={availableFrom || undefined}
+                    style={inputStyle}
+                  />
+                </div>
               </div>
             </div>
           </WorkflowStep>
