@@ -4907,13 +4907,14 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
         COALESCE(
           MAX(CASE WHEN osl.relationship = 'chinese_homeroom_teacher' THEN 'chinese_homeroom_teacher' END),
           MAX(osl.relationship),
+          NULLIF(LOWER(TRIM(u.observer_relationship)), ''),
           'observer'
         ) AS relationship
       FROM users u
       LEFT JOIN observer_student_links osl
         ON osl.observer_user_id = u.id
       WHERE LOWER(u.email) = $1
-      GROUP BY u.id, u.first_name, u.last_name, u.email, u.role
+      GROUP BY u.id, u.first_name, u.last_name, u.email, u.role, u.observer_relationship
       LIMIT 1
       `,
       [observerEmail]

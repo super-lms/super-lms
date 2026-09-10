@@ -915,7 +915,7 @@ export default function ObserverPage() {
                 <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.viewFeedback}</div>
               </Card>
 
-              {observerData.observer?.relationship === "chinese_homeroom_teacher" ? (
+              {isChineseHomeroomTeacher ? (
                 <>
                   <Card onClick={openRtiStudentSupport}>
                     <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.rtiStudentSupport}</div>
