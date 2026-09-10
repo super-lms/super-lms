@@ -239,6 +239,7 @@ export default function AssignmentSpeedGradingPage() {
   const [knowScore, setKnowScore] = useState("");
   const [understandScore, setUnderstandScore] = useState("");
   const [overallScore, setOverallScore] = useState("");
+  const [pointsEarned, setPointsEarned] = useState("");
   const [teacherFeedback, setTeacherFeedback] = useState("");
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [feedbackSaveMessage, setFeedbackSaveMessage] = useState("");
@@ -647,6 +648,13 @@ export default function AssignmentSpeedGradingPage() {
       "";
 
     setOverallScore(savedOverallScore === null || savedOverallScore === undefined ? "" : String(savedOverallScore));
+    const totalPoints = Number(assignment?.points_possible || 100);
+    const earnedPoints = Number(savedOverallScore) * totalPoints / 100;
+    setPointsEarned(
+      savedOverallScore === "" || savedOverallScore === null || savedOverallScore === undefined
+        ? ""
+        : String(Number(earnedPoints.toFixed(4)))
+    );
     setTeacherFeedback(String(row?.feedback || ""));
     setFeedbackSaveMessage("");
     setKduSaveMessage("");
@@ -699,7 +707,7 @@ export default function AssignmentSpeedGradingPage() {
 
   useEffect(() => {
     loadKduScoresFromSelectedStudent(selectedRow);
-  }, [selectedRow?.student_email]);
+  }, [selectedRow?.student_email, assignment?.points_possible]);
 
   useEffect(() => {
     loadStudentAttachments(selectedRow?.student_email || "");
@@ -2092,29 +2100,40 @@ export default function AssignmentSpeedGradingPage() {
                           UNDERSTAND {Number(assignment?.single_score_understand_percent ?? 25)}%.
                         </div>
 
-                        <label style={{ display: "grid", gap: "6px", maxWidth: "260px" }}>
-                          <span style={{ fontWeight: 800 }}>Overall Score %</span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={overallScore}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              setOverallScore(value);
-
-                              const converted = convertOverallPercentToSixPointScore(value);
-
-                              if (converted !== "") {
-                                setDoScore(converted);
-                                setKnowScore(converted);
-                                setUnderstandScore(converted);
-                              }
-                            }}
-                            style={inputStyle}
-                            placeholder="Example: 84"
-                          />
-                        </label>
+                        <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
+                          <label style={{ display: "grid", gap: "6px", maxWidth: "180px" }}>
+                            <span style={{ fontWeight: 800 }}>Score Earned</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={Number(assignment?.points_possible || 100)}
+                              step="0.01"
+                              value={pointsEarned}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setPointsEarned(value);
+                                const total = Number(assignment?.points_possible || 100);
+                                const percent = value === "" || !total ? "" : String(Number(((Number(value) / total) * 100).toFixed(4)));
+                                setOverallScore(percent);
+                                const converted = convertOverallPercentToSixPointScore(percent);
+                                if (converted !== "") {
+                                  setDoScore(converted);
+                                  setKnowScore(converted);
+                                  setUnderstandScore(converted);
+                                }
+                              }}
+                              style={inputStyle}
+                              placeholder="Example: 14"
+                            />
+                          </label>
+                          <div style={{ paddingBottom: "11px", fontWeight: 900 }}>out of</div>
+                          <div style={{ padding: "10px 12px", minWidth: "90px", border: "1px solid #cbd5e1", borderRadius: "10px", background: "#f8fafc", fontWeight: 900 }}>
+                            {Number(assignment?.points_possible || 100)}
+                          </div>
+                        </div>
+                        <div style={{ color: "#4b5563", fontWeight: 700 }}>
+                          Calculated percentage: {overallScore === "" ? "—" : `${Number(overallScore).toFixed(2)}%`}
+                        </div>
 
                         <ActionButton
                           onClick={() => {
@@ -2126,7 +2145,7 @@ export default function AssignmentSpeedGradingPage() {
                               overallScore,
                             });
                           }}
-                          disabled={savingKduScores || overallScore === ""}
+                          disabled={savingKduScores || overallScore === "" || Number(pointsEarned) < 0 || Number(pointsEarned) > Number(assignment?.points_possible || 100)}
                         >
                           {savingKduScores ? "Saving One Score..." : "Save One Score"}
                         </ActionButton>

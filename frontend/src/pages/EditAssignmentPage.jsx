@@ -72,6 +72,7 @@ export default function EditAssignmentPage() {
   const [description, setDescription] = useState("");
   const [availableFrom, setAvailableFrom] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [pointsPossible, setPointsPossible] = useState("100");
   const [isPublished, setIsPublished] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
@@ -240,6 +241,7 @@ export default function EditAssignmentPage() {
           ? String(foundAssignment.due_date).slice(0, 10)
           : ""
       );
+      setPointsPossible(String(foundAssignment.points_possible || 100));
       setIsPublished(foundAssignment.is_published === true);
       setGeneratedRubricTitle(`${foundAssignment.title || "Assignment"} KDU Rubric`);
       setScoringMethod(foundAssignment.scoring_method || "rubric");
@@ -694,6 +696,12 @@ export default function EditAssignmentPage() {
       return;
     }
 
+
+    if (!Number.isFinite(Number(pointsPossible)) || Number(pointsPossible) <= 0) {
+      setError("Points Possible must be greater than 0");
+      return;
+    }
+
     try {
       setSaving(true);
       setError("");
@@ -712,6 +720,7 @@ export default function EditAssignmentPage() {
           description: cleanDescription,
           available_from: cleanAvailableFrom,
           due_date: cleanDueDate,
+          points_possible: Number(pointsPossible),
           is_published: isPublished,
           subcategory_id: Number(selectedSubcategoryId),
           scoring_method: scoringMethod,
@@ -735,6 +744,7 @@ export default function EditAssignmentPage() {
         description: cleanDescription,
         available_from: cleanAvailableFrom,
         due_date: cleanDueDate,
+        points_possible: Number(pointsPossible),
         is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
         category_name: selectedCategory
@@ -1311,6 +1321,17 @@ export default function EditAssignmentPage() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+                <div>
+                  <EditAssignmentFieldLabel>Points Possible</EditAssignmentFieldLabel>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={pointsPossible}
+                    onChange={(e) => setPointsPossible(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
                 <div>
                   <EditAssignmentFieldLabel>Available From</EditAssignmentFieldLabel>
                   <input

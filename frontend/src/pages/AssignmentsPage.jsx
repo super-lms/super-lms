@@ -260,6 +260,7 @@ export default function AssignmentsPage() {
   const [description, setDescription] = useState("")
   const [availableFrom, setAvailableFrom] = useState("")
   const [dueDate, setDueDate] = useState("")
+  const [pointsPossible, setPointsPossible] = useState("100")
   const [isPublished, setIsPublished] = useState(false)
 
   const [submissionText, setSubmissionText] = useState("")
@@ -300,6 +301,7 @@ export default function AssignmentsPage() {
   const [editDescription, setEditDescription] = useState("")
   const [editAvailableFrom, setEditAvailableFrom] = useState("")
   const [editDueDate, setEditDueDate] = useState("")
+  const [editPointsPossible, setEditPointsPossible] = useState("100")
   const [editIsPublished, setEditIsPublished] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
 
@@ -338,6 +340,7 @@ export default function AssignmentsPage() {
     setDescription("")
     setAvailableFrom("")
     setDueDate("")
+    setPointsPossible("100")
     setIsPublished(false)
     setCsvImportText("")
     setCsvImportResult(null)
@@ -349,6 +352,7 @@ export default function AssignmentsPage() {
     setEditDescription("")
     setEditAvailableFrom("")
     setEditDueDate("")
+    setEditPointsPossible("100")
     setEditIsPublished(false)
     setEditSaving(false)
   }
@@ -861,6 +865,11 @@ export default function AssignmentsPage() {
       return
     }
 
+    if (!Number.isFinite(Number(pointsPossible)) || Number(pointsPossible) <= 0) {
+      setError("Points Possible must be greater than 0")
+      return
+    }
+
     setError("")
     setMessage("")
     setAssignmentCreating(true)
@@ -875,6 +884,7 @@ export default function AssignmentsPage() {
         description: sanitizeRichText(description),
         available_from: availableFrom || null,
         due_date: dueDate || null,
+        points_possible: Number(pointsPossible),
         is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
       }),
@@ -1006,6 +1016,7 @@ export default function AssignmentsPage() {
     setEditDescription(assignment.description || "")
     setEditAvailableFrom(assignment.available_from ? String(assignment.available_from).slice(0, 10) : "")
     setEditDueDate(assignment.due_date ? String(assignment.due_date).slice(0, 10) : "")
+    setEditPointsPossible(String(assignment.points_possible || 100))
     setEditIsPublished(assignment.is_published === true)
     setError("")
     setMessage("")
@@ -1125,6 +1136,12 @@ export default function AssignmentsPage() {
       return
     }
 
+
+    if (!Number.isFinite(Number(editPointsPossible)) || Number(editPointsPossible) <= 0) {
+      setError("Points Possible must be greater than 0")
+      return
+    }
+
     setEditSaving(true)
     setError("")
     setMessage("")
@@ -1137,6 +1154,7 @@ export default function AssignmentsPage() {
         description: sanitizeRichText(editDescription),
         available_from: editAvailableFrom || null,
         due_date: editDueDate || null,
+        points_possible: Number(editPointsPossible),
         is_published: editIsPublished,
       }),
     })
@@ -1925,6 +1943,10 @@ export default function AssignmentsPage() {
                             <RichTextEditor value={description} onChange={setDescription} placeholder="Enter assignment description." />
                           </InputBlock>
 
+                          <InputBlock label="Points Possible">
+                            <input type="number" min="0.01" step="0.01" value={pointsPossible} onChange={(e) => setPointsPossible(e.target.value)} />
+                          </InputBlock>
+
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
                             <InputBlock label="Available From">
                               <input type="date" value={availableFrom} onChange={(e) => setAvailableFrom(e.target.value)} />
@@ -2115,6 +2137,9 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   <strong>Due:</strong> {formatDate(assignment.due_date)}
                                 </div>
                                 <div>
+                                  <strong>Points Possible:</strong> {Number(assignment.points_possible || 100)}
+                                </div>
+                                <div>
                                   <strong>Assessment Pathway:</strong> {assignment.category_name || "Not linked"}
                                 </div>
                                 <div>
@@ -2171,6 +2196,9 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                     </InputBlock>
                                     <InputBlock label="Due Date">
                                       <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} min={editAvailableFrom || undefined} />
+                                    </InputBlock>
+                                    <InputBlock label="Points Possible">
+                                      <input type="number" min="0.01" step="0.01" value={editPointsPossible} onChange={(e) => setEditPointsPossible(e.target.value)} />
                                     </InputBlock>
                                     <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
                                       <input type="checkbox" checked={editIsPublished} onChange={(e) => setEditIsPublished(e.target.checked)} />

@@ -1440,6 +1440,7 @@ async function ensureCourseStructureTemplateTables() {
 
 async function ensureAssignmentSectionTables() {
   await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS available_from TIMESTAMP`);
+  await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assignment_sections (
@@ -4477,7 +4478,8 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
       ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment',
-      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP
+      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
     `);
 
     await pool.query(`
@@ -5075,14 +5077,20 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
       ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
       ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP
+      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
     `);
 
     const { class_id, teacher_id, title, description, available_from, due_date, subcategory_id } = req.body;
     const isPublished = req.body.is_published === true;
+    const pointsPossible = Number(req.body.points_possible ?? 100);
 
     if (!class_id || !title || !subcategory_id) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    if (!Number.isFinite(pointsPossible) || pointsPossible <= 0) {
+      return res.status(400).json({ error: "Points Possible must be greater than 0" });
     }
 
     if ((available_from && Number.isNaN(Date.parse(available_from))) || (due_date && Number.isNaN(Date.parse(due_date)))) {
@@ -5108,10 +5116,10 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
     const sortOrder = Number(sortResult.rows[0]?.next_sort_order || 1);
 
     const result = await pool.query(
-      `INSERT INTO assignments (class_id, teacher_id, title, description, available_from, due_date, subcategory_id, is_published, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO assignments (class_id, teacher_id, title, description, points_possible, available_from, due_date, subcategory_id, is_published, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING *`,
-      [contentCourseId, teacher_id, title, description, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder]
+      [contentCourseId, teacher_id, title, description, pointsPossible, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder]
     );
 
     return res.json(result.rows[0]);
@@ -5145,6 +5153,7 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         teacher_id,
         title,
         description,
+        points_possible,
         available_from,
         due_date,
         subcategory_id,
@@ -5172,12 +5181,13 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         teacher_id,
         title,
         description,
+        points_possible,
         available_from,
         due_date,
         subcategory_id,
         is_published
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
       `,
       [
@@ -5185,6 +5195,7 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         source.teacher_id || null,
         newTitle,
         source.description || "",
+        Number(source.points_possible || 100),
         source.available_from || null,
         source.due_date || null,
         source.subcategory_id || null,
@@ -5419,6 +5430,9 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
     const availableFrom = req.body.available_from || null;
     const dueDate = req.body.due_date || null;
     const isPublished = typeof req.body.is_published === "boolean" ? req.body.is_published : null;
+    const pointsPossible = req.body.points_possible === undefined
+      ? null
+      : Number(req.body.points_possible);
     const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
 
     const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu"];
@@ -5439,6 +5453,10 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
 
     if (!title) {
       return res.status(400).json({ error: "Assignment title is required" });
+    }
+
+    if (pointsPossible !== null && (!Number.isFinite(pointsPossible) || pointsPossible <= 0)) {
+      return res.status(400).json({ error: "Points Possible must be greater than 0" });
     }
 
     if ((availableFrom && Number.isNaN(Date.parse(availableFrom))) || (dueDate && Number.isNaN(Date.parse(dueDate)))) {
@@ -5498,8 +5516,9 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
           single_score_do_percent = $8,
           single_score_understand_percent = $9,
           is_published = COALESCE($10, is_published),
+          points_possible = COALESCE($11, points_possible),
           updated_at = NOW()
-      WHERE id = $11
+      WHERE id = $12
       RETURNING *
       `,
       [
@@ -5513,6 +5532,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
         singleScoreDoPercent,
         singleScoreUnderstandPercent,
         isPublished,
+        pointsPossible,
         assignmentId,
       ]
     );
@@ -6955,6 +6975,7 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         title,
         description,
         due_date,
+        points_possible,
         scoring_method,
         single_score_know_percent,
         single_score_do_percent,
@@ -10198,7 +10219,7 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
 
     const assignmentResult = await client.query(
       `
-      SELECT id, teacher_id, title, description, available_from, due_date, subcategory_id, is_published
+      SELECT id, teacher_id, title, description, points_possible, available_from, due_date, subcategory_id, is_published
       FROM assignments
       WHERE class_id = $1
       ORDER BY id ASC
@@ -10217,12 +10238,13 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
           teacher_id,
           title,
           description,
+          points_possible,
           available_from,
           due_date,
           subcategory_id,
           is_published
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING id
         `,
         [
@@ -10230,6 +10252,7 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
           assignment.teacher_id || sourceCourse.teacher_id || null,
           assignment.title,
           assignment.description || "",
+          Number(assignment.points_possible || 100),
           assignment.available_from || null,
           assignment.due_date || null,
           newSubcategoryId,

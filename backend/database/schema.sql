@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   lesson_id INTEGER REFERENCES lessons(id) ON DELETE SET NULL,
   title VARCHAR(255) NOT NULL,
   description TEXT,
+  points_possible NUMERIC NOT NULL DEFAULT 100,
   available_from TIMESTAMP,
   due_date TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
