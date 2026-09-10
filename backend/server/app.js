@@ -7013,9 +7013,19 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         ON ce.class_id = $2
       JOIN users u
         ON u.id = ce.student_user_id
-      LEFT JOIN submissions s
-        ON s.assignment_id = a.id
-        AND LOWER(s.student_email) = LOWER(u.email)
+      LEFT JOIN LATERAL (
+        SELECT submission.*
+        FROM submissions submission
+        WHERE submission.assignment_id = a.id
+          AND (
+            submission.student_id = u.id
+            OR LOWER(submission.student_email) = LOWER(u.email)
+          )
+        ORDER BY
+          CASE WHEN submission.student_id = u.id THEN 0 ELSE 1 END,
+          submission.id DESC
+        LIMIT 1
+      ) s ON TRUE
       WHERE a.id = $1
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
       `,
@@ -7072,8 +7082,13 @@ app.post("/api/assignments/:assignmentId/teacher-feedback", authenticateJWT, req
 
     const assignment = assignmentResult.rows[0];
     const existingResult = await pool.query(
-      `SELECT id FROM submissions WHERE assignment_id = $1 AND LOWER(student_email) = $2 LIMIT 1`,
-      [assignmentId, studentEmail]
+      `SELECT id
+       FROM submissions
+       WHERE assignment_id = $1
+         AND (student_id = $2 OR LOWER(student_email) = $3)
+       ORDER BY CASE WHEN student_id = $2 THEN 0 ELSE 1 END, id DESC
+       LIMIT 1`,
+      [assignmentId, studentResult.rows[0].id, studentEmail]
     );
 
     let result;
@@ -7290,10 +7305,11 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       SELECT id, feedback
       FROM submissions
       WHERE assignment_id = $1
-        AND LOWER(student_email) = $2
+        AND (student_id = $2 OR LOWER(student_email) = $3)
+      ORDER BY CASE WHEN student_id = $2 THEN 0 ELSE 1 END, id DESC
       LIMIT 1
       `,
-      [assignmentId, studentEmail]
+      [assignmentId, studentUserId, studentEmail]
     );
 
     let result;
