@@ -267,6 +267,8 @@ export default function AssignmentsPage() {
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("")
   const [selectedFiles, setSelectedFiles] = useState([])
   const [studentSubmissions, setStudentSubmissions] = useState([])
+  const [submissionSaving, setSubmissionSaving] = useState(false)
+  const [submissionSaved, setSubmissionSaved] = useState(false)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -1310,6 +1312,8 @@ export default function AssignmentsPage() {
   function submitAssignment(e) {
     e.preventDefault()
 
+    if (submissionSaving || submissionSaved) return
+
     if (!selectedAssignmentId || !user?.name || !user?.email) {
       setError("Select an assignment")
       return
@@ -1322,6 +1326,7 @@ export default function AssignmentsPage() {
 
     setError("")
     setMessage("")
+    setSubmissionSaving(true)
 
     const formData = new FormData()
     formData.append("assignment_id", String(Number(selectedAssignmentId)))
@@ -1343,6 +1348,7 @@ export default function AssignmentsPage() {
         return data
       })
       .then(() => {
+        setSubmissionSaved(true)
         setSubmissionText("")
         setSelectedFiles([])
         const fileInput = document.getElementById("submission-file-input")
@@ -1352,6 +1358,9 @@ export default function AssignmentsPage() {
       })
       .catch((err) => {
         setError(err.message || "Failed to submit assignment")
+      })
+      .finally(() => {
+        setSubmissionSaving(false)
       })
   }
 
@@ -2227,7 +2236,16 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
             <form onSubmit={submitAssignment}>
               <div style={{ display: "grid", gap: "14px", maxWidth: "760px" }}>
                 <InputBlock label="Assignment">
-                  <select value={selectedAssignmentId} onChange={(e) => setSelectedAssignmentId(e.target.value)}>
+                  <select
+                    value={selectedAssignmentId}
+                    onChange={(e) => {
+                      setSelectedAssignmentId(e.target.value)
+                      setSubmissionSaved(false)
+                      setSubmissionSaving(false)
+                      setError("")
+                      setMessage("")
+                    }}
+                  >
                     <option value="">Select assignment</option>
                     {assignments.map((assignment) => (
                       <option key={assignment.id} value={assignment.id}>
@@ -2253,7 +2271,9 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                   />
                 </InputBlock>
 
-                <ActionButton type="submit">Submit Assignment</ActionButton>
+                <ActionButton type="submit" disabled={submissionSaving || submissionSaved}>
+                  {submissionSaving ? "Saving..." : submissionSaved ? "Submission Saved" : "Submit Assignment"}
+                </ActionButton>
               </div>
             </form>
           </DetailCard>
