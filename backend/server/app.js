@@ -7198,12 +7198,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       const value = Number(percent);
 
       if (!Number.isFinite(value)) return null;
-      if (value >= 92) return 6;
-      if (value >= 80) return 5;
-      if (value >= 67) return 4;
-      if (value >= 50) return 3;
-      if (value >= 35) return 2;
-      return 1;
+      return Number(((Math.min(100, Math.max(0, value)) / 100) * 6).toFixed(4));
     };
 
     const isSingleScoreKdu =

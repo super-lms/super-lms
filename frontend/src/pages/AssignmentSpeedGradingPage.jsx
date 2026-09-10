@@ -154,12 +154,7 @@ function convertOverallPercentToSixPointScore(percentValue) {
     return "";
   }
 
-  if (percent >= 92) return "6";
-  if (percent >= 80) return "5";
-  if (percent >= 67) return "4";
-  if (percent >= 50) return "3";
-  if (percent >= 35) return "2";
-  return "1";
+  return String(Number(((Math.min(100, Math.max(0, percent)) / 100) * 6).toFixed(4)));
 }
 
 function getRubricCriterion(criteria, bucket, fallback) {
@@ -204,8 +199,20 @@ function getSavedKduSummary(row) {
       rubricSelection.understand_score
   );
 
-  const scoreOutOfSix = doValue * 0.5 + knowValue * 0.25 + understandValue * 0.25;
-  const percent = getKduPercent(scoreOutOfSix);
+  const savedOverallPercent = Number(
+    rubricSelection.overallScore ?? rubricSelection.overall_score
+  );
+  const hasSavedOverallPercent =
+    Number.isFinite(savedOverallPercent) &&
+    savedOverallPercent >= 0 &&
+    savedOverallPercent <= 100;
+  const calculatedScoreOutOfSix = doValue * 0.5 + knowValue * 0.25 + understandValue * 0.25;
+  const scoreOutOfSix = hasSavedOverallPercent
+    ? (savedOverallPercent / 100) * 6
+    : calculatedScoreOutOfSix;
+  const percent = hasSavedOverallPercent
+    ? savedOverallPercent
+    : getKduPercent(scoreOutOfSix);
 
   return {
     isGraded: true,
@@ -2110,12 +2117,15 @@ export default function AssignmentSpeedGradingPage() {
                         </label>
 
                         <ActionButton
-                          onClick={() => saveKduScores({
-                            doScore: overallScore,
-                            knowScore: overallScore,
-                            understandScore: overallScore,
-                            overallScore,
-                          })}
+                          onClick={() => {
+                            const convertedScore = convertOverallPercentToSixPointScore(overallScore);
+                            saveKduScores({
+                              doScore: convertedScore,
+                              knowScore: convertedScore,
+                              understandScore: convertedScore,
+                              overallScore,
+                            });
+                          }}
                           disabled={savingKduScores || overallScore === ""}
                         >
                           {savingKduScores ? "Saving One Score..." : "Save One Score"}
