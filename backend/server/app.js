@@ -3674,7 +3674,7 @@ app.put("/api/courses/:courseId/live-status", authenticateJWT, requireRole("admi
 
     const result = await pool.query(
       `UPDATE courses
-       SET is_live = $2, access_updated_at = NOW(), access_updated_by = $3, updated_at = NOW()
+       SET is_live = $2, access_updated_at = NOW(), access_updated_by = $3
        WHERE id = $1
        RETURNING id, title, master_course_id, section_code, is_live, access_updated_at, access_updated_by`,
       [courseId, isLive, Number(req.user.id)]
