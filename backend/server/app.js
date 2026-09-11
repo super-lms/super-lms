@@ -3667,7 +3667,6 @@ app.put("/api/courses/:courseId/live-status", authenticateJWT, requireRole("admi
           `SELECT COUNT(*)::int AS count
            FROM submissions s
            JOIN assignments a ON a.id = s.assignment_id
-           JOIN class_enrollments ce ON ce.student_user_id = s.student_id AND ce.class_id = $1
            WHERE a.class_id = COALESCE((SELECT master_course_id FROM courses WHERE id = $1), $1)`,
           [courseId]
         )
