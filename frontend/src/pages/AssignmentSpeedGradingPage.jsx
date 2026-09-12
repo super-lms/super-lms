@@ -2359,11 +2359,12 @@ function SubmissionPreviewPanel({
   const activeMimeType = String(activeFile?.mime_type || "").toLowerCase();
   const activeExtension = activeFileName.split(".").pop()?.toLowerCase() || "";
   const isPdf = activeMimeType === "application/pdf" || activeExtension === "pdf";
+  const isDocx = activeMimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || activeExtension === "docx";
   const isImage = activeMimeType.startsWith("image/");
   const isAudio = activeMimeType.startsWith("audio/");
   const isVideo = activeMimeType.startsWith("video/");
   const canFrameText = activeMimeType.startsWith("text/") || ["txt", "html", "htm"].includes(activeExtension);
-  const canPreview = isPdf || isImage || isAudio || isVideo || canFrameText;
+  const canPreview = isPdf || isDocx || isImage || isAudio || isVideo || canFrameText;
 
   return (
     <aside style={submissionPreviewPanelStyle}>
@@ -2443,6 +2444,7 @@ function SubmissionPreviewPanel({
             </div>
 
             {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
+            {activeFileHref && isDocx ? <DocxPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isImage ? <img src={activeFileHref} alt={activeFileName} style={submissionImageStyle} /> : null}
             {activeFileHref && isAudio ? <audio controls preload="metadata" src={activeFileHref} style={{ width: "100%" }} /> : null}
@@ -2468,6 +2470,104 @@ function SubmissionPreviewPanel({
   );
 }
 
+function sanitizeDocxHtml(sourceHtml) {
+  if (typeof window === "undefined" || typeof window.DOMParser === "undefined") return "";
+
+  const allowedTags = new Set([
+    "A", "B", "BLOCKQUOTE", "BR", "EM", "H1", "H2", "H3", "H4", "H5", "H6",
+    "HR", "I", "IMG", "LI", "OL", "P", "PRE", "S", "STRONG", "SUB", "SUP",
+    "TABLE", "TBODY", "TD", "TFOOT", "TH", "THEAD", "TR", "U", "UL",
+  ]);
+  const documentNode = new window.DOMParser().parseFromString(`<div>${String(sourceHtml || "")}</div>`, "text/html");
+  const root = documentNode.body.firstElementChild;
+
+  Array.from(root.querySelectorAll("*")).reverse().forEach((element) => {
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      return;
+    }
+
+    const href = element.tagName === "A" ? String(element.getAttribute("href") || "") : "";
+    const src = element.tagName === "IMG" ? String(element.getAttribute("src") || "") : "";
+    const colspan = ["TD", "TH"].includes(element.tagName) ? element.getAttribute("colspan") : "";
+    const rowspan = ["TD", "TH"].includes(element.tagName) ? element.getAttribute("rowspan") : "";
+    Array.from(element.attributes).forEach((attribute) => element.removeAttribute(attribute.name));
+
+    if (element.tagName === "A" && /^(https?:|mailto:)/i.test(href)) {
+      element.setAttribute("href", href);
+      element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noreferrer");
+    }
+    if (element.tagName === "IMG" && /^data:image\/(?:png|gif|jpe?g|webp);base64,/i.test(src)) {
+      element.setAttribute("src", src);
+      element.setAttribute("alt", "Embedded document image");
+    }
+    if (colspan && /^\d+$/.test(colspan)) element.setAttribute("colspan", colspan);
+    if (rowspan && /^\d+$/.test(rowspan)) element.setAttribute("rowspan", rowspan);
+  });
+
+  return root.innerHTML;
+}
+
+function DocxPreview({ href, fileName }) {
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewStatus, setPreviewStatus] = useState("loading");
+  const [previewError, setPreviewError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setPreviewHtml("");
+    setPreviewStatus("loading");
+    setPreviewError("");
+
+    fetch(href, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("The Word document could not be downloaded for preview.");
+        return response.arrayBuffer();
+      })
+      .then(async (arrayBuffer) => {
+        const mammothModule = await import("mammoth");
+        const mammoth = mammothModule.default || mammothModule;
+        return mammoth.convertToHtml({ arrayBuffer });
+      })
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        const safeHtml = sanitizeDocxHtml(result.value);
+        if (!safeHtml.trim()) throw new Error("This Word document does not contain previewable content.");
+        setPreviewHtml(safeHtml);
+        setPreviewStatus("ready");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setPreviewError(error.message || "The Word document could not be previewed.");
+        setPreviewStatus("error");
+      });
+
+    return () => controller.abort();
+  }, [href]);
+
+  if (previewStatus === "loading") {
+    return <div style={docxPreviewMessageStyle}>Preparing Word document preview...</div>;
+  }
+
+  if (previewStatus === "error") {
+    return (
+      <div style={docxPreviewMessageStyle}>
+        <strong>Word preview unavailable.</strong>
+        <div>{previewError}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      aria-label={`Preview ${fileName}`}
+      style={docxPreviewStyle}
+      dangerouslySetInnerHTML={{ __html: previewHtml }}
+    />
+  );
+}
+
 const fileTabStyle = {
   border: "1px solid #cbd5e1",
   borderRadius: "8px",
@@ -2484,6 +2584,27 @@ const activeFileTabStyle = {
   borderColor: "#2563eb",
   background: "#eff6ff",
   color: "#1d4ed8",
+};
+
+const docxPreviewMessageStyle = {
+  padding: "28px 18px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+  textAlign: "center",
+  lineHeight: 1.6,
+};
+
+const docxPreviewStyle = {
+  minHeight: "420px",
+  maxHeight: "min(58vh, 680px)",
+  overflow: "auto",
+  padding: "28px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+  color: "#111827",
+  lineHeight: 1.55,
 };
 
 
