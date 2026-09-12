@@ -12164,11 +12164,20 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
       SELECT
         s.id AS submission_id,
         s.assignment_id,
+        s.student_id,
         LOWER(s.student_email) AS student_email,
         s.score,
         s.grade,
         s.feedback,
-        s.rubric_selection
+        s.rubric_selection,
+        (
+          NULLIF(TRIM(COALESCE(s.content, '')), '') IS NOT NULL
+          OR EXISTS (
+            SELECT 1
+            FROM submission_attachments sa
+            WHERE sa.submission_id = s.id
+          )
+        ) AS has_submitted_content
       FROM submissions s
       JOIN assignments a
         ON a.id = s.assignment_id
@@ -12181,9 +12190,15 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
 
     submissionsResult.rows.forEach((submission) => {
       submissionsByStudentAssignment.set(
-        `${String(submission.student_email || "").toLowerCase()}:${submission.assignment_id}`,
+        `email:${String(submission.student_email || "").toLowerCase()}:${submission.assignment_id}`,
         submission
       );
+      if (submission.student_id) {
+        submissionsByStudentAssignment.set(
+          `id:${submission.student_id}:${submission.assignment_id}`,
+          submission
+        );
+      }
     });
 
     let reportStudents = studentsResult.rows;
@@ -12211,6 +12226,11 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
     const students = reportStudents.map((student) => {
       const categoryTotals = {};
       let courseTotal = 0;
+      let gradedWeight = 0;
+      let totalWeight = 0;
+      let gradedAssignmentCount = 0;
+      let completedWeight = 0;
+      let completedAssignmentCount = 0;
 
       const assignments = assignmentsResult.rows
         .filter((assignment) => {
@@ -12225,9 +12245,13 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
           return categoryMatches && levelMatches;
         })
         .map((assignment) => {
-          const submission = submissionsByStudentAssignment.get(
-            `${String(student.student_email || "").toLowerCase()}:${assignment.assignment_id}`
-          );
+          const submission =
+            submissionsByStudentAssignment.get(
+              `id:${student.student_user_id}:${assignment.assignment_id}`
+            ) ||
+            submissionsByStudentAssignment.get(
+              `email:${String(student.student_email || "").toLowerCase()}:${assignment.assignment_id}`
+            );
 
           const numericScore =
             submission && submission.score !== null && submission.score !== undefined
@@ -12235,6 +12259,15 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
               : null;
 
           const weight = Number(assignment.calculated_weight_percent || 0);
+          totalWeight += weight;
+          if (numericScore !== null) {
+            gradedWeight += weight;
+            gradedAssignmentCount += 1;
+          }
+          if (submission && (submission.has_submitted_content || numericScore !== null)) {
+            completedWeight += weight;
+            completedAssignmentCount += 1;
+          }
           const contribution =
             numericScore === null ? 0 : Number(((numericScore * weight) / 100).toFixed(2));
 
@@ -12263,30 +12296,52 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
         roundedCategoryTotals[name] = Number(Number(value || 0).toFixed(2));
       });
 
+      const totalAssignmentCount = assignments.length;
+      const currentGrade = gradedAssignmentCount === 0
+        ? null
+        : gradedWeight > 0
+          ? Number(((courseTotal / gradedWeight) * 100).toFixed(2))
+          : Number((assignments.reduce((sum, item) => sum + (item.score === "" ? 0 : Number(item.score)), 0) / gradedAssignmentCount).toFixed(2));
+      const progressPercent = totalAssignmentCount === 0
+        ? 0
+        : totalWeight > 0
+          ? Number(((completedWeight / totalWeight) * 100).toFixed(2))
+          : Number(((completedAssignmentCount / totalAssignmentCount) * 100).toFixed(2));
+
       return {
         student_user_id: student.student_user_id,
         student_name: student.student_name,
         student_email: student.student_email,
         student_id: student.student_id,
         parent_email: student.parent_email,
+        current_grade: currentGrade,
+        progress_percent: progressPercent,
+        graded_assignment_count: gradedAssignmentCount,
+        completed_assignment_count: completedAssignmentCount,
+        total_assignment_count: totalAssignmentCount,
+        graded_weight: Number(gradedWeight.toFixed(2)),
+        total_weight: Number(totalWeight.toFixed(2)),
         course_total: Number(courseTotal.toFixed(2)),
         category_totals: roundedCategoryTotals,
         assignments,
       };
     });
 
-    const courseTotals = students.map((student) => Number(student.course_total || 0));
+    const currentGrades = students
+      .map((student) => student.current_grade)
+      .filter((value) => value !== null && value !== undefined)
+      .map(Number);
 
     const classSummary = {
       student_count: students.length,
       class_average:
-        courseTotals.length > 0
-          ? Number((courseTotals.reduce((sum, value) => sum + value, 0) / courseTotals.length).toFixed(2))
+        currentGrades.length > 0
+          ? Number((currentGrades.reduce((sum, value) => sum + value, 0) / currentGrades.length).toFixed(2))
           : 0,
       highest_grade:
-        courseTotals.length > 0 ? Number(Math.max(...courseTotals).toFixed(2)) : 0,
+        currentGrades.length > 0 ? Number(Math.max(...currentGrades).toFixed(2)) : 0,
       lowest_grade:
-        courseTotals.length > 0 ? Number(Math.min(...courseTotals).toFixed(2)) : 0,
+        currentGrades.length > 0 ? Number(Math.min(...currentGrades).toFixed(2)) : 0,
     };
 
     const uniqueCategories = [

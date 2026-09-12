@@ -632,11 +632,14 @@ function ReportsPage() {
     reportData.students.forEach((student) => {
       rows.push(["Student", student.student_name]);
       rows.push(["Student Email", student.student_email || ""]);
-      rows.push(["Course Total", student.course_total]);
+      rows.push(["Current Grade", student.current_grade ?? "Not enough graded work"]);
+      rows.push(["Course Progress", student.progress_percent ?? 0]);
+      rows.push(["Assignments Completed", `${student.completed_assignment_count ?? 0} of ${student.total_assignment_count ?? 0}`]);
+      rows.push(["Final Course Contribution", student.course_total]);
       rows.push([]);
 
-      rows.push(["Category Totals"]);
-      rows.push(["Category", "Total"]);
+      rows.push(["Category Contributions Toward Final Grade"]);
+      rows.push(["Category", "Contribution"]);
       Object.entries(student.category_totals || {}).forEach(([category, value]) => {
         rows.push([category, value]);
       });
@@ -782,9 +785,11 @@ function ReportsPage() {
           <section class="student-block">
             <h2>${escapeHtml(student.student_name)}</h2>
             <p><strong>Student Email:</strong> ${escapeHtml(student.student_email || "")}</p>
-            <p><strong>Course Total:</strong> ${escapeHtml(String(student.course_total))}%</p>
+            <p><strong>Current Grade:</strong> ${student.current_grade === null || student.current_grade === undefined ? "Not enough graded work" : `${escapeHtml(String(student.current_grade))}%`}</p>
+            <p><strong>Course Progress:</strong> ${escapeHtml(String(student.progress_percent ?? 0))}% (${escapeHtml(String(student.completed_assignment_count ?? 0))} of ${escapeHtml(String(student.total_assignment_count ?? 0))} assignments completed)</p>
+            <p><strong>Final Course Contribution:</strong> ${escapeHtml(String(student.course_total))}%</p>
 
-            <h3>Category Totals</h3>
+            <h3>Category Contributions Toward Final Grade</h3>
             <ul>${categoryTotalsHtml || "<li>No category totals</li>"}</ul>
 
             <h3>Assignments</h3>
@@ -1216,10 +1221,19 @@ function ReportsPage() {
                 <strong>Student Email:</strong> {student.student_email || "-"}
               </p>
               <p style={detailTextStyle}>
-                <strong>Course Total:</strong> {student.course_total}%
+                <strong>Current Grade:</strong>{" "}
+                {student.current_grade === null || student.current_grade === undefined
+                  ? "Not enough graded work"
+                  : `${student.current_grade}%`}
+              </p>
+              <p style={detailTextStyle}>
+                <strong>Course Progress:</strong> {student.progress_percent ?? 0}% ({student.completed_assignment_count ?? 0} of {student.total_assignment_count ?? 0} assignments completed)
+              </p>
+              <p style={detailTextStyle}>
+                <strong>Final Course Contribution:</strong> {student.course_total}%
               </p>
 
-              <h5 style={miniHeadingStyle}>Category Totals</h5>
+              <h5 style={miniHeadingStyle}>Category Contributions Toward Final Grade</h5>
               <ul style={listStyle}>
                 {Object.entries(student.category_totals).map(([category, value]) => (
                   <li key={category}>
