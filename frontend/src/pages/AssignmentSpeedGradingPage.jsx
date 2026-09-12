@@ -268,7 +268,9 @@ export default function AssignmentSpeedGradingPage() {
     try {
       return window.localStorage.getItem("super-lms-speedgrader-layout") === "side-by-side"
         ? "side-by-side"
-        : "detailed";
+        : window.localStorage.getItem("super-lms-speedgrader-layout") === "detailed"
+          ? "detailed"
+          : "side-by-side";
     } catch {
       return "detailed";
     }
@@ -2135,20 +2137,37 @@ export default function AssignmentSpeedGradingPage() {
                           Calculated percentage: {overallScore === "" ? "—" : `${Number(overallScore).toFixed(2)}%`}
                         </div>
 
-                        <ActionButton
-                          onClick={() => {
-                            const convertedScore = convertOverallPercentToSixPointScore(overallScore);
-                            saveKduScores({
-                              doScore: convertedScore,
-                              knowScore: convertedScore,
-                              understandScore: convertedScore,
-                              overallScore,
-                            });
-                          }}
-                          disabled={savingKduScores || overallScore === "" || Number(pointsEarned) < 0 || Number(pointsEarned) > Number(assignment?.points_possible || 100)}
-                        >
-                          {savingKduScores ? "Saving One Score..." : "Save One Score"}
-                        </ActionButton>
+                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                          <ActionButton
+                            onClick={() => {
+                              const convertedScore = convertOverallPercentToSixPointScore(overallScore);
+                              saveKduScores({
+                                doScore: convertedScore,
+                                knowScore: convertedScore,
+                                understandScore: convertedScore,
+                                overallScore,
+                              });
+                            }}
+                            disabled={savingKduScores || overallScore === "" || Number(pointsEarned) < 0 || Number(pointsEarned) > Number(assignment?.points_possible || 100)}
+                          >
+                            {savingKduScores ? "Saving One Score..." : "Save One Score"}
+                          </ActionButton>
+                          <ActionButton
+                            quiet
+                            onClick={() => {
+                              const convertedScore = convertOverallPercentToSixPointScore(overallScore);
+                              saveKduScores({
+                                doScore: convertedScore,
+                                knowScore: convertedScore,
+                                understandScore: convertedScore,
+                                overallScore,
+                              }, null, { advanceToNextStudent: true });
+                            }}
+                            disabled={savingKduScores || overallScore === "" || Number(pointsEarned) < 0 || Number(pointsEarned) > Number(assignment?.points_possible || 100)}
+                          >
+                            {savingKduScores ? "Saving..." : "Save & Next Student"}
+                          </ActionButton>
+                        </div>
                       </div>
                     ) : null}
 
@@ -2318,6 +2337,34 @@ function SubmissionPreviewPanel({
   studentAttachmentsMessage,
   onRefresh,
 }) {
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveFileIndex(0);
+  }, [
+    selectedRow?.student_email,
+    studentAttachments.map((file) => file.id || file.file_path || file.original_name).join("|"),
+  ]);
+
+  const activeFile = studentAttachments[activeFileIndex] || null;
+  const activeFileName = activeFile
+    ? activeFile.original_name || activeFile.file_name || activeFile.filename || activeFile.stored_name || `Uploaded file ${activeFileIndex + 1}`
+    : "";
+  const activeFilePath = activeFile?.file_path || activeFile?.url || "";
+  const activeFileHref = activeFilePath.startsWith("http")
+    ? activeFilePath
+    : activeFilePath
+      ? `${API_BASE}${activeFilePath}`
+      : "";
+  const activeMimeType = String(activeFile?.mime_type || "").toLowerCase();
+  const activeExtension = activeFileName.split(".").pop()?.toLowerCase() || "";
+  const isPdf = activeMimeType === "application/pdf" || activeExtension === "pdf";
+  const isImage = activeMimeType.startsWith("image/");
+  const isAudio = activeMimeType.startsWith("audio/");
+  const isVideo = activeMimeType.startsWith("video/");
+  const canFrameText = activeMimeType.startsWith("text/") || ["txt", "html", "htm"].includes(activeExtension);
+  const canPreview = isPdf || isImage || isAudio || isVideo || canFrameText;
+
   return (
     <aside style={submissionPreviewPanelStyle}>
       <div style={submissionPreviewHeaderStyle}>
@@ -2349,74 +2396,95 @@ function SubmissionPreviewPanel({
       </section>
 
       <section style={submissionPreviewSectionStyle}>
-        <h3 style={{ margin: "0 0 8px" }}>Uploaded Work</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+          <h3 style={{ margin: 0 }}>Uploaded Work</h3>
+          {studentAttachments.length > 1 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <ActionButton quiet onClick={() => setActiveFileIndex((current) => Math.max(0, current - 1))} disabled={activeFileIndex === 0}>
+                ← Previous File
+              </ActionButton>
+              <strong>{activeFileIndex + 1} of {studentAttachments.length}</strong>
+              <ActionButton quiet onClick={() => setActiveFileIndex((current) => Math.min(studentAttachments.length - 1, current + 1))} disabled={activeFileIndex >= studentAttachments.length - 1}>
+                Next File →
+              </ActionButton>
+            </div>
+          ) : null}
+        </div>
         {studentAttachmentsLoading ? <div>Loading uploaded files...</div> : null}
         {!studentAttachmentsLoading && studentAttachmentsMessage ? (
           <div style={{ color: "#4b5563" }}>{studentAttachmentsMessage}</div>
         ) : null}
         {!studentAttachmentsLoading && studentAttachments.length > 0 ? (
-          <div style={{ display: "grid", gap: "14px" }}>
-            {studentAttachments.map((file, index) => {
-              const fileName =
-                file.original_name || file.file_name || file.filename || file.stored_name ||
-                `Uploaded file ${index + 1}`;
-              const filePath = file.file_path || file.url || "";
-              const href = filePath.startsWith("http")
-                ? filePath
-                : filePath
-                  ? `${API_BASE}${filePath}`
-                  : "";
-              const mimeType = String(file.mime_type || "").toLowerCase();
-              const extension = fileName.split(".").pop()?.toLowerCase() || "";
-              const isPdf = mimeType === "application/pdf" || extension === "pdf";
-              const isImage = mimeType.startsWith("image/");
-              const isAudio = mimeType.startsWith("audio/");
-              const isVideo = mimeType.startsWith("video/");
-              const canFrameText = mimeType.startsWith("text/") || ["txt", "html", "htm"].includes(extension);
+          <div key={activeFile?.id || activeFileHref} style={submissionFileCardStyle}>
+            {studentAttachments.length > 1 ? (
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px" }}>
+                {studentAttachments.map((file, index) => {
+                  const name = file.original_name || file.file_name || file.filename || file.stored_name || `File ${index + 1}`;
+                  return (
+                    <button
+                      key={file.id || `${name}-${index}`}
+                      type="button"
+                      onClick={() => setActiveFileIndex(index)}
+                      style={index === activeFileIndex ? activeFileTabStyle : fileTabStyle}
+                    >
+                      {index + 1}. {name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
 
-              return (
-                <div key={file.id || `${fileName}-${index}`} style={submissionFileCardStyle}>
-                  <div style={{ fontWeight: 900, overflowWrap: "anywhere" }}>{fileName}</div>
-                  <div style={{ color: "#4b5563", fontSize: "0.9rem" }}>
-                    {file.mime_type || "File"}
-                    {formatAttachmentSize(file.size_bytes || file.size)
-                      ? ` · ${formatAttachmentSize(file.size_bytes || file.size)}`
-                      : ""}
-                  </div>
+            <div style={{ fontWeight: 900, overflowWrap: "anywhere" }}>{activeFileName}</div>
+            <div style={{ color: "#4b5563", fontSize: "0.9rem" }}>
+              {activeFile?.mime_type || "File"}
+              {formatAttachmentSize(activeFile?.size_bytes || activeFile?.size)
+                ? ` · ${formatAttachmentSize(activeFile?.size_bytes || activeFile?.size)}`
+                : ""}
+            </div>
 
-                  {href && isPdf ? (
-                    <iframe src={href} title={`Preview ${fileName}`} style={submissionDocumentFrameStyle} />
-                  ) : null}
-                  {href && canFrameText ? (
-                    <iframe src={href} title={`Preview ${fileName}`} style={submissionDocumentFrameStyle} />
-                  ) : null}
-                  {href && isImage ? (
-                    <img src={href} alt={fileName} style={submissionImageStyle} />
-                  ) : null}
-                  {href && isAudio ? <audio controls preload="metadata" src={href} style={{ width: "100%" }} /> : null}
-                  {href && isVideo ? <video controls preload="metadata" src={href} style={submissionVideoStyle} /> : null}
+            {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
+            {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
+            {activeFileHref && isImage ? <img src={activeFileHref} alt={activeFileName} style={submissionImageStyle} /> : null}
+            {activeFileHref && isAudio ? <audio controls preload="metadata" src={activeFileHref} style={{ width: "100%" }} /> : null}
+            {activeFileHref && isVideo ? <video controls preload="metadata" src={activeFileHref} style={submissionVideoStyle} /> : null}
 
-                  {href ? (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                      <a href={href} target="_blank" rel="noreferrer" style={teacherAttachmentLinkStyle}>
-                        Open File
-                      </a>
-                      <a href={href} download={fileName} style={teacherAttachmentLinkStyle}>
-                        Download
-                      </a>
-                    </div>
-                  ) : (
-                    <div style={{ color: "#4b5563", fontWeight: 800 }}>No file link</div>
-                  )}
-                </div>
-              );
-            })}
+            {activeFileHref && !canPreview ? (
+              <div style={{ padding: "28px 18px", border: "1px dashed #94a3b8", borderRadius: "12px", background: "#f8fafc", textAlign: "center", lineHeight: 1.6 }}>
+                <strong>Preview is not available for this file type.</strong>
+                <div style={{ color: "#4b5563" }}>Download the original or open it in a separate window to review it.</div>
+              </div>
+            ) : null}
+
+            {activeFileHref ? (
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <a href={activeFileHref} target="_blank" rel="noreferrer" style={teacherAttachmentLinkStyle}>Open in New Window</a>
+                <a href={activeFileHref} download={activeFileName} style={teacherAttachmentLinkStyle}>Download Original</a>
+              </div>
+            ) : <div style={{ color: "#4b5563", fontWeight: 800 }}>No file link</div>}
           </div>
         ) : null}
       </section>
     </aside>
   );
 }
+
+const fileTabStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: "8px",
+  padding: "7px 10px",
+  background: "#ffffff",
+  color: "#334155",
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+};
+
+const activeFileTabStyle = {
+  ...fileTabStyle,
+  borderColor: "#2563eb",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+};
 
 
 const inputStyle = {
