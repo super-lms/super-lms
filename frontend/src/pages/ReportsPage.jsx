@@ -509,38 +509,86 @@ function ReportsPage() {
 
     return {
       overallPercent: gradebookStudent?.current_percent ?? null,
+      assignmentScores,
       doAverage: averageScores(doScores),
       knowAverage: averageScores(knowScores),
       understandAverage: averageScores(understandScores),
     };
   }
 
+  function formatCommentPercent(value) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return "";
+    return Number.isInteger(numericValue) ? `${numericValue}%` : `${numericValue.toFixed(1)}%`;
+  }
+
+  function getAssignmentEvidence(performance) {
+    const assignments = Array.isArray(performance.assignmentScores)
+      ? performance.assignmentScores
+      : [];
+    const gradedAssignments = assignments
+      .filter((assignment) => assignment.score !== null && assignment.score !== undefined && assignment.score !== "" && Number.isFinite(Number(assignment.score)))
+      .map((assignment) => ({
+        title: String(assignment.assignment_title || "Untitled assignment"),
+        score: Number(assignment.score),
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    return {
+      totalCount: assignments.length,
+      gradedCount: gradedAssignments.length,
+      strongest: gradedAssignments[0] || null,
+      focus: gradedAssignments.length > 1
+        ? gradedAssignments[gradedAssignments.length - 1]
+        : gradedAssignments[0] || null,
+    };
+  }
+
   function buildStudentFriendlyDraftComments(student) {
     const performance = getStudentKduPerformance(student);
+    const evidence = getAssignmentEvidence(performance);
     const doLabel = getScoreLabel(performance.doAverage);
     const knowLabel = getScoreLabel(performance.knowAverage);
     const understandLabel = getScoreLabel(performance.understandAverage);
 
     const studentFirstName = String(student.student_name || "This student").split(" ")[0];
     const studentName = String(student.student_name || "This student");
+    const hasCurrentGrade = performance.overallPercent !== null &&
+      performance.overallPercent !== undefined &&
+      performance.overallPercent !== "" &&
+      Number.isFinite(Number(performance.overallPercent));
+    const currentGradeText = hasCurrentGrade
+      ? formatCommentPercent(performance.overallPercent)
+      : "not yet available";
+    const evidenceCountSentence = evidence.totalCount > 0
+      ? `grades recorded for ${evidence.gradedCount} of ${evidence.totalCount} assignments`
+      : "no assignments are currently available for reporting";
+    const strongestSentence = evidence.strongest
+      ? `The strongest recorded result is ${evidence.strongest.title} at ${formatCommentPercent(evidence.strongest.score)}.`
+      : "There is not yet enough graded assignment evidence to identify a performance strength.";
+    const focusSentence = evidence.focus
+      ? evidence.gradedCount > 1
+        ? `A useful next focus is ${evidence.focus.title}, currently at ${formatCommentPercent(evidence.focus.score)}.`
+        : `The next step is to build on the ${formatCommentPercent(evidence.focus.score)} result in ${evidence.focus.title} as more assignments are completed.`
+      : "The immediate next step is to complete and submit work so specific performance feedback can be provided.";
 
     if (commentTone === "parent") {
-      const com1 = `${studentName} is making progress in English Studies 12. Current evidence shows ${knowLabel.toLowerCase()} development in KNOW, ${doLabel.toLowerCase()} development in DO, and ${understandLabel.toLowerCase()} development in UNDERSTAND. Continued practice with evidence, explanation, and connecting ideas will support further growth.`;
-      const com2 = `Next step: encourage regular review, careful revision, and specific text evidence when explaining ideas.`;
+      const com1 = `${studentName} has ${evidenceCountSentence}, with a current grade of ${currentGradeText}. ${strongestSentence} Current KDU evidence is ${knowLabel.toLowerCase()} in KNOW, ${doLabel.toLowerCase()} in DO, and ${understandLabel.toLowerCase()} in UNDERSTAND.`;
+      const com2 = `${focusSentence} Continued regular review, careful revision, and specific evidence will support further growth.`;
 
       return { com1, com2 };
     }
 
     if (commentTone === "academic") {
-      const com1 = `${studentName} demonstrates ${knowLabel.toLowerCase()} achievement in knowledge and concepts, ${doLabel.toLowerCase()} achievement in applying skills and evidence, and ${understandLabel.toLowerCase()} achievement in explaining meaning and connections. Further growth should focus on precision, depth of analysis, and consistency across written responses.`;
-      const com2 = `Recommended focus: strengthen textual evidence, academic explanation, and revision for clarity and depth.`;
+      const com1 = `${studentName} has ${evidenceCountSentence}; the current grade is ${currentGradeText}. ${strongestSentence} Achievement is presently ${knowLabel.toLowerCase()} in KNOW, ${doLabel.toLowerCase()} in DO, and ${understandLabel.toLowerCase()} in UNDERSTAND.`;
+      const com2 = `${focusSentence} Recommended priorities are precision, depth of analysis, specific evidence, and consistent revision.`;
 
       return { com1, com2 };
     }
 
     if (commentTone === "supportive") {
-      const com1 = `${studentFirstName} is working on building confidence in KNOW, DO, and UNDERSTAND. The current evidence shows ${knowLabel.toLowerCase()} progress in KNOW, ${doLabel.toLowerCase()} progress in DO, and ${understandLabel.toLowerCase()} progress in UNDERSTAND. With support and practice, ${studentFirstName} can continue improving.`;
-      const com2 = `Next step: focus on one clear idea, use one strong piece of evidence, and explain how it connects to the answer.`;
+      const com1 = `${studentFirstName} has ${evidenceCountSentence}, and the current grade is ${currentGradeText}. ${strongestSentence} With support and practice, ${studentFirstName} can continue building confidence.`;
+      const com2 = `${focusSentence} Focus on one clear idea, one strong piece of evidence, and an explanation of how it connects to the answer.`;
 
       return { com1, com2 };
     }
@@ -557,9 +605,9 @@ function ReportsPage() {
       strengthSentence = `${studentFirstName} is beginning to work toward the course expectations and benefits from guided support and repeated practice.`;
     }
 
-    const com1 = `${strengthSentence} In KNOW, the current level is ${knowLabel.toLowerCase()}; in DO, the current level is ${doLabel.toLowerCase()}; and in UNDERSTAND, the current level is ${understandLabel.toLowerCase()}. The next step is to keep strengthening evidence, explanation, and connections between ideas.`;
+    const com1 = `${strengthSentence} ${studentFirstName} has ${evidenceCountSentence}, with a current grade of ${currentGradeText}. ${strongestSentence} In KNOW, the current level is ${knowLabel.toLowerCase()}; in DO, it is ${doLabel.toLowerCase()}; and in UNDERSTAND, it is ${understandLabel.toLowerCase()}.`;
 
-    const com2 = `Next step: continue using specific evidence, clear explanations, and careful revision to improve confidence and consistency.`;
+    const com2 = `${focusSentence} Continue using specific evidence, clear explanations, and careful revision to improve confidence and consistency.`;
 
     return { com1, com2 };
   }
@@ -1046,7 +1094,7 @@ function ReportsPage() {
           <div>
             <h2 style={sectionTitleStyle}>Report Card Comments (Com1 / Com2)</h2>
             <p style={commentHelpTextStyle}>
-              Generate editable student-friendly draft comments from KDU performance, then export them to WebTESS.
+              Generate editable, evidence-based draft comments from assignment completion, recorded grades, and KDU performance, then export them to WebTESS.
             </p>
           </div>
 
