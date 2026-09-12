@@ -12688,6 +12688,13 @@ function escapeCsvValue(value) {
   return text;
 }
 
+function escapeWebtessTextValue(value) {
+  return String(value ?? "")
+    .replace(/[\t\r\n]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function roundSchoolMark(value) {
   const numericValue = Number(value);
 
@@ -12807,7 +12814,7 @@ app.put("/api/classes/:classId/report-comments/:studentUserId", authenticateJWT,
   }
 });
 
-/* EXPORT WEBTESS / MINISTRY MARKS CSV */
+/* EXPORT WEBTESS / MINISTRY MARKS TAB-DELIMITED TEXT */
 app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
@@ -12896,8 +12903,8 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       );
     }
 
-    const csvRows = [
-      ["Student ID", "Mark", "Work", "Att", "Com1", "Com2"],
+    const webtessRows = [
+      ["StudentID", "Mark", "Work", "Abs", "Com1", "Com2"],
     ];
 
     for (const student of studentsResult.rows) {
@@ -12947,7 +12954,7 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       const currentPercent = gradedWeight > 0 ? (earnedCoursePoints / gradedWeight) * 100 : null;
       const mark = currentPercent === null ? "" : roundSchoolMark(currentPercent);
 
-      csvRows.push([
+      webtessRows.push([
         student.student_id || "",
         mark,
         "",
@@ -12957,25 +12964,25 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       ]);
     }
 
-    const csvText = csvRows
-      .map((row) => row.map(escapeCsvValue).join(","))
-      .join("\n");
+    const webtessText = webtessRows
+      .map((row) => row.map(escapeWebtessTextValue).join("\t"))
+      .join("\r\n");
 
     const safeClassTitle = String(classResult.rows[0].title || "class")
       .replace(/[^a-z0-9]+/gi, "-")
       .replace(/^-+|-+$/g, "")
       .toLowerCase();
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${safeClassTitle || "class"}-webtess-marks.csv"`
+      `attachment; filename="${safeClassTitle || "class"}-webtess-marks.txt"`
     );
 
-    return res.send(csvText);
+    return res.send(webtessText);
   } catch (err) {
     console.error("GET /api/classes/:classId/webtess-marks-csv failed:", err);
-    return res.status(500).json({ error: "Failed to export WebTESS marks CSV" });
+    return res.status(500).json({ error: "Failed to export WebTESS marks file" });
   }
 });
 

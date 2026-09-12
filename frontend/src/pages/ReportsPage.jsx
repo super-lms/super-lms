@@ -748,21 +748,21 @@ function ReportsPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function downloadWebtessCSV() {
+  async function downloadWebtessFile() {
     if (!selectedCourse) {
-      setMessage("Please select a course before downloading WebTESS CSV");
+      setMessage("Please select a course before downloading the WebTESS file");
       return;
     }
 
     try {
-      setMessage("Preparing WebTESS CSV for ministry upload...");
+      setMessage("Preparing the tab-delimited WebTESS file...");
 
       const response = await authFetch(
         `/api/classes/${selectedCourse}/webtess-marks-csv`
       );
 
       if (!response.ok) {
-        let errorMessage = "Could not download WebTESS CSV.";
+        let errorMessage = "Could not download the WebTESS file.";
 
         try {
           const errorData = await response.json();
@@ -774,20 +774,20 @@ function ReportsPage() {
         throw new Error(errorMessage);
       }
 
-      const csvBlob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(csvBlob);
+      const webtessBlob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(webtessBlob);
       const link = document.createElement("a");
 
       link.href = downloadUrl;
-      link.download = `webtess-marks-course-${selectedCourse}.csv`;
+      link.download = `webtess-marks-course-${selectedCourse}.txt`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
       window.URL.revokeObjectURL(downloadUrl);
-      setMessage("WebTESS CSV downloaded.");
+      setMessage("WebTESS tab-delimited file downloaded and ready to upload.");
     } catch (error) {
-      setMessage(error.message || "Could not download WebTESS CSV.");
+      setMessage(error.message || "Could not download the WebTESS file.");
     }
   }
 
@@ -1069,8 +1069,8 @@ function ReportsPage() {
             Export CSV
           </button>
 
-          <button onClick={downloadWebtessCSV} style={buttonStyle}>
-            Download WebTESS CSV
+          <button onClick={downloadWebtessFile} style={buttonStyle}>
+            Download WebTESS File (.txt)
           </button>
         </div>
 
@@ -1083,8 +1083,8 @@ function ReportsPage() {
         ) : null}
 
         <div style={webtessHelpStyle}>
-          WebTESS CSV exports the required columns: Student ID, Mark, Work, Att, Com1, Com2.
-          Marks are rounded to whole numbers for ministry upload.
+          Downloads a ready-to-upload tab-delimited .txt file with the required columns:
+          StudentID, Mark, Work, Abs, Com1, Com2. Marks are rounded to whole numbers.
         </div>
       </div>
 
