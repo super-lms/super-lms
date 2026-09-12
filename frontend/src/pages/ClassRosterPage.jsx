@@ -26,6 +26,9 @@ export default function ClassRosterPage() {
   const [enrollmentError, setEnrollmentError] = useState("");
   const [enrollmentSaving, setEnrollmentSaving] = useState(false);
   const [removingStudentId, setRemovingStudentId] = useState("");
+  const [editingStudentId, setEditingStudentId] = useState("");
+  const [editingStudent, setEditingStudent] = useState(emptyStudentForm);
+  const [editingStudentSaving, setEditingStudentSaving] = useState(false);
   const [selectedHomeform, setSelectedHomeform] = useState("");
   const [homeformImporting, setHomeformImporting] = useState(false);
 
@@ -106,6 +109,82 @@ export default function ClassRosterPage() {
     }));
     setEnrollmentMessage("");
     setEnrollmentError("");
+  }
+
+  function startEditingStudent(student) {
+    setEditingStudentId(String(student.id));
+    setEditingStudent({
+      name:
+        student.name ||
+        [student.first_name, student.last_name].filter(Boolean).join(" "),
+      email: student.email || "",
+      student_id: student.student_id || "",
+      parent_email: student.parent_email || "",
+    });
+    setEnrollmentMessage("");
+    setEnrollmentError("");
+  }
+
+  function updateEditingStudent(field, value) {
+    setEditingStudent((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setEnrollmentMessage("");
+    setEnrollmentError("");
+  }
+
+  function cancelEditingStudent() {
+    setEditingStudentId("");
+    setEditingStudent(emptyStudentForm);
+  }
+
+  async function saveEditedStudent(student) {
+    const updatedStudent = {
+      name: String(editingStudent.name || "").trim(),
+      email: String(editingStudent.email || "").trim().toLowerCase(),
+      student_id: String(editingStudent.student_id || "").trim(),
+      parent_email: String(editingStudent.parent_email || "").trim().toLowerCase(),
+      role: "student",
+    };
+
+    if (!updatedStudent.name) {
+      setEnrollmentError("Student name is required.");
+      return;
+    }
+
+    if (!updatedStudent.email) {
+      setEnrollmentError("Student email is required.");
+      return;
+    }
+
+    setEditingStudentSaving(true);
+    setEnrollmentMessage("");
+    setEnrollmentError("");
+
+    try {
+      const response = await authFetch(`/api/users/${student.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedStudent),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to update student");
+      }
+
+      cancelEditingStudent();
+      setEnrollmentMessage(`${updatedStudent.name} was updated.`);
+      await loadRoster(selectedCourseId);
+    } catch (error) {
+      console.error(error);
+      setEnrollmentError(error.message || "Failed to update student.");
+    } finally {
+      setEditingStudentSaving(false);
+    }
   }
 
   async function handleRemoveStudent(student) {
@@ -343,6 +422,7 @@ export default function ClassRosterPage() {
   useEffect(() => {
     setEnrollmentMessage("");
     setEnrollmentError("");
+    cancelEditingStudent();
     loadRoster(selectedCourseId);
   }, [selectedCourseId]);
 
@@ -575,7 +655,7 @@ export default function ClassRosterPage() {
               <thead>
                 <tr>
                   <th>Student</th>
-                  <th>Student ID</th>
+                  <th>WebTESS Student ID</th>
                   <th>Email</th>
                   <th>Parent Email</th>
                   <th>Actions</th>
@@ -595,26 +675,119 @@ export default function ClassRosterPage() {
                     <td colSpan="5">No students found for this course.</td>
                   </tr>
                 ) : (
-                  students.map((student) => (
-                    <tr key={student.id}>
-                      <td>{student.name || [student.first_name, student.last_name].filter(Boolean).join(" ") || "Unnamed student"}</td>
-                      <td>{student.student_id || "Not recorded"}</td>
-                      <td>{student.email || "No email"}</td>
-                      <td>{student.parent_email || "Not recorded"}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="secondary-btn"
-                          onClick={() => handleRemoveStudent(student)}
-                          disabled={removingStudentId === String(student.id)}
-                        >
-                          {removingStudentId === String(student.id)
-                            ? "Removing..."
-                            : "Remove"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  students.map((student) => {
+                    const isEditing = editingStudentId === String(student.id);
+
+                    return (
+                      <tr key={student.id}>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={editingStudent.name}
+                              onChange={(event) => updateEditingStudent("name", event.target.value)}
+                              disabled={editingStudentSaving}
+                              aria-label={`Student name for ${student.name || student.email}`}
+                            />
+                          ) : (
+                            student.name || [student.first_name, student.last_name].filter(Boolean).join(" ") || "Unnamed student"
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              className="form-input"
+                              value={editingStudent.student_id}
+                              onChange={(event) => updateEditingStudent("student_id", event.target.value)}
+                              disabled={editingStudentSaving}
+                              placeholder="WebTESS Student ID"
+                              aria-label={`Student ID for ${student.name || student.email}`}
+                            />
+                          ) : (
+                            student.student_id || "Not recorded"
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="email"
+                              className="form-input"
+                              value={editingStudent.email}
+                              onChange={(event) => updateEditingStudent("email", event.target.value)}
+                              disabled={editingStudentSaving}
+                              aria-label={`Student email for ${student.name || student.email}`}
+                            />
+                          ) : (
+                            student.email || "No email"
+                          )}
+                        </td>
+                        <td>
+                          {isEditing ? (
+                            <input
+                              type="email"
+                              className="form-input"
+                              value={editingStudent.parent_email}
+                              onChange={(event) => updateEditingStudent("parent_email", event.target.value)}
+                              disabled={editingStudentSaving}
+                              placeholder="Optional"
+                              aria-label={`Parent email for ${student.name || student.email}`}
+                            />
+                          ) : (
+                            student.parent_email || "Not recorded"
+                          )}
+                        </td>
+                        <td>
+                          <div style={actionButtonsStyle}>
+                            {isEditing ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="primary-btn"
+                                  onClick={() => saveEditedStudent(student)}
+                                  disabled={editingStudentSaving}
+                                >
+                                  {editingStudentSaving ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-btn"
+                                  onClick={cancelEditingStudent}
+                                  disabled={editingStudentSaving}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {isAdmin ? (
+                                  <button
+                                    type="button"
+                                    className="secondary-btn"
+                                    onClick={() => startEditingStudent(student)}
+                                    disabled={Boolean(editingStudentId) || Boolean(removingStudentId)}
+                                  >
+                                    Edit
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="secondary-btn"
+                                  onClick={() => handleRemoveStudent(student)}
+                                  disabled={Boolean(editingStudentId) || removingStudentId === String(student.id)}
+                                >
+                                  {removingStudentId === String(student.id)
+                                    ? "Removing..."
+                                    : "Remove"}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -627,4 +800,11 @@ export default function ClassRosterPage() {
 
 const compactFieldStyle = {
   maxWidth: "420px",
+};
+
+const actionButtonsStyle = {
+  display: "flex",
+  gap: "8px",
+  alignItems: "center",
+  flexWrap: "wrap",
 };

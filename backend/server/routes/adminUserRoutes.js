@@ -90,6 +90,26 @@ router.put("/:userId", authenticateJWT, requireRole("admin"), async (req, res) =
       });
     }
 
+    if (studentId) {
+      const duplicateStudentIdResult = await pool.query(
+        `
+        SELECT id
+        FROM users
+        WHERE student_id = $1
+          AND id <> $2
+        LIMIT 1
+        `,
+        [studentId, userId]
+      );
+
+      if (duplicateStudentIdResult.rows.length > 0) {
+        return res.status(409).json({
+          success: false,
+          error: "Another student already uses this Student ID",
+        });
+      }
+    }
+
     const nameParts = name.split(/\s+/).filter(Boolean);
     const firstName = nameParts[0] || "User";
     const lastName = nameParts.slice(1).join(" ") || "User";
@@ -139,7 +159,7 @@ router.put("/:userId", authenticateJWT, requireRole("admin"), async (req, res) =
     if (error.code === "23505") {
       return res.status(409).json({
         success: false,
-        error: "Another user already uses this email address",
+        error: "Another user already uses this email address or Student ID",
       });
     }
 

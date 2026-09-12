@@ -12865,12 +12865,24 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       SELECT
         CONCAT(u.first_name, ' ', u.last_name) AS student_name,
         u.email AS student_email,
-        u.student_id,
+        COALESCE(
+          NULLIF(TRIM(u.student_id), ''),
+          NULLIF(TRIM(directory.student_id), ''),
+          ''
+        ) AS student_id,
         COALESCE(src.com1, '') AS com1,
         COALESCE(src.com2, '') AS com2
       FROM class_enrollments ce
       JOIN users u
         ON u.id = ce.student_user_id
+      LEFT JOIN LATERAL (
+        SELECT ms.student_id
+        FROM master_students ms
+        WHERE COALESCE(u.email, '') <> ''
+          AND LOWER(ms.student_email) = LOWER(u.email)
+        ORDER BY ms.id ASC
+        LIMIT 1
+      ) directory ON TRUE
       LEFT JOIN student_report_comments src
         ON src.class_id = ce.class_id
         AND src.student_user_id = u.id
@@ -12879,6 +12891,24 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       `,
       [classId]
     );
+
+    const studentsMissingIds = studentsResult.rows.filter(
+      (student) => !String(student.student_id || "").trim()
+    );
+
+    if (studentsMissingIds.length > 0) {
+      const missingNames = studentsMissingIds
+        .slice(0, 8)
+        .map((student) => student.student_name || student.student_email)
+        .join(", ");
+      const additionalCount = Math.max(0, studentsMissingIds.length - 8);
+      const additionalText = additionalCount > 0 ? ` and ${additionalCount} more` : "";
+
+      return res.status(422).json({
+        error: `WebTESS Student IDs are missing for: ${missingNames}${additionalText}. Add the IDs to the student roster, then download again.`,
+        missing_student_count: studentsMissingIds.length,
+      });
+    }
 
     const submissionsResult = await pool.query(
       `
