@@ -2521,9 +2521,21 @@ function DocxPreview({ href, fileName }) {
     setPreviewError("");
 
     fetch(href, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("The Word document could not be downloaded for preview.");
-        return response.arrayBuffer();
+      .then(async (response) => {
+        if (!response.ok) {
+          const serverMessage = await response.text().catch(() => "");
+          throw new Error(
+            serverMessage ||
+            (response.status === 410
+              ? "This older upload is no longer available. Please ask the student to upload it again."
+              : "The Word document could not be downloaded for preview.")
+          );
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error("This uploaded file is empty. Please ask the student to upload the original document again.");
+        }
+        return arrayBuffer;
       })
       .then(async (arrayBuffer) => {
         const mammothModule = await import("mammoth");

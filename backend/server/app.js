@@ -114,6 +114,7 @@ async function saveCourseResource(client, { courseId, originalName, mimeType, fi
 
 app.get("/uploads/:storedName", async (req, res, next) => {
   try {
+    await ensureSubmissionAttachmentsTable();
     const storedName = path.basename(String(req.params.storedName || ""));
 
     if (!storedName) {
@@ -122,7 +123,7 @@ app.get("/uploads/:storedName", async (req, res, next) => {
 
     const attachmentResult = await pool.query(
       `
-      SELECT original_name, mime_type
+      SELECT id, original_name, mime_type, file_data
       FROM submission_attachments
       WHERE stored_name = $1
       ORDER BY id DESC
@@ -135,13 +136,25 @@ app.get("/uploads/:storedName", async (req, res, next) => {
       return next();
     }
 
+    const attachment = attachmentResult.rows[0];
     const filePath = path.join(uploadDir, storedName);
+    let fileData = Buffer.isBuffer(attachment.file_data) ? attachment.file_data : null;
 
-    if (!fs.existsSync(filePath)) {
-      return next();
+    if ((!fileData || fileData.length === 0) && fs.existsSync(filePath)) {
+      fileData = fs.readFileSync(filePath);
+      if (fileData.length > 0) {
+        await pool.query(
+          `UPDATE submission_attachments SET file_data = $1, size_bytes = $2 WHERE id = $3`,
+          [fileData, fileData.length, attachment.id]
+        );
+      }
     }
 
-    const attachment = attachmentResult.rows[0];
+    if (!fileData || fileData.length === 0) {
+      return res.status(410).type("text/plain").send(
+        "This older uploaded file is no longer available. Please ask the student to upload it again."
+      );
+    }
     const originalName = String(attachment.original_name || storedName)
       .replace(/[\r\n"]/g, "_");
     const originalExtension = path.extname(originalName).replace(/[^a-zA-Z0-9.]/g, "");
@@ -157,7 +170,7 @@ app.get("/uploads/:storedName", async (req, res, next) => {
       `inline; filename="${asciiFallbackName}"; filename*=UTF-8''${encodedOriginalName}`
     );
     res.set("Cache-Control", "private, no-cache");
-    return res.sendFile(filePath);
+    return res.send(fileData);
   } catch (err) {
     console.error("GET /uploads/:storedName failed:", err);
     return next();
@@ -254,9 +267,11 @@ async function ensureSubmissionAttachmentsTable() {
       file_path TEXT NOT NULL,
       mime_type TEXT DEFAULT '',
       size_bytes INTEGER DEFAULT 0,
+      file_data BYTEA,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE submission_attachments ADD COLUMN IF NOT EXISTS file_data BYTEA`);
 }
 
 async function ensureAttendanceTables() {
@@ -6604,6 +6619,11 @@ app.post(
         return res.status(400).json({ error: "Attachment file is required" });
       }
 
+      if (!Number(req.file.size || 0)) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: "The selected file is empty. Choose the original file and upload it again." });
+      }
+
       const assignmentResult = await pool.query(
         `
         SELECT id, teacher_id, class_id, title, available_from, is_published
@@ -6706,6 +6726,7 @@ app.post(
       const filePath = `/uploads/${storedName}`;
       const mimeType = req.file.mimetype || "";
       const sizeBytes = Number(req.file.size || 0);
+      const fileData = fs.readFileSync(req.file.path);
 
       const attachmentResult = await pool.query(
         `
@@ -6717,9 +6738,10 @@ app.post(
           stored_name,
           file_path,
           mime_type,
-          size_bytes
+          size_bytes,
+          file_data
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING
           id,
           submission_id,
@@ -6741,6 +6763,7 @@ app.post(
           filePath,
           mimeType,
           sizeBytes,
+          fileData,
         ]
       );
 
@@ -6817,6 +6840,9 @@ app.post(
 
         for (let fileIndex = 0; fileIndex < uploadedFiles.length; fileIndex += 1) {
           const file = uploadedFiles[fileIndex];
+          if (!Number(file.size || 0)) {
+            throw new Error(`${file.originalname || `File ${fileIndex + 1}`} is empty and must be uploaded again`);
+          }
           const mapping = mappings.find((item) => Number(item.fileIndex) === fileIndex) || {};
           const studentEmail = String(mapping.studentEmail || "").trim().toLowerCase();
           if (!studentEmail) throw new Error(`Student match is missing for ${file.originalname || `file ${fileIndex + 1}`}`);
@@ -6842,6 +6868,7 @@ app.post(
           const storedName = file.filename;
           const originalName = file.originalname || storedName;
           const filePath = `/uploads/${storedName}`;
+          const fileData = fs.readFileSync(file.path);
 
           if (!submissionId) {
             const insertedSubmission = await client.query(
@@ -6865,14 +6892,14 @@ app.post(
             `
             INSERT INTO submission_attachments (
               submission_id, assignment_id, student_email, original_name,
-              stored_name, file_path, mime_type, size_bytes
+              stored_name, file_path, mime_type, size_bytes, file_data
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id, submission_id, assignment_id, student_email, original_name,
               stored_name, file_path, mime_type, size_bytes, created_at
             `,
             [submissionId, assignmentId, studentEmail, originalName, storedName,
-              filePath, file.mimetype || "", Number(file.size || 0)]
+              filePath, file.mimetype || "", Number(file.size || 0), fileData]
           );
           imported.push(attachmentResult.rows[0]);
         }
