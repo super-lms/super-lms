@@ -93,7 +93,10 @@ router.put("/:userId", authenticateJWT, requireRole("admin"), async (req, res) =
     if (studentId) {
       const duplicateStudentIdResult = await pool.query(
         `
-        SELECT id
+        SELECT
+          id,
+          COALESCE(NULLIF(TRIM(name), ''), CONCAT(first_name, ' ', last_name), email) AS name,
+          email
         FROM users
         WHERE student_id = $1
           AND id <> $2
@@ -103,9 +106,15 @@ router.put("/:userId", authenticateJWT, requireRole("admin"), async (req, res) =
       );
 
       if (duplicateStudentIdResult.rows.length > 0) {
+        const duplicateStudent = duplicateStudentIdResult.rows[0];
+        const duplicateName = String(duplicateStudent.name || "another student").trim();
+        const duplicateEmail = String(duplicateStudent.email || "").trim();
+
         return res.status(409).json({
           success: false,
-          error: "Another student already uses this Student ID",
+          error: `Student ID ${studentId} is already assigned to ${duplicateName}${
+            duplicateEmail ? ` (${duplicateEmail})` : ""
+          }. Correct that student record before reassigning this ID.`,
         });
       }
     }

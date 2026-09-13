@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import API_BASE from "../apiBase";
@@ -29,6 +29,7 @@ export default function ClassRosterPage() {
   const [editingStudentId, setEditingStudentId] = useState("");
   const [editingStudent, setEditingStudent] = useState(emptyStudentForm);
   const [editingStudentSaving, setEditingStudentSaving] = useState(false);
+  const [editingStudentError, setEditingStudentError] = useState("");
   const [selectedHomeform, setSelectedHomeform] = useState("");
   const [homeformImporting, setHomeformImporting] = useState(false);
 
@@ -112,6 +113,11 @@ export default function ClassRosterPage() {
   }
 
   function startEditingStudent(student) {
+    const safeParentEmail =
+      String(student.parent_email || "").trim().toLowerCase() === "not recorded"
+        ? ""
+        : student.parent_email || "";
+
     setEditingStudentId(String(student.id));
     setEditingStudent({
       name:
@@ -119,8 +125,9 @@ export default function ClassRosterPage() {
         [student.first_name, student.last_name].filter(Boolean).join(" "),
       email: student.email || "",
       student_id: student.student_id || "",
-      parent_email: student.parent_email || "",
+      parent_email: safeParentEmail,
     });
+    setEditingStudentError("");
     setEnrollmentMessage("");
     setEnrollmentError("");
   }
@@ -130,6 +137,7 @@ export default function ClassRosterPage() {
       ...current,
       [field]: value,
     }));
+    setEditingStudentError("");
     setEnrollmentMessage("");
     setEnrollmentError("");
   }
@@ -137,6 +145,7 @@ export default function ClassRosterPage() {
   function cancelEditingStudent() {
     setEditingStudentId("");
     setEditingStudent(emptyStudentForm);
+    setEditingStudentError("");
   }
 
   async function saveEditedStudent(student) {
@@ -149,18 +158,19 @@ export default function ClassRosterPage() {
     };
 
     if (!updatedStudent.name) {
-      setEnrollmentError("Student name is required.");
+      setEditingStudentError("Student name is required.");
       return;
     }
 
     if (!updatedStudent.email) {
-      setEnrollmentError("Student email is required.");
+      setEditingStudentError("Student email is required.");
       return;
     }
 
     setEditingStudentSaving(true);
     setEnrollmentMessage("");
     setEnrollmentError("");
+    setEditingStudentError("");
 
     try {
       const response = await authFetch(`/api/users/${student.id}`, {
@@ -181,7 +191,7 @@ export default function ClassRosterPage() {
       await loadRoster(selectedCourseId);
     } catch (error) {
       console.error(error);
-      setEnrollmentError(error.message || "Failed to update student.");
+      setEditingStudentError(error.message || "Failed to update student.");
     } finally {
       setEditingStudentSaving(false);
     }
@@ -679,7 +689,8 @@ export default function ClassRosterPage() {
                     const isEditing = editingStudentId === String(student.id);
 
                     return (
-                      <tr key={student.id}>
+                      <Fragment key={student.id}>
+                      <tr>
                         <td>
                           {isEditing ? (
                             <input
@@ -786,6 +797,16 @@ export default function ClassRosterPage() {
                           </div>
                         </td>
                       </tr>
+                      {isEditing && editingStudentError ? (
+                        <tr>
+                          <td colSpan="5">
+                            <div className="form-message" role="alert" style={editErrorStyle}>
+                              {editingStudentError}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                      </Fragment>
                     );
                   })
                 )}
@@ -807,4 +828,10 @@ const actionButtonsStyle = {
   gap: "8px",
   alignItems: "center",
   flexWrap: "wrap",
+};
+
+const editErrorStyle = {
+  color: "#b91c1c",
+  fontWeight: 700,
+  margin: 0,
 };
