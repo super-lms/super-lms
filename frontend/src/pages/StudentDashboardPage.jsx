@@ -387,11 +387,12 @@ function SubmissionEditor({
           <div style={{ marginBottom: "16px" }}>
             <label style={labelStyle}>Attach Files</label>
             <p style={{ marginTop: "4px", marginBottom: "8px", color: "#4b5563", lineHeight: 1.5 }}>
-              Add a document, image, or file that supports your submission.
+              Add a document, presentation, image, or other file that supports your submission. PowerPoint (.pptx) files are supported.
             </p>
 
             <input
               type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.jpg,.jpeg,.png,.gif,.webp,.heic,audio/*,video/*"
               onChange={onAttachmentFileChange}
               disabled={attachmentUploading}
               style={fileInputStyle}
