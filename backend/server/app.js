@@ -68,6 +68,23 @@ const upload = multer({
   },
 });
 
+const studentAttachmentUpload = multer({
+  dest: uploadDir,
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+  },
+});
+
+function handleStudentAttachmentUpload(req, res, next) {
+  studentAttachmentUpload.single("attachment")(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "Student attachments must be 50 MB or smaller" });
+    }
+    return res.status(400).json({ error: error.message || "The attachment could not be uploaded" });
+  });
+}
+
 const lessonResourceUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -6599,7 +6616,7 @@ app.post(
   "/api/assignments/:assignmentId/student-attachments",
   authenticateJWT,
   requireRole("admin", "student"),
-  upload.single("attachment"),
+  handleStudentAttachmentUpload,
   async (req, res) => {
     try {
       await ensureSubmissionAttachmentsTable();
