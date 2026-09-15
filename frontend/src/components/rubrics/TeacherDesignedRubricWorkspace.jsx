@@ -4,6 +4,7 @@ import authFetch from "../../services/authFetch";
 export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
   const [title, setTitle] = useState("");
   const [levelCount, setLevelCount] = useState("4");
+  const [levelLabels, setLevelLabels] = useState([]);
   const [criteria, setCriteria] = useState([]);
   const [criterionName, setCriterionName] = useState("");
   const [criterionWeight, setCriterionWeight] = useState("");
@@ -35,6 +36,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
         setCriteria(
           Array.isArray(data.rubric.criteria_json) ? data.rubric.criteria_json : []
         );
+        setLevelLabels(data.rubric.criteria_json?.[0]?.level_labels || []);
       }
     } catch (err) {
       setError(err.message || "Failed to load teacher rubric.");
@@ -80,6 +82,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
 
       setTitle(imported.title || "Imported Teacher Rubric");
       setLevelCount(String(imported.level_count || 4));
+      setLevelLabels(Array.isArray(imported.level_labels) ? imported.level_labels : []);
       setCriteria(Array.isArray(imported.criteria) ? imported.criteria : []);
       setRawImportText(imported.raw_text || "");
       setMessage("Rubric imported. Review and edit the preview, then save.");
@@ -116,7 +119,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
           body: JSON.stringify({
             title: cleanTitle,
             level_count: Number(levelCount || 4),
-            criteria,
+            criteria: criteria.map((criterion) => ({ ...criterion, level_labels: levelLabels })),
           }),
         }
       );
@@ -300,11 +303,11 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
                   </div>
                 </div>
 
-                <div style={descriptorGridStyle}>
+                <div style={{ ...descriptorGridStyle, gridTemplateColumns: `repeat(${numericLevelCount}, minmax(0, 1fr))` }}>
                   {Array.from({ length: numericLevelCount }, (_, index) => index + 1).map(
                     (level) => (
                       <div key={level}>
-                        <label style={labelStyle}>Level {level}</label>
+                        <label style={labelStyle}>{levelLabels[level - 1] || `Level ${level}`}</label>
                         <textarea
                           value={(criterion.descriptors || {})[`level_${level}`] || ""}
                           onChange={(event) =>
@@ -496,7 +499,7 @@ const criterionEditGridStyle = {
 
 const descriptorGridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  minWidth: "900px",
   gap: "12px",
 };
 

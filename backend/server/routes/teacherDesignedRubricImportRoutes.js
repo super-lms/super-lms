@@ -34,6 +34,50 @@ function splitLines(text) {
     .filter(Boolean);
 }
 
+function decodeHtml(value) {
+  return String(value || "")
+    .replace(/<br\s*\/?>(\s*)/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .trim();
+}
+
+function docxTableToRubric(html, fallbackTitle) {
+  const tableHtml = String(html || "").match(/<table[\s\S]*?<\/table>/i)?.[0];
+  if (!tableHtml) return null;
+  const rows = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+    .map((match) => [...match[1].matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map((cell) => cleanText(decodeHtml(cell[1]))))
+    .filter((row) => row.some(Boolean));
+  const header = rows[0] || [];
+  const levelLabels = header.slice(1).filter(Boolean).slice(0, 6);
+  if (!header[0] || ![4, 5, 6].includes(levelLabels.length)) return null;
+
+  const criteria = rows.slice(1).map((row, index) => {
+    const name = cleanText(row[0]);
+    if (!name) return null;
+    const descriptors = {};
+    levelLabels.forEach((_label, levelIndex) => {
+      descriptors[`level_${levelIndex + 1}`] = cleanText(row[levelIndex + 1]);
+    });
+    return { id: `imported-criterion-${Date.now()}-${index}`, name, weight: "", descriptors };
+  }).filter(Boolean);
+  if (!criteria.length) return null;
+
+  return {
+    title: fallbackTitle || "Imported Teacher Rubric",
+    level_count: levelLabels.length,
+    level_labels: levelLabels,
+    criteria,
+    raw_text: rows.map((row) => row.join(" | ")).join("\n"),
+  };
+}
+
 function guessLevelCount(lines) {
   const joined = lines.join(" ").toLowerCase();
 
@@ -236,8 +280,12 @@ router.post(
       let converted;
 
       if (extension === ".docx") {
-        const result = await mammoth.extractRawText({ path: req.file.path });
-        converted = linesToRubric(splitLines(result.value), originalName.replace(extension, ""));
+        const [htmlResult, textResult] = await Promise.all([
+          mammoth.convertToHtml({ path: req.file.path }),
+          mammoth.extractRawText({ path: req.file.path }),
+        ]);
+        converted = docxTableToRubric(htmlResult.value, originalName.replace(extension, "")) ||
+          linesToRubric(splitLines(textResult.value), originalName.replace(extension, ""));
       } else if (extension === ".pdf") {
         const buffer = fs.readFileSync(req.file.path);
         const parser = new PDFParse({ data: buffer });
