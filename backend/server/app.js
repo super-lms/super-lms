@@ -2829,6 +2829,22 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
   }
 });
 
+/* LIST AVAILABLE TEACHERS FOR ADMIN COURSE ASSIGNMENT */
+app.get("/api/admin/teachers", authenticateJWT, requireRole("admin"), async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, role
+       FROM users
+       WHERE role IN ('teacher', 'admin')
+       ORDER BY first_name ASC, last_name ASC, email ASC`
+    );
+    return res.json({ success: true, teachers: result.rows });
+  } catch (err) {
+    console.error("GET /api/admin/teachers failed:", err);
+    return res.status(500).json({ error: "Failed to load teachers" });
+  }
+});
+
 /* GET TEACHER FOR ONE COURSE - ADMIN COURSE WORKSPACE */
 app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
@@ -2884,6 +2900,50 @@ app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("ad
   } catch (err) {
     console.error("GET /api/admin/courses/:courseId/teacher failed:", err);
     return res.status(500).json({ error: "Failed to load course teacher" });
+  }
+});
+
+/* REPLACE THE PRIMARY TEACHER FOR ONE COURSE */
+app.put("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("admin"), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const courseId = Number(req.params.courseId);
+    const teacherId = Number(req.body?.teacher_id);
+    if (!courseId || !teacherId) {
+      return res.status(400).json({ error: "A course and teacher are required" });
+    }
+
+    await client.query("BEGIN");
+    const [courseResult, teacherResult] = await Promise.all([
+      client.query(`SELECT id, title FROM courses WHERE id = $1 LIMIT 1`, [courseId]),
+      client.query(
+        `SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, role
+         FROM users WHERE id = $1 AND role IN ('teacher', 'admin') LIMIT 1`,
+        [teacherId]
+      ),
+    ]);
+    if (courseResult.rows.length === 0) throw new Error("Course not found");
+    if (teacherResult.rows.length === 0) throw new Error("Selected user is not a teacher");
+
+    await client.query(`UPDATE courses SET teacher_id = $1 WHERE id = $2`, [teacherId, courseId]);
+    await client.query(`DELETE FROM course_teachers WHERE course_id = $1 AND role = 'primary'`, [courseId]);
+    await client.query(
+      `INSERT INTO course_teachers (course_id, teacher_id, role, section_inherited)
+       VALUES ($1, $2, 'primary', false)
+       ON CONFLICT (course_id, teacher_id) DO UPDATE
+       SET role = EXCLUDED.role, section_inherited = false`,
+      [courseId, teacherId]
+    );
+    await client.query("COMMIT");
+
+    return res.json({ success: true, course: courseResult.rows[0], teacher: teacherResult.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PUT /api/admin/courses/:courseId/teacher failed:", err);
+    return res.status(err.message === "Course not found" || err.message === "Selected user is not a teacher" ? 400 : 500)
+      .json({ error: err.message || "Failed to replace course teacher" });
+  } finally {
+    client.release();
   }
 });
 

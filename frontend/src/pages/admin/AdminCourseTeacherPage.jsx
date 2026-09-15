@@ -9,6 +9,8 @@ export default function AdminCourseTeacherPage() {
 
   const [course, setCourse] = useState(null)
   const [teacher, setTeacher] = useState(null)
+  const [teachers, setTeachers] = useState([])
+  const [selectedTeacherId, setSelectedTeacherId] = useState("")
   const [hasTeacherWorkspaceAccess, setHasTeacherWorkspaceAccess] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -23,16 +25,24 @@ export default function AdminCourseTeacherPage() {
         setLoading(true)
         setError("")
 
-        const response = await authFetch(`/api/admin/courses/${courseId}/teacher`)
-        const data = await response.json()
+        const [teacherResponse, teachersResponse] = await Promise.all([
+          authFetch(`/api/admin/courses/${courseId}/teacher`),
+          authFetch("/api/admin/teachers"),
+        ])
+        const [data, teachersData] = await Promise.all([teacherResponse.json(), teachersResponse.json()])
 
-        if (!response.ok || data?.success === false) {
+        if (!teacherResponse.ok || data?.success === false) {
           throw new Error(data?.error || "Failed to load course teacher")
+        }
+        if (!teachersResponse.ok || teachersData?.success === false) {
+          throw new Error(teachersData?.error || "Failed to load teachers")
         }
 
         if (!isCancelled) {
           setCourse(data?.course || null)
           setTeacher(data?.teacher || null)
+          setTeachers(Array.isArray(teachersData?.teachers) ? teachersData.teachers : [])
+          setSelectedTeacherId(data?.teacher?.id ? String(data.teacher.id) : "")
           setHasTeacherWorkspaceAccess(Boolean(data?.viewerHasTeacherAccess))
         }
       } catch (err) {
@@ -87,6 +97,30 @@ export default function AdminCourseTeacherPage() {
     }
   }
 
+  async function replaceTeacher() {
+    if (!selectedTeacherId || Number(selectedTeacherId) === Number(teacher?.id)) return
+    try {
+      setAssignStatus("saving")
+      setAssignMessage("")
+      const response = await authFetch(`/api/admin/courses/${courseId}/teacher`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacher_id: Number(selectedTeacherId) }),
+      })
+      const data = await response.json()
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || "Failed to replace course teacher")
+      }
+      setCourse(data?.course || course)
+      setTeacher(data?.teacher || null)
+      setAssignStatus("saved")
+      setAssignMessage("Course teacher updated.")
+    } catch (err) {
+      setAssignStatus("error")
+      setAssignMessage(err.message || "Failed to replace course teacher")
+    }
+  }
+
   return (
     <div>
       <Link to={`/admin/courses/${encodeURIComponent(String(courseId))}`} style={backLinkStyle}>
@@ -110,6 +144,43 @@ export default function AdminCourseTeacherPage() {
       {loading ? <div style={noticeStyle}>Loading teacher...</div> : null}
 
       {error ? <div style={errorStyle}>{error}</div> : null}
+
+      {!loading && !error ? (
+        <div style={assignmentActionStyle}>
+          <div>
+            <div style={{ fontWeight: 800, color: "#111827" }}>Change Course Teacher</div>
+            <div style={{ marginTop: "5px", color: "#4b5563", lineHeight: 1.5 }}>
+              Select the teacher responsible for this course.
+            </div>
+          </div>
+          <select
+            value={selectedTeacherId}
+            onChange={(event) => setSelectedTeacherId(event.target.value)}
+            disabled={assignStatus === "saving"}
+            style={teacherSelectStyle}
+          >
+            <option value="">Select a teacher</option>
+            {teachers.map((availableTeacher) => (
+              <option key={availableTeacher.id} value={availableTeacher.id}>
+                {availableTeacher.name || availableTeacher.email} {availableTeacher.email ? `(${availableTeacher.email})` : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={replaceTeacher}
+            disabled={!selectedTeacherId || Number(selectedTeacherId) === Number(teacher?.id) || assignStatus === "saving"}
+            style={assignButtonStyle}
+          >
+            {assignStatus === "saving" ? "Saving..." : "Replace Teacher"}
+          </button>
+          {assignMessage ? (
+            <div style={assignStatus === "error" ? actionErrorStyle : actionSuccessStyle}>
+              {assignMessage}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {!loading && !error ? (
         <div style={assignmentActionStyle}>
@@ -273,6 +344,17 @@ const assignButtonStyle = {
   color: "white",
   padding: "11px 16px",
   fontWeight: 800,
+}
+
+const teacherSelectStyle = {
+  minWidth: "260px",
+  maxWidth: "100%",
+  border: "1px solid #9ca3af",
+  borderRadius: "10px",
+  background: "white",
+  color: "#111827",
+  padding: "11px 12px",
+  fontWeight: 700,
 }
 
 const actionSuccessStyle = {
