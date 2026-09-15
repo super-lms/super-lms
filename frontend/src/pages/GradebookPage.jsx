@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import * as XLSX from "xlsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import authFetch from "../services/authFetch";
 
@@ -600,6 +601,24 @@ export default function GradebookPage() {
     });
   }, [assignments, spreadsheetAssignmentSort, spreadsheetCustomOrder]);
 
+  function exportSpreadsheetGradebook() {
+    const rows = [
+      ["Student", "Email", ...spreadsheetAssignments.map((assignment) => assignment.title || "Untitled Assignment"), "Current Grade"],
+      ...spreadsheetStudents.map((student) => [
+        student.student_name,
+        student.student_email,
+        ...spreadsheetAssignments.map((assignment) => {
+          const match = (student.assignment_scores || []).find((item) => item.assignment_id === assignment.id);
+          return match?.score ?? "";
+        }),
+        Number.isFinite(Number(student.current_percent)) ? Number(student.current_percent) : "",
+      ]),
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), "Gradebook");
+    XLSX.writeFile(workbook, `${String(gradebook?.course?.title || "gradebook").replace(/[^a-z0-9]+/gi, "-")}.xlsx`);
+  }
+
   function saveSpreadsheetCustomOrder(nextOrder) {
     const normalizedOrder = nextOrder.map(String);
     setSpreadsheetCustomOrder(normalizedOrder);
@@ -997,6 +1016,12 @@ export default function GradebookPage() {
             </p>
 
             <div style={spreadsheetToolbarStyle}>
+              <button type="button" onClick={() => window.print()} style={spreadsheetToolbarButtonStyle}>
+                Print / Save PDF
+              </button>
+              <button type="button" onClick={exportSpreadsheetGradebook} style={spreadsheetToolbarButtonStyle}>
+                Export Excel
+              </button>
               <details style={spreadsheetMenuStyle}>
                 <summary style={spreadsheetMenuSummaryStyle}>View</summary>
                 <div style={spreadsheetMenuPanelStyle}>
@@ -1829,6 +1854,16 @@ const spreadsheetToolbarStyle = {
   gap: "12px",
   flexWrap: "wrap",
   marginBottom: "14px",
+};
+
+const spreadsheetToolbarButtonStyle = {
+  border: "1px solid #94a3b8",
+  borderRadius: "7px",
+  background: "#ffffff",
+  color: "#0f172a",
+  padding: "7px 10px",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const spreadsheetMenuStyle = {
