@@ -2854,7 +2854,8 @@ app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("ad
       return res.status(400).json({ error: "Valid courseId is required" });
     }
 
-    const result = await pool.query(
+    const [result, coTeacherResult] = await Promise.all([
+      pool.query(
       `
       SELECT
         c.id AS course_id,
@@ -2876,8 +2877,17 @@ app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("ad
       WHERE c.id = $1
       LIMIT 1
       `,
-      [courseId, Number(req.user.id)]
-    );
+        [courseId, Number(req.user.id)]
+      ),
+      pool.query(
+        `SELECT u.id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email, u.role
+         FROM course_teachers ct
+         JOIN users u ON u.id = ct.teacher_id
+         WHERE ct.course_id = $1 AND ct.role = 'co-teacher'
+         ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC`,
+        [courseId]
+      ),
+    ]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Course not found" });
@@ -2895,11 +2905,44 @@ app.get("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("ad
         email: result.rows[0].teacher_email,
         role: result.rows[0].teacher_role,
       },
+      coTeachers: coTeacherResult.rows,
       viewerHasTeacherAccess: Boolean(result.rows[0].viewer_has_teacher_access),
     });
   } catch (err) {
     console.error("GET /api/admin/courses/:courseId/teacher failed:", err);
     return res.status(500).json({ error: "Failed to load course teacher" });
+  }
+});
+
+/* ADD A CO-TEACHER WITHOUT REPLACING THE PRIMARY TEACHER */
+app.post("/api/admin/courses/:courseId/co-teachers", authenticateJWT, requireRole("admin"), async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    const teacherId = Number(req.body?.teacher_id);
+    if (!courseId || !teacherId) return res.status(400).json({ error: "A course and teacher are required" });
+
+    const teacherResult = await pool.query(
+      `SELECT id, CONCAT(first_name, ' ', last_name) AS name, email, role
+       FROM users WHERE id = $1 AND role IN ('teacher', 'admin') LIMIT 1`,
+      [teacherId]
+    );
+    if (teacherResult.rows.length === 0) return res.status(400).json({ error: "Selected user is not a teacher" });
+
+    const inserted = await pool.query(
+      `INSERT INTO course_teachers (course_id, teacher_id, role, section_inherited)
+       SELECT $1, $2, 'co-teacher', false
+       WHERE EXISTS (SELECT 1 FROM courses WHERE id = $1)
+       ON CONFLICT (course_id, teacher_id) DO UPDATE
+       SET role = CASE WHEN course_teachers.role = 'primary' THEN 'primary' ELSE EXCLUDED.role END,
+           section_inherited = false
+       RETURNING teacher_id`,
+      [courseId, teacherId]
+    );
+    if (inserted.rows.length === 0) return res.status(404).json({ error: "Course not found" });
+    return res.json({ success: true, teacher: teacherResult.rows[0] });
+  } catch (err) {
+    console.error("POST /api/admin/courses/:courseId/co-teachers failed:", err);
+    return res.status(500).json({ error: "Failed to add co-teacher" });
   }
 });
 

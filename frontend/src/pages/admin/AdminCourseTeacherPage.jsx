@@ -9,8 +9,10 @@ export default function AdminCourseTeacherPage() {
 
   const [course, setCourse] = useState(null)
   const [teacher, setTeacher] = useState(null)
+  const [coTeachers, setCoTeachers] = useState([])
   const [teachers, setTeachers] = useState([])
   const [selectedTeacherId, setSelectedTeacherId] = useState("")
+  const [selectedCoTeacherId, setSelectedCoTeacherId] = useState("")
   const [hasTeacherWorkspaceAccess, setHasTeacherWorkspaceAccess] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -41,6 +43,7 @@ export default function AdminCourseTeacherPage() {
         if (!isCancelled) {
           setCourse(data?.course || null)
           setTeacher(data?.teacher || null)
+          setCoTeachers(Array.isArray(data?.coTeachers) ? data.coTeachers : [])
           setTeachers(Array.isArray(teachersData?.teachers) ? teachersData.teachers : [])
           setSelectedTeacherId(data?.teacher?.id ? String(data.teacher.id) : "")
           setHasTeacherWorkspaceAccess(Boolean(data?.viewerHasTeacherAccess))
@@ -121,6 +124,30 @@ export default function AdminCourseTeacherPage() {
     }
   }
 
+  async function addCoTeacher() {
+    if (!selectedCoTeacherId) return
+    try {
+      setAssignStatus("saving")
+      setAssignMessage("")
+      const response = await authFetch(`/api/admin/courses/${courseId}/co-teachers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teacher_id: Number(selectedCoTeacherId) }),
+      })
+      const data = await response.json()
+      if (!response.ok || data?.success === false) throw new Error(data?.error || "Failed to add co-teacher")
+      setCoTeachers((current) => current.some((item) => Number(item.id) === Number(data.teacher?.id))
+        ? current
+        : [...current, data.teacher])
+      setSelectedCoTeacherId("")
+      setAssignStatus("saved")
+      setAssignMessage("Co-teacher added.")
+    } catch (err) {
+      setAssignStatus("error")
+      setAssignMessage(err.message || "Failed to add co-teacher")
+    }
+  }
+
   return (
     <div>
       <Link to={`/admin/courses/${encodeURIComponent(String(courseId))}`} style={backLinkStyle}>
@@ -144,6 +171,31 @@ export default function AdminCourseTeacherPage() {
       {loading ? <div style={noticeStyle}>Loading teacher...</div> : null}
 
       {error ? <div style={errorStyle}>{error}</div> : null}
+
+      {!loading && !error ? (
+        <div style={assignmentActionStyle}>
+          <div>
+            <div style={{ fontWeight: 800, color: "#111827" }}>Share This Course</div>
+            <div style={{ marginTop: "5px", color: "#4b5563", lineHeight: 1.5 }}>
+              Add another teacher without changing the primary teacher.
+            </div>
+          </div>
+          <select value={selectedCoTeacherId} onChange={(event) => setSelectedCoTeacherId(event.target.value)} disabled={assignStatus === "saving"} style={teacherSelectStyle}>
+            <option value="">Select a co-teacher</option>
+            {teachers.filter((item) => Number(item.id) !== Number(teacher?.id) && !coTeachers.some((coTeacher) => Number(coTeacher.id) === Number(item.id))).map((availableTeacher) => (
+              <option key={availableTeacher.id} value={availableTeacher.id}>
+                {availableTeacher.name || availableTeacher.email} {availableTeacher.email ? `(${availableTeacher.email})` : ""}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={addCoTeacher} disabled={!selectedCoTeacherId || assignStatus === "saving"} style={assignButtonStyle}>
+            {assignStatus === "saving" ? "Saving..." : "Add Co-Teacher"}
+          </button>
+          {coTeachers.length > 0 ? (
+            <div style={actionSuccessStyle}>Co-teachers: {coTeachers.map((item) => item.name || item.email).join(", ")}</div>
+          ) : null}
+        </div>
+      ) : null}
 
       {!loading && !error ? (
         <div style={assignmentActionStyle}>
