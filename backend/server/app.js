@@ -2946,6 +2946,27 @@ app.post("/api/admin/courses/:courseId/co-teachers", authenticateJWT, requireRol
   }
 });
 
+/* REMOVE A CO-TEACHER WITHOUT AFFECTING THE PRIMARY TEACHER */
+app.delete("/api/admin/courses/:courseId/co-teachers/:teacherId", authenticateJWT, requireRole("admin"), async (req, res) => {
+  try {
+    const courseId = Number(req.params.courseId);
+    const teacherId = Number(req.params.teacherId);
+    if (!courseId || !teacherId) return res.status(400).json({ error: "A course and teacher are required" });
+
+    const result = await pool.query(
+      `DELETE FROM course_teachers
+       WHERE course_id = $1 AND teacher_id = $2 AND role = 'co-teacher'
+       RETURNING teacher_id`,
+      [courseId, teacherId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: "Co-teacher not found" });
+    return res.json({ success: true, teacher_id: teacherId });
+  } catch (err) {
+    console.error("DELETE /api/admin/courses/:courseId/co-teachers/:teacherId failed:", err);
+    return res.status(500).json({ error: "Failed to remove co-teacher" });
+  }
+});
+
 /* REPLACE THE PRIMARY TEACHER FOR ONE COURSE */
 app.put("/api/admin/courses/:courseId/teacher", authenticateJWT, requireRole("admin"), async (req, res) => {
   const client = await pool.connect();

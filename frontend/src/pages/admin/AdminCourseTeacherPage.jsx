@@ -148,6 +148,22 @@ export default function AdminCourseTeacherPage() {
     }
   }
 
+  async function removeCoTeacher(coTeacher) {
+    try {
+      setAssignStatus("saving")
+      setAssignMessage("")
+      const response = await authFetch(`/api/admin/courses/${courseId}/co-teachers/${coTeacher.id}`, { method: "DELETE" })
+      const data = await response.json()
+      if (!response.ok || data?.success === false) throw new Error(data?.error || "Failed to remove co-teacher")
+      setCoTeachers((current) => current.filter((item) => Number(item.id) !== Number(coTeacher.id)))
+      setAssignStatus("saved")
+      setAssignMessage("Co-teacher removed.")
+    } catch (err) {
+      setAssignStatus("error")
+      setAssignMessage(err.message || "Failed to remove co-teacher")
+    }
+  }
+
   return (
     <div>
       <Link to={`/admin/courses/${encodeURIComponent(String(courseId))}`} style={backLinkStyle}>
@@ -192,7 +208,15 @@ export default function AdminCourseTeacherPage() {
             {assignStatus === "saving" ? "Saving..." : "Add Co-Teacher"}
           </button>
           {coTeachers.length > 0 ? (
-            <div style={actionSuccessStyle}>Co-teachers: {coTeachers.map((item) => item.name || item.email).join(", ")}</div>
+            <div style={{ ...actionSuccessStyle, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+              <strong>Co-teachers:</strong>
+              {coTeachers.map((item) => (
+                <span key={item.id} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  {item.name || item.email}
+                  <button type="button" onClick={() => removeCoTeacher(item)} disabled={assignStatus === "saving"} style={removeButtonStyle}>Remove</button>
+                </span>
+              ))}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -407,6 +431,16 @@ const teacherSelectStyle = {
   color: "#111827",
   padding: "11px 12px",
   fontWeight: 700,
+}
+
+const removeButtonStyle = {
+  border: "1px solid #b91c1c",
+  borderRadius: "7px",
+  background: "white",
+  color: "#b91c1c",
+  padding: "4px 7px",
+  fontWeight: 800,
+  cursor: "pointer",
 }
 
 const actionSuccessStyle = {
