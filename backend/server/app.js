@@ -4212,6 +4212,7 @@ app.post("/api/courses/:courseId/categories", authenticateJWT, requireRole("admi
 
 
 app.delete("/api/categories/:categoryId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  let client = null;
   try {
     const categoryId = Number(req.params.categoryId);
 
@@ -4219,7 +4220,10 @@ app.delete("/api/categories/:categoryId", authenticateJWT, requireRole("admin", 
       return res.status(400).json({ error: "Valid categoryId is required" });
     }
 
-    const subcategoryResult = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    const subcategoryResult = await client.query(
       `
       SELECT COUNT(*)::int AS tier_count
       FROM category_subcategories
@@ -4230,14 +4234,20 @@ app.delete("/api/categories/:categoryId", authenticateJWT, requireRole("admin", 
 
     const tierCount = Number(subcategoryResult.rows[0]?.tier_count || 0);
 
-    if (tierCount > 0) {
-      return res.status(409).json({
-        error: "Cannot delete this learning category because evidence tiers still exist. Delete evidence tiers first.",
-        tier_count: tierCount,
-      });
-    }
+    const detachedAssignmentsResult = await client.query(
+      `
+      UPDATE assignments
+      SET subcategory_id = NULL
+      WHERE subcategory_id IN (
+        SELECT id
+        FROM category_subcategories
+        WHERE course_category_id = $1
+      )
+      `,
+      [categoryId]
+    );
 
-    const result = await pool.query(
+    const result = await client.query(
       `
       DELETE FROM course_categories
       WHERE id = $1
@@ -4247,16 +4257,24 @@ app.delete("/api/categories/:categoryId", authenticateJWT, requireRole("admin", 
     );
 
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Learning category not found" });
     }
+
+    await client.query("COMMIT");
 
     return res.json({
       success: true,
       deleted: result.rows[0],
+      deleted_tier_count: tierCount,
+      detached_assignment_count: detachedAssignmentsResult.rowCount || 0,
     });
   } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /api/categories/:categoryId failed:", err);
     return res.status(500).json({ error: "Failed to delete learning category" });
+  } finally {
+    if (client) client.release();
   }
 });
 

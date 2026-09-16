@@ -805,7 +805,7 @@ export default function CoursesPage() {
     const categoryName = String(category?.name || "this grading pathway")
 
     const confirmed = window.confirm(
-      `Delete grading pathway "${categoryName}"? This is only allowed when no evidence tiers remain.`
+      `Delete grading pathway "${categoryName}" and all of its Evidence Tiers? Lessons, assignments, and grades will stay safe, but linked assignments will be removed from this grading pathway.`
     )
 
     if (!confirmed) return
@@ -827,7 +827,11 @@ export default function CoursesPage() {
         throw new Error(data.error || "Failed to delete grading pathway")
       }
 
-      setMessage(`Assessment pathway deleted: ${data.deleted?.name || categoryName}`)
+      const detachedAssignments = Number(data.detached_assignment_count || 0)
+      setMessage(
+        `Assessment pathway deleted: ${data.deleted?.name || categoryName}` +
+        (detachedAssignments ? ` ${detachedAssignments} assignment${detachedAssignments === 1 ? "" : "s"} kept safely outside the pathway.` : "")
+      )
 
       await loadCompetencies(courseId, { forceOpen: true, scrollIntoView: false })
       window.requestAnimationFrame(() => {
