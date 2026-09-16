@@ -2707,7 +2707,7 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
           OR EXISTS (
             SELECT 1
             FROM course_teachers workspace_teacher
-            WHERE workspace_teacher.course_id = c.id
+            WHERE workspace_teacher.course_id IN (c.id, COALESCE(c.master_course_id, c.id))
               AND workspace_teacher.teacher_id = $1
           )`
       : "";
@@ -2778,7 +2778,7 @@ app.get("/api/courses", authenticateJWT, requireRole("admin", "teacher", "studen
         COALESCE((
           SELECT json_agg(DISTINCT course_teacher.teacher_id)
           FROM course_teachers course_teacher
-          WHERE course_teacher.course_id = c.id
+          WHERE course_teacher.course_id IN (c.id, COALESCE(c.master_course_id, c.id))
         ), '[]'::json) AS shared_teacher_ids,
         COUNT(ce.student_user_id)::int AS student_count
       FROM courses c
@@ -3663,7 +3663,7 @@ app.get("/api/classes", authenticateJWT, requireRole("admin", "teacher"), async 
         COALESCE((
           SELECT json_agg(DISTINCT ct.teacher_id)
           FROM course_teachers ct
-          WHERE ct.course_id = c.id
+          WHERE ct.course_id IN (c.id, COALESCE(c.master_course_id, c.id))
         ), '[]'::json) AS shared_teacher_ids
       FROM courses c
       ORDER BY c.id ASC

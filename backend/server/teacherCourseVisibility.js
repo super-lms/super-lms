@@ -98,12 +98,26 @@ function isCourseAssignedToTeacher(course, teacherId) {
   );
 }
 
+function isCourseSharedWithTeacher(course, teacherId) {
+  const numericTeacherId = Number(teacherId || 0);
+  const sharedTeacherIds = Array.isArray(course?.shared_teacher_ids)
+    ? course.shared_teacher_ids.map((id) => Number(id || 0)).filter(Boolean)
+    : [];
+
+  return Boolean(numericTeacherId && sharedTeacherIds.includes(numericTeacherId));
+}
+
 function shouldShowCourseForTeacher({ email, teacherId, course }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const normalizedTitle = normalizeCourseTitle(course?.title || course?.class_name);
 
   if (!normalizedTitle) return false;
   if (normalizedTitle === normalizeCourseTitle("Summer Session Spoken Language 10 Upgrade")) return false;
+
+  // An administrator's current course assignment always wins over the older
+  // timetable visibility list. This lets co-teachers see master courses and
+  // their linked sections immediately.
+  if (isCourseSharedWithTeacher(course, teacherId)) return true;
 
   const approvedTitles = NORMALIZED_ASSIGNMENTS.get(normalizedEmail);
   if (!approvedTitles) return isCourseAssignedToTeacher(course, teacherId);
