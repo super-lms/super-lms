@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import * as XLSX from "xlsx"
 import authFetch from "../../services/authFetch"
 
 const emptyEnrollForm = {
@@ -22,6 +23,9 @@ export default function AdminCourseStudentsPage() {
   const [enrollMessage, setEnrollMessage] = useState("")
   const [enrollError, setEnrollError] = useState("")
   const [enrolling, setEnrolling] = useState(false)
+  const [importMessage, setImportMessage] = useState("")
+  const [importError, setImportError] = useState("")
+  const [importing, setImporting] = useState(false)
 
   async function loadStudents() {
     try {
@@ -129,6 +133,62 @@ export default function AdminCourseStudentsPage() {
       setEnrollError(err.message || "Failed to enroll student.")
     } finally {
       setEnrolling(false)
+    }
+  }
+
+  async function handleRosterSpreadsheet(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+
+    try {
+      setImporting(true)
+      setImportMessage("Reading spreadsheet...")
+      setImportError("")
+
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" })
+      const studentsToEnroll = rows.map((row) => {
+        const values = Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [
+            String(key).trim().toLowerCase().replace(/\s+/g, "_"),
+            String(value ?? "").trim(),
+          ])
+        )
+        return {
+          name: values.student_name || values.student || values.name || "",
+          email: values.student_email || values.email || "",
+          student_id: values.student_id || values.webtess_student_id || values.id || "",
+          parent_email: values.parent_email || "",
+        }
+      }).filter((student) => student.name && student.email)
+
+      if (!studentsToEnroll.length) {
+        throw new Error("The spreadsheet needs Student/Student Name and Email columns.")
+      }
+
+      let enrolled = 0
+      let alreadyEnrolled = 0
+      for (const student of studentsToEnroll) {
+        const response = await authFetch(`/api/class-roster/${courseId}/students`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(student),
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data?.error || `Could not enroll ${student.name}.`)
+        if (data?.already_enrolled) alreadyEnrolled += 1
+        else enrolled += 1
+      }
+
+      setImportMessage(`Roster imported: ${enrolled} enrolled${alreadyEnrolled ? `; ${alreadyEnrolled} already enrolled` : ""}.`)
+      await loadStudents()
+    } catch (err) {
+      setImportError(err.message || "Failed to import spreadsheet.")
+      setImportMessage("")
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -251,6 +311,24 @@ export default function AdminCourseStudentsPage() {
             {enrollMessage ? <div style={noticeStyle}>{enrollMessage}</div> : null}
             {enrollError ? <div style={errorStyle}>{enrollError}</div> : null}
           </form>
+
+          <div style={formBoxStyle}>
+            <h2 style={{ margin: "0 0 8px 0", fontSize: "22px", color: "#111827" }}>
+              Import Student Roster
+            </h2>
+            <p style={{ margin: "0 0 16px 0", color: "#4b5563", lineHeight: 1.5 }}>
+              Upload an Excel file with Student (or Student Name), Email, Student ID, and Parent Email columns.
+            </p>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleRosterSpreadsheet}
+              disabled={importing}
+            />
+            {importing ? <div style={noticeStyle}>Importing roster...</div> : null}
+            {importMessage ? <div style={noticeStyle}>{importMessage}</div> : null}
+            {importError ? <div style={errorStyle}>{importError}</div> : null}
+          </div>
 
           <div style={searchBoxStyle}>
             <label style={searchLabelStyle}>Search students</label>
