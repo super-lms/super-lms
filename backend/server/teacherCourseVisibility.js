@@ -63,11 +63,6 @@ const TEACHER_COURSE_ASSIGNMENTS = {
     "Spoken Language and New Media 10A", "Spoken Language and New Media 10B",
     "Spoken Language and New Media 10C", "Spoken Language and New Media 10D",
   ],
-  "nolanhansen@cbcschools.ca": [
-    "Composition 10D",
-    "FMP 10D",
-    "Social Studies 10D",
-  ],
 };
 
 function normalizeCourseTitle(value) {
