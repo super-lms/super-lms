@@ -5,6 +5,7 @@ const pool = require("./db");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const xlsx = require("xlsx");
 const authRoutes = require("../api/auth-api/routes");
 const { ensurePasswordRecoveryTables } = authRoutes;
 const { authenticateJWT, requireRole } = require("../middleware/auth");
@@ -7231,6 +7232,189 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
     return res.status(500).json({ error: "Failed to load assignment gradebook" });
   }
 });
+
+/* IMPORT CHECKLIST MARKS FROM AN EXCEL ROSTER */
+app.post(
+  "/api/assignments/:assignmentId/import-checklist-marks",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  upload.single("file"),
+  async (req, res) => {
+    const assignmentId = Number(req.params.assignmentId);
+    const requestedSectionId = Number(req.body.section_id || 0);
+
+    if (!Number.isFinite(assignmentId)) {
+      return res.status(400).json({ error: "Valid assignment id is required" });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Choose an Excel checklist before importing." });
+    }
+
+    try {
+      const assignmentResult = await pool.query(
+        `
+        SELECT id, title, class_id, teacher_id, points_possible
+        FROM assignments
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [assignmentId]
+      );
+      const assignment = assignmentResult.rows[0];
+
+      if (!assignment) {
+        return res.status(404).json({ error: "Assignment not found" });
+      }
+
+      const sectionId = requestedSectionId || Number(assignment.class_id);
+      const sectionResult = await pool.query(
+        `
+        SELECT id, title
+        FROM courses
+        WHERE id = $1
+          AND COALESCE(master_course_id, id) = $2
+        LIMIT 1
+        `,
+        [sectionId, assignment.class_id]
+      );
+      const section = sectionResult.rows[0];
+
+      if (!section) {
+        return res.status(400).json({ error: "Choose a valid course section before importing." });
+      }
+
+      const workbook = xlsx.readFile(req.file.path);
+      const normalize = (value) => String(value || "")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+      const sectionKey = normalize(section.title);
+      const sheetName = workbook.SheetNames.find((name) => normalize(name) === sectionKey) ||
+        (workbook.SheetNames.length === 1 ? workbook.SheetNames[0] : null);
+
+      if (!sheetName) {
+        return res.status(400).json({
+          error: `No worksheet named \"${section.title}\" was found. Choose that section, then upload its matching checklist.`,
+        });
+      }
+
+      const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+      let headerIndex = -1;
+      let studentColumn = -1;
+      let markColumn = -1;
+      let maxMark = 0;
+
+      rows.forEach((row, rowIndex) => {
+        if (headerIndex !== -1) return;
+        row.forEach((cell, columnIndex) => {
+          const text = String(cell || "").trim();
+          if (/student\s*name/i.test(text)) studentColumn = columnIndex;
+          const markMatch = text.match(/mark\s*out\s*of\s*(\d+(?:\.\d+)?)/i);
+          if (markMatch) {
+            markColumn = columnIndex;
+            maxMark = Number(markMatch[1]);
+          }
+        });
+        if (studentColumn >= 0 && markColumn >= 0 && maxMark > 0) headerIndex = rowIndex;
+      });
+
+      if (headerIndex === -1) {
+        return res.status(400).json({ error: "The checklist needs Student Name and Mark out of columns." });
+      }
+
+      const rosterResult = await pool.query(
+        `
+        SELECT u.id AS student_user_id,
+          COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.name, u.email) AS student_name,
+          u.email AS student_email
+        FROM class_enrollments ce
+        JOIN users u ON u.id = ce.student_user_id
+        WHERE ce.class_id = $1
+        `,
+        [sectionId]
+      );
+      const rosterByName = new Map();
+      rosterResult.rows.forEach((student) => {
+        const key = normalize(student.student_name);
+        if (!key) return;
+        rosterByName.set(key, rosterByName.has(key) ? null : student);
+      });
+
+      const imported = [];
+      const skipped = [];
+      for (const row of rows.slice(headerIndex + 1)) {
+        const studentName = String(row[studentColumn] || "").trim();
+        const markValue = row[markColumn];
+        if (!studentName || markValue === "" || markValue === null || markValue === undefined) continue;
+
+        const mark = Number(markValue);
+        const student = rosterByName.get(normalize(studentName));
+        if (!student || !Number.isFinite(mark) || mark < 0 || mark > maxMark) {
+          skipped.push(studentName);
+          continue;
+        }
+
+        const percentScore = Number(((mark / maxMark) * 100).toFixed(2));
+        const kduLevel = Number(((percentScore / 100) * 6).toFixed(4));
+        const rubricSelection = {
+          DO: kduLevel,
+          KNOW: kduLevel,
+          UNDERSTAND: kduLevel,
+          overallScore: percentScore,
+          directPercentage: true,
+          importedChecklistMark: mark,
+          importedChecklistMaxMark: maxMark,
+        };
+        const existingResult = await pool.query(
+          `
+          SELECT id, feedback
+          FROM submissions
+          WHERE assignment_id = $1
+            AND (student_id = $2 OR LOWER(student_email) = LOWER($3))
+          ORDER BY CASE WHEN student_id = $2 THEN 0 ELSE 1 END, id DESC
+          LIMIT 1
+          `,
+          [assignmentId, student.student_user_id, student.student_email]
+        );
+
+        if (existingResult.rows[0]) {
+          await pool.query(
+            `UPDATE submissions SET score = $1, grade = $2, rubric_selection = $3 WHERE id = $4`,
+            [percentScore, `${percentScore}%`, rubricSelection, existingResult.rows[0].id]
+          );
+        } else {
+          await pool.query(
+            `
+            INSERT INTO submissions (
+              assignment_id, assignment_title, course_id, teacher_id, student_id, student_name,
+              student_email, original_file_name, stored_file_name, file_path, content, score, grade,
+              feedback, rubric_selection
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            `,
+            [
+              assignmentId, assignment.title, assignment.class_id, assignment.teacher_id,
+              student.student_user_id, student.student_name, student.student_email,
+              "Imported checklist mark", "Imported checklist mark", "imported-checklist-mark",
+              `Imported from ${sheetName}: ${mark}/${maxMark}.`, percentScore, `${percentScore}%`,
+              "Checklist mark imported.", rubricSelection,
+            ]
+          );
+        }
+        imported.push({ student_name: student.student_name, mark, percent: percentScore });
+      }
+
+      return res.json({ success: true, sheet_name: sheetName, imported, skipped });
+    } catch (err) {
+      console.error("POST /api/assignments/:assignmentId/import-checklist-marks failed:", err);
+      return res.status(500).json({ error: "Failed to import checklist marks" });
+    } finally {
+      fs.unlink(req.file?.path || "", () => {});
+    }
+  }
+);
 
 /* SAVE TEACHER FEEDBACK */
 app.post("/api/assignments/:assignmentId/teacher-feedback", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {

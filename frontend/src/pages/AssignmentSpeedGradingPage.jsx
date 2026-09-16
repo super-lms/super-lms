@@ -264,6 +264,9 @@ export default function AssignmentSpeedGradingPage() {
   const [studentAttachmentsLoading, setStudentAttachmentsLoading] = useState(false);
   const [studentAttachmentsMessage, setStudentAttachmentsMessage] = useState("");
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("");
+  const [checklistFile, setChecklistFile] = useState(null);
+  const [checklistImporting, setChecklistImporting] = useState(false);
+  const [checklistImportMessage, setChecklistImportMessage] = useState("");
   const [graderLayout, setGraderLayout] = useState(() => {
     try {
       return window.localStorage.getItem("super-lms-speedgrader-layout") === "side-by-side"
@@ -335,6 +338,39 @@ export default function AssignmentSpeedGradingPage() {
       console.error("Failed to load gradebook:", error);
       setRows([]);
       setSelectedRow(null);
+    }
+  }
+
+  async function importChecklistMarks() {
+    if (!checklistFile) {
+      setChecklistImportMessage("Choose the completed Excel checklist first.");
+      return;
+    }
+
+    try {
+      setChecklistImporting(true);
+      setChecklistImportMessage("Importing checklist marks...");
+      const formData = new FormData();
+      formData.append("file", checklistFile);
+      if (sectionId) formData.append("section_id", sectionId);
+
+      const res = await authFetch(
+        `${API_BASE}/api/assignments/${assignmentId}/import-checklist-marks`,
+        { method: "POST", body: formData }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to import checklist marks");
+
+      const skipped = Array.isArray(data.skipped) ? data.skipped.length : 0;
+      setChecklistImportMessage(
+        `${data.imported?.length || 0} marks imported from ${data.sheet_name}.${skipped ? ` ${skipped} rows need checking.` : ""}`
+      );
+      setChecklistFile(null);
+      await loadGradebook();
+    } catch (error) {
+      setChecklistImportMessage(error.message || "Failed to import checklist marks");
+    } finally {
+      setChecklistImporting(false);
     }
   }
 
@@ -1211,6 +1247,36 @@ export default function AssignmentSpeedGradingPage() {
           Review student submission status, score, feedback, and KDU competency
           scoring in one place.
         </div>
+
+        {isOneScoreAssignment ? (
+          <div
+            style={{
+              border: "1px solid #cbd5e1",
+              borderRadius: "12px",
+              padding: "14px",
+              background: "#f8fafc",
+              display: "grid",
+              gap: "10px",
+              marginBottom: "16px",
+            }}
+          >
+            <strong>Import completed PE checklist</strong>
+            <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+              Choose this section's Excel sheet after entering marks. Marks out of 10 are converted and saved directly to this assignment's gradebook.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <input
+                type="file"
+                accept=".xlsx"
+                onChange={(event) => setChecklistFile(event.target.files?.[0] || null)}
+              />
+              <ActionButton onClick={importChecklistMarks} disabled={checklistImporting}>
+                {checklistImporting ? "Importing..." : "Import Checklist Marks"}
+              </ActionButton>
+            </div>
+            {checklistImportMessage ? <div style={{ fontWeight: 700 }}>{checklistImportMessage}</div> : null}
+          </div>
+        ) : null}
 
         <div
           style={{
