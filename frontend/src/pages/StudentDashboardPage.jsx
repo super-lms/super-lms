@@ -487,6 +487,14 @@ function SubmissionEditor({
               <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
                 {existingFeedback || "No feedback yet."}
               </div>
+              {submissionState?.submission?.audio_feedback_url ? (
+                <audio
+                  controls
+                  preload="metadata"
+                  src={`${API_BASE}${submissionState.submission.audio_feedback_url}`}
+                  style={{ width: "100%", marginTop: "12px" }}
+                />
+              ) : null}
             </DetailCard>
           </div>
         </>

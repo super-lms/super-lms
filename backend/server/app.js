@@ -6225,6 +6225,7 @@ app.get(
 
 app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJWT, requireRole("admin", "teacher", "student"), async (req, res) => {
   try {
+    await ensureTeacherAudioFeedbackTable();
     const studentEmail = String(req.params.studentEmail || "").trim().toLowerCase();
     const courseId = Number(req.params.courseId);
 
@@ -6344,6 +6345,12 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         s.feedback,
         s.grade,
         s.rubric_selection,
+        (
+          SELECT '/teacher-audio-feedback/' || taf.stored_name
+          FROM teacher_audio_feedback taf
+          WHERE taf.submission_id = s.id
+          LIMIT 1
+        ) AS audio_feedback_url,
         EXISTS (
           SELECT 1
           FROM submission_attachments sa
