@@ -271,6 +271,7 @@ export default function AssignmentSpeedGradingPage() {
   const [feedbackAudioMessage, setFeedbackAudioMessage] = useState("");
   const mediaRecorderRef = useRef(null);
   const feedbackAudioChunksRef = useRef([]);
+  const feedbackRecordingStartedAtRef = useRef(0);
   const [checklistFile, setChecklistFile] = useState(null);
   const [checklistImporting, setChecklistImporting] = useState(false);
   const [checklistImportMessage, setChecklistImportMessage] = useState("");
@@ -757,7 +758,12 @@ export default function AssignmentSpeedGradingPage() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const preferredMimeType = ["audio/webm;codecs=opus", "audio/mp4"].find(
+        (type) => MediaRecorder.isTypeSupported(type)
+      );
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       feedbackAudioChunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data?.size) feedbackAudioChunksRef.current.push(event.data);
@@ -765,14 +771,20 @@ export default function AssignmentSpeedGradingPage() {
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
         const blob = new Blob(feedbackAudioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        if (!blob.size) return setFeedbackAudioMessage("No audio was recorded. Try again.");
+        const elapsedMs = Date.now() - feedbackRecordingStartedAtRef.current;
+        if (blob.size < 1024 || elapsedMs < 500) {
+          setRecordedFeedbackAudio(null);
+          setFeedbackAudioMessage("No usable audio was recorded. Hold Record for at least one second, then try again.");
+          return;
+        }
         if (recordedFeedbackAudioUrl) URL.revokeObjectURL(recordedFeedbackAudioUrl);
         setRecordedFeedbackAudio(blob);
         setRecordedFeedbackAudioUrl(URL.createObjectURL(blob));
         setFeedbackAudioMessage("Recording ready. Listen, then save it for the student.");
       };
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      feedbackRecordingStartedAtRef.current = Date.now();
+      recorder.start(250);
       setIsRecordingFeedback(true);
       setFeedbackAudioMessage("Recording… tap Stop when finished.");
     } catch (_error) {
@@ -791,7 +803,10 @@ export default function AssignmentSpeedGradingPage() {
       setSavingFeedbackAudio(true);
       setFeedbackAudioMessage("Saving audio feedback…");
       const formData = new FormData();
-      formData.append("audio", recordedFeedbackAudio, "teacher-audio-feedback.webm");
+      const fileName = recordedFeedbackAudio.type.includes("mp4")
+        ? "teacher-audio-feedback.m4a"
+        : "teacher-audio-feedback.webm";
+      formData.append("audio", recordedFeedbackAudio, fileName);
       formData.append("student_email", selectedRow.student_email);
       const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/teacher-audio-feedback`, {
         method: "POST", body: formData,

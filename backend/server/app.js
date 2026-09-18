@@ -7620,14 +7620,15 @@ app.post(
         submissionId = created.rows[0].id;
       }
 
-      const extension = String(req.file.mimetype || "").includes("mp4") ? ".m4a" : ".webm";
+      const mimeType = String(req.file.mimetype || "audio/webm").split(";")[0];
+      const extension = mimeType.includes("mp4") ? ".m4a" : ".webm";
       const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
       const fileData = fs.readFileSync(req.file.path);
       await pool.query(
         `INSERT INTO teacher_audio_feedback (submission_id, assignment_id, student_email, stored_name, mime_type, size_bytes, file_data, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
          ON CONFLICT (submission_id) DO UPDATE SET stored_name = EXCLUDED.stored_name, mime_type = EXCLUDED.mime_type, size_bytes = EXCLUDED.size_bytes, file_data = EXCLUDED.file_data, updated_at = NOW()`,
-        [submissionId, assignmentId, studentEmail, storedName, req.file.mimetype || "audio/webm", Number(req.file.size || 0), fileData]
+        [submissionId, assignmentId, studentEmail, storedName, mimeType, Number(req.file.size || 0), fileData]
       );
       return res.json({ success: true, audio_feedback_url: `/teacher-audio-feedback/${storedName}` });
     } catch (error) {
