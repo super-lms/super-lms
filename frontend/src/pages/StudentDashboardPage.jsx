@@ -242,6 +242,16 @@ function ResultCard({ assignment, submissionState, onOpen }) {
         <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
           {submission?.feedback || "No feedback yet."}
         </div>
+        {submission?.audio_feedback_url ? (
+          <audio
+            controls
+            preload="metadata"
+            src={`${API_BASE}${submission.audio_feedback_url}`}
+            style={{ width: "100%", marginTop: "12px" }}
+          >
+            Your browser does not support audio playback.
+          </audio>
+        ) : null}
       </DetailCard>
     </div>
   )

@@ -194,6 +194,21 @@ app.get("/uploads/:storedName", async (req, res, next) => {
     return next();
   }
 });
+
+app.get("/teacher-audio-feedback/:storedName", async (req, res, next) => {
+  try {
+    await ensureTeacherAudioFeedbackTable();
+    const storedName = path.basename(String(req.params.storedName || ""));
+    const result = await pool.query(
+      `SELECT mime_type, file_data FROM teacher_audio_feedback WHERE stored_name = $1 LIMIT 1`,
+      [storedName]
+    );
+    if (!result.rows[0]) return next();
+    return res.type(result.rows[0].mime_type || "audio/webm").send(result.rows[0].file_data);
+  } catch (error) {
+    return next(error);
+  }
+});
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/auth", authRoutes);
 app.use("/api/demo", demoRoutes);
@@ -290,6 +305,23 @@ async function ensureSubmissionAttachmentsTable() {
     )
   `);
   await pool.query(`ALTER TABLE submission_attachments ADD COLUMN IF NOT EXISTS file_data BYTEA`);
+}
+
+async function ensureTeacherAudioFeedbackTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS teacher_audio_feedback (
+      id SERIAL PRIMARY KEY,
+      submission_id INTEGER NOT NULL UNIQUE REFERENCES submissions(id) ON DELETE CASCADE,
+      assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+      student_email TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'audio/webm',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      file_data BYTEA NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
 }
 
 async function ensureAttendanceTables() {
@@ -6401,6 +6433,7 @@ app.get(
   requireRole("admin", "student"),
   async (req, res) => {
     try {
+      await ensureTeacherAudioFeedbackTable();
       const assignmentId = Number(req.params.assignmentId);
       const studentEmail = String(req.user?.role === "student" ? req.user.email : req.query.student_email || "")
         .trim()
@@ -6463,6 +6496,12 @@ app.get(
           feedback,
           grade,
           rubric_selection,
+          (
+            SELECT '/teacher-audio-feedback/' || taf.stored_name
+            FROM teacher_audio_feedback taf
+            WHERE taf.submission_id = submissions.id
+            LIMIT 1
+          ) AS audio_feedback_url,
           EXISTS (
             SELECT 1
             FROM submission_attachments sa
@@ -7148,6 +7187,7 @@ app.delete("/api/student-attachments/:attachmentId", authenticateJWT, requireRol
 /* GET ASSIGNMENT GRADEBOOK */
 app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
+    await ensureTeacherAudioFeedbackTable();
     const assignmentId = Number(req.params.assignmentId);
 
     if (!assignmentId) {
@@ -7205,6 +7245,12 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         s.score,
         s.feedback,
         s.rubric_selection,
+        (
+          SELECT '/teacher-audio-feedback/' || taf.stored_name
+          FROM teacher_audio_feedback taf
+          WHERE taf.submission_id = s.id
+          LIMIT 1
+        ) AS audio_feedback_url,
         CASE
           WHEN s.id IS NULL THEN 'None'
           WHEN NULLIF(TRIM(s.content), '') IS NOT NULL
@@ -7522,6 +7568,69 @@ app.post("/api/assignments/:assignmentId/teacher-feedback", authenticateJWT, req
     return res.status(500).json({ error: "Failed to save teacher feedback" });
   }
 });
+
+/* RECORD AND SAVE TEACHER AUDIO FEEDBACK */
+app.post(
+  "/api/assignments/:assignmentId/teacher-audio-feedback",
+  authenticateJWT,
+  requireRole("admin", "teacher"),
+  upload.single("audio"),
+  async (req, res) => {
+    try {
+      await ensureTeacherAudioFeedbackTable();
+      const assignmentId = Number(req.params.assignmentId);
+      const studentEmail = String(req.body.student_email || "").trim().toLowerCase();
+      if (!assignmentId || !studentEmail || !req.file) {
+        return res.status(400).json({ error: "Assignment, student, and audio recording are required" });
+      }
+      if (!String(req.file.mimetype || "").startsWith("audio/")) {
+        return res.status(400).json({ error: "Audio feedback must be an audio recording" });
+      }
+
+      const assignmentResult = await pool.query(
+        `SELECT id, title, class_id, teacher_id FROM assignments WHERE id = $1 LIMIT 1`,
+        [assignmentId]
+      );
+      const studentResult = await pool.query(
+        `SELECT id, name FROM users WHERE LOWER(email) = $1 AND role = 'student' LIMIT 1`,
+        [studentEmail]
+      );
+      const assignment = assignmentResult.rows[0];
+      const student = studentResult.rows[0];
+      if (!assignment || !student) return res.status(404).json({ error: "Assignment or student not found" });
+
+      const existingSubmission = await pool.query(
+        `SELECT id FROM submissions WHERE assignment_id = $1 AND (student_id = $2 OR LOWER(student_email) = $3) LIMIT 1`,
+        [assignmentId, student.id, studentEmail]
+      );
+      let submissionId = existingSubmission.rows[0]?.id;
+      if (!submissionId) {
+        const created = await pool.query(
+          `INSERT INTO submissions (assignment_id, assignment_title, course_id, teacher_id, student_id, student_name, student_email, original_file_name, stored_file_name, file_path, content, feedback)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'Teacher audio feedback','Teacher audio feedback','teacher-audio-feedback','','') RETURNING id`,
+          [assignmentId, assignment.title || "Untitled Assignment", assignment.class_id, assignment.teacher_id, student.id, student.name || studentEmail, studentEmail]
+        );
+        submissionId = created.rows[0].id;
+      }
+
+      const extension = String(req.file.mimetype || "").includes("mp4") ? ".m4a" : ".webm";
+      const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
+      const fileData = fs.readFileSync(req.file.path);
+      await pool.query(
+        `INSERT INTO teacher_audio_feedback (submission_id, assignment_id, student_email, stored_name, mime_type, size_bytes, file_data, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+         ON CONFLICT (submission_id) DO UPDATE SET stored_name = EXCLUDED.stored_name, mime_type = EXCLUDED.mime_type, size_bytes = EXCLUDED.size_bytes, file_data = EXCLUDED.file_data, updated_at = NOW()`,
+        [submissionId, assignmentId, studentEmail, storedName, req.file.mimetype || "audio/webm", Number(req.file.size || 0), fileData]
+      );
+      return res.json({ success: true, audio_feedback_url: `/teacher-audio-feedback/${storedName}` });
+    } catch (error) {
+      console.error("POST teacher audio feedback failed:", error);
+      return res.status(500).json({ error: "Failed to save audio feedback" });
+    } finally {
+      if (req.file?.path) fs.unlink(req.file.path, () => {});
+    }
+  }
+);
 
 /* SAVE KDU SCORES */
 app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {

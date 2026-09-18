@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import RawMarkEntryPanel from "./RawMarkEntryPanel";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
@@ -264,6 +264,13 @@ export default function AssignmentSpeedGradingPage() {
   const [studentAttachmentsLoading, setStudentAttachmentsLoading] = useState(false);
   const [studentAttachmentsMessage, setStudentAttachmentsMessage] = useState("");
   const [deletingAttachmentId, setDeletingAttachmentId] = useState("");
+  const [isRecordingFeedback, setIsRecordingFeedback] = useState(false);
+  const [recordedFeedbackAudio, setRecordedFeedbackAudio] = useState(null);
+  const [recordedFeedbackAudioUrl, setRecordedFeedbackAudioUrl] = useState("");
+  const [savingFeedbackAudio, setSavingFeedbackAudio] = useState(false);
+  const [feedbackAudioMessage, setFeedbackAudioMessage] = useState("");
+  const mediaRecorderRef = useRef(null);
+  const feedbackAudioChunksRef = useRef([]);
   const [checklistFile, setChecklistFile] = useState(null);
   const [checklistImporting, setChecklistImporting] = useState(false);
   const [checklistImportMessage, setChecklistImportMessage] = useState("");
@@ -740,6 +747,66 @@ export default function AssignmentSpeedGradingPage() {
       return false;
     } finally {
       setSavingFeedback(false);
+    }
+  }
+
+  async function startAudioFeedbackRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setFeedbackAudioMessage("Audio recording is not supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      feedbackAudioChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) feedbackAudioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(feedbackAudioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (!blob.size) return setFeedbackAudioMessage("No audio was recorded. Try again.");
+        if (recordedFeedbackAudioUrl) URL.revokeObjectURL(recordedFeedbackAudioUrl);
+        setRecordedFeedbackAudio(blob);
+        setRecordedFeedbackAudioUrl(URL.createObjectURL(blob));
+        setFeedbackAudioMessage("Recording ready. Listen, then save it for the student.");
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecordingFeedback(true);
+      setFeedbackAudioMessage("Recording… tap Stop when finished.");
+    } catch (_error) {
+      setFeedbackAudioMessage("Microphone access was not allowed.");
+    }
+  }
+
+  function stopAudioFeedbackRecording() {
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    setIsRecordingFeedback(false);
+  }
+
+  async function saveAudioFeedback() {
+    if (!recordedFeedbackAudio || !selectedRow?.student_email) return;
+    try {
+      setSavingFeedbackAudio(true);
+      setFeedbackAudioMessage("Saving audio feedback…");
+      const formData = new FormData();
+      formData.append("audio", recordedFeedbackAudio, "teacher-audio-feedback.webm");
+      formData.append("student_email", selectedRow.student_email);
+      const res = await authFetch(`${API_BASE}/api/assignments/${assignmentId}/teacher-audio-feedback`, {
+        method: "POST", body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save audio feedback");
+      setFeedbackAudioMessage("Audio feedback saved ✓ The student can play it with their feedback.");
+      setRecordedFeedbackAudio(null);
+      if (recordedFeedbackAudioUrl) URL.revokeObjectURL(recordedFeedbackAudioUrl);
+      setRecordedFeedbackAudioUrl("");
+      await loadGradebook(selectedRow.student_email);
+    } catch (error) {
+      setFeedbackAudioMessage(error.message || "Failed to save audio feedback.");
+    } finally {
+      setSavingFeedbackAudio(false);
     }
   }
 
@@ -1754,6 +1821,30 @@ export default function AssignmentSpeedGradingPage() {
                       <span style={{ color: "#4b5563", fontWeight: 700 }}>
                         {feedbackSaveMessage || `${teacherFeedback.length}/5000 characters`}
                       </span>
+                    </div>
+
+                    <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+                      <strong>Audio Feedback</strong>
+                      <div style={{ color: "#4b5563", lineHeight: 1.45 }}>
+                        Record a short message. The student can play it beside this written feedback.
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        {!isRecordingFeedback ? (
+                          <ActionButton quiet onClick={startAudioFeedbackRecording} disabled={savingFeedbackAudio}>
+                            Record Audio
+                          </ActionButton>
+                        ) : (
+                          <ActionButton onClick={stopAudioFeedbackRecording}>Stop Recording</ActionButton>
+                        )}
+                        {recordedFeedbackAudio ? (
+                          <ActionButton onClick={saveAudioFeedback} disabled={savingFeedbackAudio}>
+                            {savingFeedbackAudio ? "Saving Audio..." : "Save Audio for Student"}
+                          </ActionButton>
+                        ) : null}
+                      </div>
+                      {recordedFeedbackAudioUrl ? <audio controls src={recordedFeedbackAudioUrl} style={{ width: "100%" }} /> : null}
+                      {selectedRow.audio_feedback_url ? <audio controls src={`${API_BASE}${selectedRow.audio_feedback_url}`} style={{ width: "100%" }} /> : null}
+                      {feedbackAudioMessage ? <div style={{ color: "#4b5563", fontWeight: 700 }}>{feedbackAudioMessage}</div> : null}
                     </div>
                   </div>
 
