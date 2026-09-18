@@ -187,6 +187,7 @@ const server = http.createServer((request, response) => {
     (requestPath === "/api" ||
       requestPath.startsWith("/api/") ||
       requestPath.startsWith("/uploads/") ||
+      requestPath.startsWith("/teacher-audio-feedback/") ||
       requestPath.startsWith("/course-resources/") ||
       requestPath.startsWith("/lesson-resources/"))
   ) {
