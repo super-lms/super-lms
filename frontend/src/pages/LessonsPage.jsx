@@ -150,6 +150,9 @@ function LessonsPage() {
       return { skipped: true }
     }
 
+    if (files.length > 20) throw new Error("Select no more than 20 resources per upload")
+    const oversized = files.find((file) => file.size > 250 * 1024 * 1024)
+    if (oversized) throw new Error(`${oversized.name} must be 250 MB or smaller`)
     const savedFiles = []
 
     for (let index = 0; index < files.length; index += 1) {
@@ -157,30 +160,21 @@ function LessonsPage() {
       setMessage(`Uploading resource ${index + 1} of ${files.length}: ${file.name}`)
       setResourceUploadMessage(`Uploading ${file.name}—please keep this page open...`)
 
-      const encodedData = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onerror = () => reject(new Error(`${file.name} could not be read`))
-        reader.onload = () => {
-          const result = String(reader.result || "")
-          resolve(result.includes(",") ? result.split(",", 2)[1] : result)
-        }
-        reader.readAsDataURL(file)
-      })
+      if (file.size > 250 * 1024 * 1024) {
+        throw new Error(`${file.name} must be 250 MB or smaller`)
+      }
+      const formData = new FormData()
+      formData.append("files", file)
 
       const controller = new AbortController()
-      const timeoutId = window.setTimeout(() => controller.abort(), 120000)
+      const timeoutId = window.setTimeout(() => controller.abort(), 900000)
 
       try {
         const response = await authFetch(
-          `${API_BASE}/api/lesson-file-data/${lessonId}`,
+          `${API_BASE}/api/lesson-files/${lessonId}`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: file.name,
-              type: file.type || "application/octet-stream",
-              data: encodedData,
-            }),
+            body: formData,
             signal: controller.signal,
           }
         )
@@ -1138,7 +1132,7 @@ function LessonsPage() {
                 color: "#475569",
               }}
             >
-              Select up to 20 files at once (maximum 50 MB each). All resources will be stored together in this lesson module and shared with linked class sections.
+              Select up to 20 files at once (maximum 250 MB each). All resources will be stored together in this lesson module and shared with linked class sections.
             </p>
           </div>
 

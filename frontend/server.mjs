@@ -67,7 +67,7 @@ function proxyRequest(request, response, target, upstreamPath = request.url) {
     }
   )
 
-  upstreamRequest.setTimeout(180000, () => {
+  upstreamRequest.setTimeout(900000, () => {
     upstreamRequest.destroy(new Error("SUPER LMS backend timed out"))
   })
 
@@ -236,6 +236,8 @@ const server = http.createServer((request, response) => {
 
   serveFile(response, safePath)
 })
+
+server.requestTimeout = 900000
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`SUPER LMS frontend gateway running on port ${port}`)

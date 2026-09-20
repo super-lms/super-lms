@@ -86,34 +86,22 @@ function handleStudentAttachmentUpload(req, res, next) {
   });
 }
 
-const lessonResourceUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 50 * 1024 * 1024,
-    files: 20,
-  },
+const { createTeacherResourceUpload } = require("./teacherResourceUpload");
+const teacherResources = createTeacherResourceUpload();
+const handleLessonResourceUpload = teacherResources.multiple;
+const handleSingleResourceUpload = teacherResources.single;
+const teacherDiskUpload = multer({
+  dest: uploadDir,
+  limits: { fileSize: 250 * 1024 * 1024 + 1 },
 });
-
-function handleLessonResourceUpload(req, res, next) {
-  lessonResourceUpload.array("files", 20)(req, res, (error) => {
+function handleTeacherDiskUpload(req, res, next) {
+  teacherDiskUpload.single("attachment")(req, res, (error) => {
     if (!error) return next();
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ error: "Each lesson resource must be 50 MB or smaller" });
-    }
-    if (error.code === "LIMIT_FILE_COUNT") {
-      return res.status(400).json({ error: "Upload no more than 20 lesson resources at once" });
-    }
-    return res.status(400).json({ error: error.message || "Lesson resources could not be uploaded" });
-  });
-}
-
-function handleSingleResourceUpload(req, res, next) {
-  lessonResourceUpload.single("attachment")(req, res, (error) => {
-    if (!error) return next();
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ error: "The resource must be 50 MB or smaller" });
-    }
-    return res.status(400).json({ error: error.message || "The resource could not be uploaded" });
+    return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({
+      error: error.code === "LIMIT_FILE_SIZE"
+        ? "The resource must be 250 MB or smaller"
+        : "The resource could not be uploaded",
+    });
   });
 }
 
@@ -2276,7 +2264,7 @@ app.post(
       for (const file of files) {
         saved.push(await saveCourseResource(client, {
           courseId, originalName: file.originalname, mimeType: file.mimetype,
-          fileData: file.buffer, createdBy: req.user?.id,
+          fileData: await fs.promises.readFile(file.path), createdBy: req.user?.id,
         }));
       }
       await client.query("COMMIT");
@@ -2441,18 +2429,19 @@ app.post(
       const savedFiles = [];
       const contentCourseId = await resolveContentCourseId(lessonResult.rows[0].course_id);
       for (const file of files) {
+        const fileData = await fs.promises.readFile(file.path);
         const extension = path.extname(String(file.originalname || "")).slice(0, 20);
         const storedName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
         const result = await client.query(
           `INSERT INTO lesson_files (lesson_id, stored_name, original_name, mime_type, file_size, file_data)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, lesson_id, original_name, mime_type, file_size, created_at`,
-          [lessonId, storedName, file.originalname, file.mimetype, file.size, file.buffer]
+          [lessonId, storedName, file.originalname, file.mimetype, file.size, fileData]
         );
         savedFiles.push({ ...result.rows[0], file_path: `/lesson-resources/${storedName}` });
         await saveCourseResource(client, {
           courseId: contentCourseId, originalName: file.originalname,
-          mimeType: file.mimetype, fileData: file.buffer, createdBy: req.user?.id,
+          mimeType: file.mimetype, fileData, createdBy: req.user?.id,
         });
       }
       await client.query("COMMIT");
@@ -5865,7 +5854,7 @@ app.post("/api/assignments/:assignmentId/resources/file", authenticateJWT, requi
     await client.query("BEGIN");
     const repositoryFile = await saveCourseResource(client, {
       courseId, originalName: req.file.originalname, mimeType: req.file.mimetype,
-      fileData: req.file.buffer, createdBy: req.user?.id,
+      fileData: await fs.promises.readFile(req.file.path), createdBy: req.user?.id,
     });
     const result = await client.query(
       `INSERT INTO assignment_resources
@@ -9821,7 +9810,7 @@ app.post(
   "/api/learning-path-items/:itemId/attachment",
   authenticateJWT,
   requireRole("admin", "teacher"),
-  upload.single("attachment"),
+  handleTeacherDiskUpload,
   async (req, res) => {
     try {
       await ensureLearningPathItemTables();
@@ -13925,9 +13914,10 @@ Promise.all([
   .then(() => ensureCourseSectionStructure())
   .then(() => backfillLegacyCourseResources())
   .then(() => {
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
       console.log("Super LMS backend running on port 3000");
     });
+    server.requestTimeout = 900000;
   })
   .catch((err) => {
     console.error("Failed to prepare backend database:", err);
