@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Pencil, Printer, RefreshCw, Save, Trash2 } from "lucide-react"
 import authFetch from "../../services/authFetch"
+import { scheduledCoursesForStudent } from "../../services/studentSchedules.js"
 
 const BLOCKS = [
   { key: "block1", label: "Block 1", time: "8:45–9:45 AM" },
@@ -156,78 +157,6 @@ function buildData(rows) {
     .sort((a, b) => a.cohort.localeCompare(b.cohort) || a.name.localeCompare(b.name))
 
   return { courses, students }
-}
-
-function requiredGrade12Courses(cohort, semester, courses) {
-  const match = String(cohort || "").toUpperCase().match(/^12([ABC])$/)
-  if (!match) return []
-
-  const section = match[1].toLowerCase()
-  const findSection = (prefixes) => courses.find((course) => {
-    const key = compactCourseTitle(course.title)
-    return prefixes.some((prefix) => key === `${prefix}${section}`)
-  })
-  const forceCourse = (course, fallback, blockKey) => ({
-    ...(course || fallback),
-    semester,
-    block_key: blockKey,
-  })
-  const academicPlanningCourse = courses.find((course) => {
-    const key = compactCourseTitle(course.title)
-    return key.includes(`planning12${section}`)
-  })
-
-  if (semester === "semester2") {
-    if (match[1] !== "C") return []
-    return [forceCourse(academicPlanningCourse, {
-      id: `required-academic-planning-${cohort}`,
-      title: `Academic Planning ${cohort}`,
-      teacher: "Academic Planning 12 Teacher",
-      room: "TBA",
-    }, "block1")]
-  }
-
-  if (semester !== "semester1") return []
-
-  const clcCourse = findSection(["clc12"])
-    || courses.find((course) => compactCourseTitle(course.title).startsWith("clc12"))
-  const blockOneCourse = match[1] === "C"
-    ? forceCourse(findSection(["chemistry12", "chem12"]), {
-        id: `required-chemistry-${cohort}`,
-        title: `Chemistry ${cohort}`,
-        teacher: "Dr. D. Vainer",
-        room: "TBA",
-      }, "block1")
-    : null
-  const academicPlanning = match[1] === "C" ? null : forceCourse(academicPlanningCourse, {
-    id: `required-academic-planning-${cohort}`,
-    title: `Academic Planning ${cohort}`,
-    teacher: "Academic Planning 12 Teacher",
-    room: "TBA",
-  }, { A: "block2", B: "block3" }[match[1]])
-
-  return [
-    blockOneCourse,
-    academicPlanning,
-    forceCourse(findSection(["physics12"]), {
-      id: `required-physics-${cohort}`,
-      title: `Physics ${cohort}`,
-      teacher: "Mr. Robinson",
-      room: "TBA",
-    }, { A: "block3", B: "block1", C: "block2" }[match[1]]),
-    forceCourse(findSection(["efp12"]), {
-      id: `required-efp-${cohort}`,
-      title: `EFP ${cohort}`,
-      teacher: "Ms. Moses",
-      room: "TBA",
-    }, { A: "block1", B: "block2", C: "block3" }[match[1]]),
-    forceCourse(clcCourse, {
-      id: `required-clc-${cohort}`,
-      title: "CLC 12A / 12B / 12C",
-      teacher: "Dr. B",
-      room: "TBA",
-    }, "block4"),
-  ].filter(Boolean)
 }
 
 export default function AdminStudentSchedulePrinterPage() {
@@ -401,20 +330,7 @@ export default function AdminStudentSchedulePrinterPage() {
   }
 
   function scheduleForStudent(student) {
-    const enrolledEntries = student.courseIds
-      .map((courseId) => courseById.get(courseId))
-      .filter(Boolean)
-      .filter((course) => course.semester === semester || course.semester === "full_year")
-      .filter((course) => !(
-        student.cohort === "12C"
-        && semester === "semester1"
-        && compactCourseTitle(course.title).includes("planning12c")
-      ))
-
-    const requiredEntries = requiredGrade12Courses(student.cohort, semester, courses)
-    const entries = Array.from(
-      new Map([...enrolledEntries, ...requiredEntries].map((course) => [course.id, course])).values()
-    )
+    const entries = scheduledCoursesForStudent(student, courseById, semester)
 
     return BLOCKS.map((block) => ({
       ...block,

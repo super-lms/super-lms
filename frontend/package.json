@@ -7,7 +7,7 @@
     "prestart": "npm run build",
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test src/services/courseSections.test.js",
+    "test": "node --test src/services/*.test.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server.mjs"
