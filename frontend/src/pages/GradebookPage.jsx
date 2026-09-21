@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import authFetch from "../services/authFetch";
@@ -120,8 +120,9 @@ function QuickScoreRow({
 
 export default function GradebookPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
-  const requestedClassId = queryParams.get("classId") || "13";
+  const requestedClassId = queryParams.get("classId") || queryParams.get("courseId") || window.localStorage.getItem("super-lms-last-course-id") || "";
   const requestedContentClassId = queryParams.get("contentClassId") || requestedClassId;
   const requestedStudentEmail = queryParams.get("studentEmail") || "";
   const requestedStudentName = queryParams.get("studentName") || "";
@@ -385,6 +386,11 @@ export default function GradebookPage() {
   useEffect(() => {
     loadCourses();
   }, []);
+
+  useEffect(() => {
+    setSelectedCourseId(requestedClassId);
+    if (requestedClassId) window.localStorage.setItem("super-lms-last-course-id", requestedClassId);
+  }, [requestedClassId]);
 
   useEffect(() => {
     loadKduGradebook(selectedCourseId);
@@ -885,7 +891,12 @@ export default function GradebookPage() {
             <select
               id="gradebook-class-select"
               value={selectedCourseId}
-              onChange={(event) => setSelectedCourseId(event.target.value)}
+              onChange={(event) => {
+                const classId = event.target.value;
+                window.localStorage.setItem("super-lms-last-course-id", classId);
+                setSelectedCourseId(classId);
+                navigate(classId ? `/gradebook?classId=${encodeURIComponent(classId)}` : "/gradebook", { replace: true });
+              }}
               className="form-input"
             >
               <option value="">Choose a class</option>

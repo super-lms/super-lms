@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from "react-router-dom"
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch"
@@ -21,7 +21,10 @@ import {
   Eye,
 } from "lucide-react"
 
+import { gradebookPath } from "../services/gradebookNavigation.js"
+
 export default function Layout() {
+  const navigate = useNavigate()
   const location = useLocation()
   const { user, logout } = useAuth()
 
@@ -96,19 +99,15 @@ export default function Layout() {
     }
   }, [user?.id, normalizedRole, isStudentRoute])
 
-  const primaryGradebookPath = useMemo(() => {
-    if (teacherCourses.length === 0) {
-      return "/gradebook"
-    }
+  function getGradebookPath() {
+    return gradebookPath(
+      window.location.pathname,
+      window.location.search,
+      window.localStorage.getItem("super-lms-last-course-id") || ""
+    )
+  }
 
-    const primaryCourseId = teacherCourses[0]?.id
-
-    if (!primaryCourseId) {
-      return "/gradebook"
-    }
-
-    return `/gradebook?classId=${primaryCourseId}`
-  }, [teacherCourses])
+  const primaryGradebookPath = getGradebookPath()
 
   const attendancePath = useMemo(() => {
     const storedCourseId = window.localStorage.getItem("super-lms-last-course-id")
@@ -260,7 +259,11 @@ export default function Layout() {
             <NavItem to="/question-banks" style={getNavLinkStyle("/question-banks")} icon={LibraryBig}>
               Question Banks
             </NavItem>
-            <NavItem to={primaryGradebookPath} style={getNavLinkStyle("/gradebook")} icon={BarChart3}>
+            <NavItem onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+              event.preventDefault()
+              navigate(getGradebookPath())
+            }} to={primaryGradebookPath} style={getNavLinkStyle("/gradebook")} icon={BarChart3}>
               Gradebook
             </NavItem>
             <NavItem to="/reports" style={getNavLinkStyle("/reports")} icon={BarChart3}>
@@ -456,9 +459,9 @@ export default function Layout() {
   )
 }
 
-function NavItem({ to, style, icon: Icon, children }) {
+function NavItem({ to, style, icon: Icon, children, onClick }) {
   return (
-    <Link to={to} title={typeof children === "string" ? children : ""} style={style}>
+    <Link to={to} onClick={onClick} title={typeof children === "string" ? children : ""} style={style}>
       <Icon size={18} />
       <span>{children}</span>
     </Link>
