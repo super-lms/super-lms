@@ -4,6 +4,8 @@ import * as XLSX from "xlsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import authFetch from "../services/authFetch";
 
+import { getPointsPossible, getEarnedPoints, pointsToPercentage } from "../services/gradebookMarks.js";
+
 const QUICK_SCORES = [1, 2, 3, 4, 5, 6];
 
 function formatPercent(value) {
@@ -340,11 +342,12 @@ export default function GradebookPage() {
 
   async function saveSpreadsheetMark(student, assignment, match) {
     const key = getDraftKey(student.student_email, assignment.id);
-    const rawMark = spreadsheetMarkDrafts[key] ?? match?.score ?? "";
-    const percentage = Number(rawMark);
-
-    if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
-      setCellSaveStatus((current) => ({ ...current, [key]: "Enter 0 to 100" }));
+    const rawMark = spreadsheetMarkDrafts[key] ?? getEarnedPoints(assignment, match);
+    let percentage;
+    try {
+      percentage = pointsToPercentage(rawMark, assignment);
+    } catch (error) {
+      setCellSaveStatus((current) => ({ ...current, [key]: error.message }));
       return;
     }
 
@@ -603,13 +606,13 @@ export default function GradebookPage() {
 
   function exportSpreadsheetGradebook() {
     const rows = [
-      ["Student", "Email", ...spreadsheetAssignments.map((assignment) => assignment.title || "Untitled Assignment"), "Current Grade"],
+      ["Student", "Email", ...spreadsheetAssignments.map((assignment) => `${assignment.title || "Untitled Assignment"} (out of ${getPointsPossible(assignment)})`), "Current Grade (%)"],
       ...spreadsheetStudents.map((student) => [
         student.student_name,
         student.student_email,
         ...spreadsheetAssignments.map((assignment) => {
           const match = (student.assignment_scores || []).find((item) => item.assignment_id === assignment.id);
-          return match?.score ?? "";
+          return getEarnedPoints(assignment, match);
         }),
         Number.isFinite(Number(student.current_percent)) ? Number(student.current_percent) : "",
       ]),
@@ -1012,7 +1015,7 @@ export default function GradebookPage() {
           <section className="panel">
             <h2>Spreadsheet Gradebook</h2>
             <p className="section-subtitle">
-              Enter a percentage mark directly in any assignment cell, then select Save. Assignment headings open Speed Grading.
+              Enter the points earned out of the assignment total, then select Save. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
             </p>
 
             <div style={spreadsheetToolbarStyle}>
@@ -1203,18 +1206,18 @@ export default function GradebookPage() {
                                 <input
                                   type="number"
                                   min="0"
-                                  max="100"
-                                  step="0.1"
-                                  value={spreadsheetMarkDrafts[markKey] ?? match?.score ?? ""}
+                                  max={getPointsPossible(assignment)}
+                                  step="any"
+                                  value={spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match)}
                                   onChange={(event) => {
                                     const value = event.target.value;
                                     setSpreadsheetMarkDrafts((current) => ({ ...current, [markKey]: value }));
                                     setCellSaveStatus((current) => ({ ...current, [markKey]: "Editing..." }));
                                   }}
                                   style={spreadsheetMarkInputStyle}
-                                  aria-label={`${student.student_name} mark for ${assignment.title || "assignment"}`}
+                                  aria-label={`${student.student_name} mark for ${assignment.title || "assignment"}, out of ${getPointsPossible(assignment)}` }
                                 />
-                                <span>%</span>
+                                <span>/ {getPointsPossible(assignment)}</span>
                               </div>
                               <button
                                 type="button"

@@ -12904,6 +12904,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
         a.id,
         a.title,
         a.description,
+        a.points_possible,
         a.due_date,
         a.subcategory_id,
         cs.name AS subcategory_name,
