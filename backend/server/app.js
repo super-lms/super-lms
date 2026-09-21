@@ -3173,6 +3173,19 @@ app.get("/api/admin/student-schedules", authenticateJWT, requireRole("admin"), a
           t.email,
           'Teacher TBA'
         ) AS teacher_name,
+        ARRAY(
+          SELECT COALESCE(NULLIF(TRIM(CONCAT(st.first_name, ' ', st.last_name)), ''), st.email)
+          FROM users st
+          WHERE st.id = c.teacher_id
+             OR EXISTS (
+               SELECT 1 FROM course_teachers ct
+               WHERE ct.teacher_id = st.id
+                 AND (ct.course_id = c.id
+                      OR (ct.course_id = c.master_course_id AND ct.role = 'co-teacher'))
+             )
+          ORDER BY CASE WHEN st.id = c.teacher_id THEN 0 ELSE 1 END,
+                   st.first_name, st.last_name, st.id
+        ) AS teacher_names,
         t.email AS teacher_email,
         COALESCE(c.description, '') AS course_description,
         COALESCE(

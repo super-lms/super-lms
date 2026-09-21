@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Pencil, Printer, RefreshCw, Save, Trash2 } from "lucide-react"
 import authFetch from "../../services/authFetch"
+import { scheduleTeacherLabel } from "../../services/scheduleTeachers.js"
 import { scheduledCoursesForStudent } from "../../services/studentSchedules.js"
 
 const BLOCKS = [
@@ -25,28 +26,6 @@ const BLOCK_OPTIONS = [
 
 function compactCourseTitle(title) {
   return String(title || "").toLowerCase().replace(/[^a-z0-9]/g, "")
-}
-
-function timetableTeacherName(value) {
-  const original = String(value || "").trim()
-  const key = original.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "")
-  const aliases = [
-    [["carriefang", "drcarrie", "carrie"], "Dr. Carrie"],
-    [["michaelsamuels", "mrsamuels", "samuels"], "Mr. Samuels"],
-    [["nicolinevanderwatt", "msvanderwatt", "vanderwatt"], "Ms. Van der Watt"],
-    [["davidcheng", "mrcheng", "cheng"], "Mr. Cheng"],
-    [["mrfeng", "feng"], "Mr. Feng"],
-    [["mrrobinson", "robinson"], "Mr. Robinson"],
-    [["msmoses", "moses"], "Ms. Moses"],
-    [["msboyd", "boyd"], "Ms. Boyd"],
-    [["drdvainer", "drvainer", "vainer"], "Dr. D. Vainer"],
-    [["mrpniu", "peteniu", "pniu"], "Mr. P. Niu"],
-    [["drbrecht", "davidbrecht", "drb"], "Dr. B"],
-    [["mrnhansen", "nhansen", "hansen"], "Mr. N. Hansen"],
-    [["academicplanning12teacher"], "Academic Planning 12 Teacher"],
-  ]
-
-  return aliases.find(([matches]) => matches.some((match) => key === match || key.includes(match)))?.[1] || original || "Teacher TBA"
 }
 
 function defaultScheduleForCourse(title) {
@@ -118,7 +97,7 @@ function buildData(rows) {
       courseMap.set(courseId, {
         id: courseId,
         title: row.course_title || `Course ${courseId}`,
-        teacher: timetableTeacherName(row.teacher_name),
+        teacher: scheduleTeacherLabel(row),
         teacherEmail: row.teacher_email || "",
         description: row.course_description || "",
         enrolledStudentCount: 0,
