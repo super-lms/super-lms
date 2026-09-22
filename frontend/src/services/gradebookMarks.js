@@ -5,7 +5,12 @@ export function getPointsPossible(assignment) {
 
 export function getEarnedPoints(assignment, match) {
   if (match?.score === null || match?.score === undefined || match.score === "") return "";
-  const points = Number(match.score) * getPointsPossible(assignment) / 100;
+  const rubric = match?.rubric_selection || {};
+  if (rubric.pointsEarned !== null && rubric.pointsEarned !== undefined && rubric.pointsEarned !== "" &&
+      Number.isFinite(Number(rubric.pointsEarned))) return Number(rubric.pointsEarned);
+  // Older direct marks retain the original percentage in the rubric JSON.
+  const percentage = rubric.overallScore ?? rubric.overall_score ?? match.score;
+  const points = Number(percentage) * getPointsPossible(assignment) / 100;
   return Number.isFinite(points) ? Number(points.toFixed(4)) : "";
 }
 

@@ -7650,10 +7650,11 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     const doScore = Number(req.body.doScore);
     const knowScore = Number(req.body.knowScore);
     const understandScore = Number(req.body.understandScore);
-    const overallScore = req.body.overallScore === null || req.body.overallScore === undefined
+    let overallScore = req.body.overallScore === null || req.body.overallScore === undefined
       ? null
       : Number(req.body.overallScore);
-    const directPercentage = req.body.directPercentage === true;
+    const hasPointsEarned = Object.prototype.hasOwnProperty.call(req.body, "pointsEarned");
+    const directPercentage = req.body.directPercentage === true || hasPointsEarned;
     const hasTeacherFeedback = Object.prototype.hasOwnProperty.call(req.body, "feedback");
     const teacherFeedback = hasTeacherFeedback ? String(req.body.feedback || "").trim() : null;
 
@@ -7677,6 +7678,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
         class_id,
         teacher_id,
         scoring_method,
+        points_possible,
         single_score_know_percent,
         single_score_do_percent,
         single_score_understand_percent
@@ -7692,6 +7694,15 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     }
 
     const assignment = assignmentResult.rows[0];
+    let rawMark = null;
+    if (hasPointsEarned) {
+      try {
+        rawMark = require("./rawMark").calculateRawMark(req.body.pointsEarned, assignment.points_possible);
+        overallScore = rawMark.percentage;
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+    }
     const assignmentTitle = String(assignment.title || "Untitled Assignment");
     const courseId = assignment.class_id ? Number(assignment.class_id) : null;
     const teacherId = assignment.teacher_id ? Number(assignment.teacher_id) : null;
@@ -7721,7 +7732,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     let saveFeedback;
     let saveContent;
 
-    if (directPercentage) {
+    if (directPercentage && !(rawMark && isSingleScoreKdu && req.body.directPercentage !== true)) {
       if (!Number.isFinite(overallScore) || overallScore < 0 || overallScore > 100) {
         return res.status(400).json({ error: "Percentage mark must be between 0 and 100" });
       }
@@ -7733,6 +7744,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
         UNDERSTAND: convertedKduLevel,
         overallScore: Number(overallScore),
         directPercentage: true,
+        ...(rawMark ? { pointsEarned: rawMark.pointsEarned, pointsPossible: rawMark.pointsPossible } : {}),
       };
       weightedScore = convertedKduLevel;
       percentScore = Number(Number(overallScore).toFixed(2));
@@ -7754,6 +7766,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
         DO: distributedDo,
         UNDERSTAND: distributedUnderstand,
         overallScore: Number(overallScore),
+        ...(rawMark ? { pointsEarned: rawMark.pointsEarned, pointsPossible: rawMark.pointsPossible } : {}),
         automaticDistribution: {
           source: "single_score_kdu",
           convertedKduLevel,

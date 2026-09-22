@@ -362,6 +362,7 @@ export default function GradebookPage() {
         body: JSON.stringify({
           student_email: student.student_email,
           overallScore: percentage,
+          pointsEarned: Number(rawMark),
           directPercentage: true,
         }),
       });

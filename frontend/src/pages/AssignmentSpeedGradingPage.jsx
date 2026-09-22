@@ -1,3 +1,4 @@
+import { getEarnedPoints } from "../services/gradebookMarks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import RawMarkEntryPanel from "./RawMarkEntryPanel";
@@ -694,12 +695,11 @@ export default function AssignmentSpeedGradingPage() {
       "";
 
     setOverallScore(savedOverallScore === null || savedOverallScore === undefined ? "" : String(savedOverallScore));
-    const totalPoints = Number(assignment?.points_possible || 100);
-    const earnedPoints = Number(savedOverallScore) * totalPoints / 100;
+    const earnedPoints = getEarnedPoints(assignment, { ...row, score: savedOverallScore });
     setPointsEarned(
       savedOverallScore === "" || savedOverallScore === null || savedOverallScore === undefined
         ? ""
-        : String(Number(earnedPoints.toFixed(4)))
+        : String(earnedPoints)
     );
     setTeacherFeedback(String(row?.feedback || ""));
     setFeedbackSaveMessage("");
@@ -1050,6 +1050,8 @@ export default function AssignmentSpeedGradingPage() {
         body: JSON.stringify({
           student_email: selectedRow.student_email,
           feedback: teacherFeedback,
+          ...(Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore")
+            ? { pointsEarned } : {}),
           doScore: toSafeScore(nextDoScore),
           knowScore: toSafeScore(nextKnowScore),
           understandScore: toSafeScore(nextUnderstandScore),
