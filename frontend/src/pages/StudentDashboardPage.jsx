@@ -2138,6 +2138,9 @@ const assignmentSheetLabelStyle = {
 const assignmentSheetHeadingStyle = {
   minWidth: "240px",
   maxWidth: "280px",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  lineHeight: 1.5,
   padding: "12px 14px",
   color: "#111827",
   fontWeight: 900,
@@ -2147,6 +2150,10 @@ const assignmentSheetHeadingStyle = {
 
 const assignmentSheetCellStyle = {
   minWidth: "240px",
+  maxWidth: "280px",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  lineHeight: 1.5,
   padding: "12px 14px",
   verticalAlign: "middle",
 }
