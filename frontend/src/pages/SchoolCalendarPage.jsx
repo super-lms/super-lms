@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus, X } from "lucide-react"
 import { useAuth } from "../AuthContext.jsx"
 import authFetch from "../services/authFetch.js"
@@ -74,8 +74,21 @@ export default function SchoolCalendarPage() {
   const eventsByDay = useMemo(() => {
     const grouped = new Map()
     for (const event of events) {
-      const key = dateKey(event.starts_at)
-      grouped.set(key, [...(grouped.get(key) || []), event])
+      const firstDay = new Date(event.starts_at)
+      firstDay.setHours(0, 0, 0, 0)
+      const lastDay = new Date(event.ends_at)
+      lastDay.setHours(0, 0, 0, 0)
+
+      for (let day = new Date(firstDay); day <= lastDay; day.setDate(day.getDate() + 1)) {
+        const key = dateKey(day)
+        const segment = {
+          event,
+          continuesBefore: day.getTime() > firstDay.getTime(),
+          continuesAfter: day.getTime() < lastDay.getTime(),
+          showLabel: day.getTime() === firstDay.getTime() || day.getDay() === 0,
+        }
+        grouped.set(key, [...(grouped.get(key) || []), segment])
+      }
     }
     return grouped
   }, [events])
@@ -168,7 +181,7 @@ export default function SchoolCalendarPage() {
             return <div key={key} style={{ ...dayStyle, background: date.getMonth() === month.getMonth() ? "#fff" : "#f8fafc" }}>
               <button type="button" onClick={() => isAdmin && openNewEvent(date)} style={{ ...dayNumberStyle, background: today ? "#1d4ed8" : "transparent", color: today ? "#fff" : "#1e293b", cursor: isAdmin ? "pointer" : "default" }}>{date.getDate()}</button>
               <div style={{ display: "grid", gap: "4px", marginTop: "4px" }}>
-                {dayEvents.slice(0, 3).map((event) => <button type="button" key={event.id} onClick={() => isAdmin ? openEditEvent(event) : setSelectedEvent(event)} style={{ ...eventChipStyle, borderLeftColor: event.color || "#2563eb" }} title={event.title}><span>{displayTime(event)}</span> {event.title}</button>)}
+                {dayEvents.slice(0, 3).map(({ event, continuesBefore, continuesAfter, showLabel }) => <button type="button" key={`${event.id}-${key}`} onClick={() => isAdmin ? openEditEvent(event) : setSelectedEvent(event)} style={{ ...eventChipStyle, borderLeftColor: event.color || "#2563eb", marginLeft: continuesBefore ? "-9px" : 0, marginRight: continuesAfter ? "-9px" : 0, borderRadius: continuesBefore ? "0" : "4px 0 0 4px", borderRight: continuesAfter ? "0" : undefined, position: "relative", zIndex: 1 }} title={event.title} aria-label={`${event.title}, ${new Date(event.starts_at).toLocaleDateString()} to ${new Date(event.ends_at).toLocaleDateString()}`}>{showLabel ? <><span>{event.all_day ? "" : displayTime(event)}</span> {event.title}</> : " "}</button>)}
                 {dayEvents.length > 3 ? <div style={{ fontSize: "12px", color: "#64748b", paddingLeft: "4px" }}>+{dayEvents.length - 3} more</div> : null}
               </div>
             </div>
