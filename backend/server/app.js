@@ -239,6 +239,44 @@ async function ensureCourseScheduleSettingsTable() {
   `);
 }
 
+async function ensureSchoolCalendarTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS school_calendar_events (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      starts_at TIMESTAMPTZ NOT NULL,
+      ends_at TIMESTAMPTZ NOT NULL,
+      all_day BOOLEAN NOT NULL DEFAULT false,
+      location TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '#2563eb',
+      audiences JSONB NOT NULL DEFAULT '["bc_teacher", "chinese_homeroom_teacher", "parent", "observer"]'::jsonb,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (ends_at >= starts_at)
+    )
+  `);
+}
+
+function calendarAudienceForUser(user) {
+  const role = String(user?.role || '').trim().toLowerCase();
+  if (role === 'parent') return 'parent';
+  if (role === 'teacher') return 'bc_teacher';
+  if (role === 'observer') {
+    return String(user?.observer_relationship || '').trim().toLowerCase() === 'chinese_homeroom_teacher'
+      ? 'chinese_homeroom_teacher'
+      : 'observer';
+  }
+  return role;
+}
+
+function normaliseCalendarAudiences(value) {
+  const allowed = new Set(['bc_teacher', 'chinese_homeroom_teacher', 'parent', 'observer']);
+  const audiences = Array.isArray(value) ? value.map((item) => String(item || '').trim()) : [];
+  return [...new Set(audiences.filter((item) => allowed.has(item)))];
+}
+
 async function ensureStudentReportCommentsTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS student_report_comments (
@@ -3454,6 +3492,126 @@ app.post("/api/admin/quick-enroll-student", authenticateJWT, requireRole("admin"
 });
 
 
+
+/* SCHOOL CALENDAR */
+app.get('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher', 'observer', 'parent'), async (req, res) => {
+  try {
+    await ensureSchoolCalendarTables();
+    const userResult = await pool.query(
+      `SELECT role, observer_relationship FROM users WHERE id = $1 LIMIT 1`,
+      [req.user.id]
+    );
+    const audience = calendarAudienceForUser({ ...req.user, ...(userResult.rows[0] || {}) });
+    const params = [];
+    const filters = [];
+
+    if (String(req.user?.role || '').toLowerCase() !== 'admin') {
+      params.push(audience);
+      filters.push(`audiences ? $${params.length}`);
+    }
+
+    const from = String(req.query.from || '').trim();
+    const to = String(req.query.to || '').trim();
+    if (from) {
+      params.push(from);
+      filters.push(`ends_at >= $${params.length}::timestamptz`);
+    }
+    if (to) {
+      params.push(to);
+      filters.push(`starts_at < $${params.length}::timestamptz`);
+    }
+
+    const result = await pool.query(
+      `SELECT id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_at, updated_at
+       FROM school_calendar_events
+       ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
+       ORDER BY starts_at ASC, id ASC`,
+      params
+    );
+    return res.json({ events: result.rows });
+  } catch (error) {
+    console.error('GET /api/calendar/events failed:', error);
+    return res.status(500).json({ error: 'Could not load calendar events' });
+  }
+});
+
+app.post('/api/calendar/events', authenticateJWT, requireRole('admin'), async (req, res) => {
+  try {
+    await ensureSchoolCalendarTables();
+    const title = String(req.body?.title || '').trim();
+    const startsAt = String(req.body?.starts_at || '').trim();
+    const endsAt = String(req.body?.ends_at || '').trim();
+    const audiences = normaliseCalendarAudiences(req.body?.audiences);
+    if (!title || !startsAt || !endsAt || audiences.length === 0) {
+      return res.status(400).json({ error: 'Title, start, end, and at least one audience are required' });
+    }
+    if (new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+      return res.status(400).json({ error: 'The event end must be after its start' });
+    }
+    const result = await pool.query(
+      `INSERT INTO school_calendar_events
+        (title, description, starts_at, ends_at, all_day, location, color, audiences, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+       RETURNING id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_at, updated_at`,
+      [
+        title,
+        String(req.body?.description || '').trim(),
+        startsAt,
+        endsAt,
+        Boolean(req.body?.all_day),
+        String(req.body?.location || '').trim(),
+        /^#[0-9a-fA-F]{6}$/.test(String(req.body?.color || '')) ? req.body.color : '#2563eb',
+        JSON.stringify(audiences),
+        req.user.id,
+      ]
+    );
+    return res.status(201).json({ event: result.rows[0] });
+  } catch (error) {
+    console.error('POST /api/calendar/events failed:', error);
+    return res.status(500).json({ error: 'Could not create calendar event' });
+  }
+});
+
+app.put('/api/calendar/events/:eventId', authenticateJWT, requireRole('admin'), async (req, res) => {
+  try {
+    await ensureSchoolCalendarTables();
+    const eventId = Number(req.params.eventId);
+    const title = String(req.body?.title || '').trim();
+    const startsAt = String(req.body?.starts_at || '').trim();
+    const endsAt = String(req.body?.ends_at || '').trim();
+    const audiences = normaliseCalendarAudiences(req.body?.audiences);
+    if (!eventId || !title || !startsAt || !endsAt || audiences.length === 0) {
+      return res.status(400).json({ error: 'Title, start, end, and at least one audience are required' });
+    }
+    if (new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+      return res.status(400).json({ error: 'The event end must be after its start' });
+    }
+    const result = await pool.query(
+      `UPDATE school_calendar_events
+       SET title=$1, description=$2, starts_at=$3, ends_at=$4, all_day=$5, location=$6, color=$7, audiences=$8::jsonb, updated_at=NOW()
+       WHERE id=$9
+       RETURNING id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_at, updated_at`,
+      [title, String(req.body?.description || '').trim(), startsAt, endsAt, Boolean(req.body?.all_day), String(req.body?.location || '').trim(), /^#[0-9a-fA-F]{6}$/.test(String(req.body?.color || '')) ? req.body.color : '#2563eb', JSON.stringify(audiences), eventId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Calendar event not found' });
+    return res.json({ event: result.rows[0] });
+  } catch (error) {
+    console.error('PUT /api/calendar/events/:eventId failed:', error);
+    return res.status(500).json({ error: 'Could not update calendar event' });
+  }
+});
+
+app.delete('/api/calendar/events/:eventId', authenticateJWT, requireRole('admin'), async (req, res) => {
+  try {
+    await ensureSchoolCalendarTables();
+    const result = await pool.query('DELETE FROM school_calendar_events WHERE id=$1 RETURNING id', [Number(req.params.eventId)]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Calendar event not found' });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/calendar/events/:eventId failed:', error);
+    return res.status(500).json({ error: 'Could not delete calendar event' });
+  }
+});
 
 /* CREATE OBSERVER / PARENT USER - ADMIN USER MANAGEMENT */
 app.post("/api/observers", authenticateJWT, requireRole("admin"), async (req, res) => {

@@ -445,6 +445,10 @@ export default function ParentDashboardPage() {
                   Chinese
                 </ActionButton>
 
+                <ActionButton quiet onClick={() => navigate("/calendar")}>
+                  School Calendar
+                </ActionButton>
+
                 <ActionButton onClick={handleLogout}>Logout</ActionButton>
               </div>
             }

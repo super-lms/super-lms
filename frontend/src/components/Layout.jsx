@@ -16,6 +16,7 @@ import {
   UserCheck,
   UserPlus,
   CalendarCheck,
+  CalendarDays,
   LogOut,
   Upload,
   Eye,
@@ -164,6 +165,7 @@ export default function Layout() {
     if (location.pathname === "/class-roster") return "Class Roster"
     if (location.pathname === "/enrolled-students") return "Class Roster"
     if (location.pathname.endsWith("/attendance")) return "Attendance"
+    if (location.pathname === "/calendar") return "School Calendar"
 
     if (location.pathname === "/student") return "My Learning"
     if (location.pathname === "/student-progress") return "My Progress"
@@ -304,6 +306,9 @@ export default function Layout() {
             </NavItem>
             <NavItem to={attendancePath} style={getNavLinkStyle(attendancePath)} icon={CalendarCheck}>
               Attendance
+            </NavItem>
+            <NavItem to="/calendar" style={getNavLinkStyle("/calendar")} icon={CalendarDays}>
+              School Calendar
             </NavItem>
 
             <div

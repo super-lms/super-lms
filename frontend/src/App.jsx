@@ -10,6 +10,7 @@ import AssignmentSpeedGradingPage from "./pages/AssignmentSpeedGradingPage.jsx";
 import AttendancePage from "./pages/AttendancePage.jsx";
 import ClassEnrollmentPage from "./pages/ClassEnrollmentPage.jsx";
 import ClassRosterPage from "./pages/ClassRosterPage.jsx";
+import SchoolCalendarPage from "./pages/SchoolCalendarPage.jsx";
 import CoursesPage from "./pages/CoursesPage.jsx";
 import CourseAssignmentsPage from "./pages/CourseAssignmentsPage.jsx";
 import CourseModulesPage from "./pages/CourseModulesPage.jsx";
@@ -161,6 +162,7 @@ function App() {
         <Route path="/admin/students" element={<AdminStudentsPage />} />
         <Route path="/admin/student-schedules" element={<AdminStudentSchedulePrinterPage />} />
         <Route path="/admin/quick-enrollment" element={<AdminQuickEnrollmentPage />} />
+        <Route path="/admin/calendar" element={<SchoolCalendarPage />} />
         <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
         <Route path="/admin/safe-reports" element={<AdminSafeReportsPage />} />
@@ -202,6 +204,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["observer", "admin"]}>
             <ObserverPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "teacher", "observer", "parent"]}>
+            <SchoolCalendarPage />
           </ProtectedRoute>
         }
       />
