@@ -7,6 +7,7 @@ import authFetch from "../services/authFetch"
 import { findCourseGroup, groupCoursesByMaster } from "../services/courseSections"
 import { FormattedText, RichTextEditor } from "../components/RichText.jsx"
 import { sanitizeRichText } from "../services/richText"
+import { printClassRoster } from "../services/printClassRoster"
 
 
 function buildSampleCsv(courseName = "Accounting 11") {
@@ -4788,7 +4789,22 @@ export default function CoursesPage() {
 
                   {isRosterOpen ? (
                     <div id={`course-${course.id}-roster`} style={rosterBoxStyle}>
-                      <h3 style={{ marginTop: 0, marginBottom: "8px" }}>{roster?.isMasterRoster ? "Master Course Roster" : "Roster"}</h3>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
+                        <h3 style={{ margin: 0 }}>{roster?.isMasterRoster ? "Master Course Roster" : "Roster"}</h3>
+                        <button
+                          type="button"
+                          style={buttonStyle}
+                          onClick={() => {
+                            try {
+                              printClassRoster(roster?.course || course, roster || {})
+                            } catch (err) {
+                              setError(err.message || "Unable to print the class roster.")
+                            }
+                          }}
+                        >
+                          Print Class Roster
+                        </button>
+                      </div>
 
                       {roster?.isMasterRoster && roster?.sections?.length > 0 ? (
                         <div style={{ marginBottom: "10px", color: "#4b5563" }}>
