@@ -6,6 +6,7 @@ import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import { FormattedText } from "../components/RichText.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
+import { speedGradingPath, speedGradingSections } from "../services/gradebookNavigation.js";
 
 
 function ActionButton({
@@ -232,6 +233,25 @@ export default function AssignmentSpeedGradingPage() {
   const navigate = useNavigate();
 
   const [assignment, setAssignment] = useState(null);
+  const [availableCourses, setAvailableCourses] = useState([]);
+  const [sectionLoadError, setSectionLoadError] = useState("");
+  const gradingSections = speedGradingSections(availableCourses, assignment?.class_id);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGradingSections() {
+      try {
+        const response = await authFetch(`${API_BASE}/api/classes`);
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data)) throw new Error("Unable to load class sections. Refresh to try again.");
+        if (!cancelled) setAvailableCourses(data);
+      } catch (error) {
+        if (!cancelled) setSectionLoadError(error.message);
+      }
+    }
+    loadGradingSections();
+    return () => { cancelled = true; };
+  }, []);
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
   const [searchText, setSearchText] = useState("");
@@ -296,6 +316,23 @@ export default function AssignmentSpeedGradingPage() {
     } catch {
       // The layout still changes for this visit if browser storage is unavailable.
     }
+  }
+
+  function changeGradingSection(nextSectionId) {
+    const saved = selectedRow?.rubric_selection || {};
+    const savedOverall = saved.overallScore ?? saved.overall_score ?? selectedRow?.score ?? "";
+    const savedPoints = savedOverall === "" ? "" : String(getEarnedPoints(assignment, { ...selectedRow, score: savedOverall }));
+    const hasUnsavedChanges = selectedRow && (
+      doScore !== String(saved.DO ?? saved.doScore ?? saved.do_score ?? "") ||
+      knowScore !== String(saved.KNOW ?? saved.knowScore ?? saved.know_score ?? "") ||
+      understandScore !== String(saved.UNDERSTAND ?? saved.understandScore ?? saved.understand_score ?? "") ||
+      overallScore !== String(savedOverall) || pointsEarned !== savedPoints ||
+      teacherFeedback !== String(selectedRow.feedback || "") || recordedFeedbackAudio
+    );
+    if (hasUnsavedChanges && !window.confirm("You have unsaved marks or feedback. Switch sections and discard these changes?")) return;
+    window.localStorage.setItem("super-lms-last-course-id", nextSectionId);
+    // Reload to clear student-specific marks, attachments, and raw-mark drafts.
+    window.location.href = speedGradingPath(assignmentId, nextSectionId);
   }
 
   function backToAssignmentsPage() {
@@ -1331,6 +1368,24 @@ export default function AssignmentSpeedGradingPage() {
           Review student submission status, score, feedback, and KDU competency
           scoring in one place.
         </div>
+
+        {gradingSections.length > 0 ? (
+          <label style={{ display: "grid", gap: "6px", maxWidth: "420px", marginBottom: "16px", fontWeight: 700 }}>
+            Class section
+            <select
+              aria-label="Class section"
+              value={sectionId || String(assignment?.class_id || "")}
+              onChange={(event) => changeGradingSection(event.target.value)}
+              disabled={savingFeedback || savingKduScores || savingFeedbackAudio || isRecordingFeedback || checklistImporting}
+              className="form-input"
+            >
+              {gradingSections.map((course) => (
+                <option key={course.id} value={String(course.id)}>{course.title || course.class_name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {sectionLoadError ? <p role="alert">{sectionLoadError}</p> : null}
 
         {isOneScoreAssignment ? (
           <div

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import authFetch from "../services/authFetch";
+import { speedGradingPath } from "../services/gradebookNavigation.js";
 
 import { getPointsPossible, getEarnedPoints, pointsToPercentage } from "../services/gradebookMarks.js";
 
@@ -1175,7 +1176,7 @@ export default function GradebookPage() {
                             type="button"
                             title={`Open ${assignment.title || "Untitled Assignment"} in Speed Grading`}
                             onClick={() => {
-                              window.location.href = `/assignments/${assignment.id}/grade`;
+                              window.location.href = speedGradingPath(assignment.id, selectedCourseId);
                             }}
                             style={spreadsheetAssignmentButtonStyle}
                           >
@@ -1598,7 +1599,7 @@ export default function GradebookPage() {
 
                             <button
                               type="button"
-                              onClick={() => { window.location.href = `/assignments/${assignment.id}/grade` }}
+                              onClick={() => { window.location.href = speedGradingPath(assignment.id, selectedCourseId) }}
                               className="btn"
                             >
                               Open Speed Grading / Raw Marks
