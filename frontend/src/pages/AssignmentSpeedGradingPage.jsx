@@ -330,7 +330,7 @@ export default function AssignmentSpeedGradingPage() {
       teacherFeedback !== String(selectedRow.feedback || "") || recordedFeedbackAudio
     );
     if (hasUnsavedChanges && !window.confirm("You have unsaved marks or feedback. Switch sections and discard these changes?")) return;
-    window.localStorage.setItem("super-lms-last-course-id", nextSectionId);
+    if (nextSectionId !== "all") window.localStorage.setItem("super-lms-last-course-id", nextSectionId);
     // Reload to clear student-specific marks, attachments, and raw-mark drafts.
     window.location.href = speedGradingPath(assignmentId, nextSectionId);
   }
@@ -339,7 +339,7 @@ export default function AssignmentSpeedGradingPage() {
     const classId = assignment?.class_id || assignment?.course_id || assignment?.classId || "";
     navigate(
       classId
-        ? `/assignments?classId=${classId}${sectionId ? `&sectionId=${encodeURIComponent(sectionId)}` : ""}`
+        ? `/assignments?classId=${classId}${sectionId === "all" ? "&view=master" : sectionId ? `&sectionId=${encodeURIComponent(sectionId)}` : ""}`
         : "/assignments"
     );
   }
@@ -1379,6 +1379,7 @@ export default function AssignmentSpeedGradingPage() {
               disabled={savingFeedback || savingKduScores || savingFeedbackAudio || isRecordingFeedback || checklistImporting}
               className="form-input"
             >
+              <option value="all">All sections</option>
               {gradingSections.map((course) => (
                 <option key={course.id} value={String(course.id)}>{course.title || course.class_name}</option>
               ))}
@@ -1401,7 +1402,7 @@ export default function AssignmentSpeedGradingPage() {
           >
             <strong>Import completed PE checklist</strong>
             <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-              Choose this section's Excel sheet after entering marks. Marks out of 10 are converted and saved directly to this assignment's gradebook.
+              {sectionId === "all" ? "Choose an individual class section above to import its checklist." : "Choose this section's Excel sheet after entering marks. Marks out of 10 are converted and saved directly to this assignment's gradebook."}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
               <input
@@ -1409,7 +1410,7 @@ export default function AssignmentSpeedGradingPage() {
                 accept=".xlsx"
                 onChange={(event) => setChecklistFile(event.target.files?.[0] || null)}
               />
-              <ActionButton onClick={importChecklistMarks} disabled={checklistImporting}>
+              <ActionButton onClick={importChecklistMarks} disabled={checklistImporting || sectionId === "all"}>
                 {checklistImporting ? "Importing..." : "Import Checklist Marks"}
               </ActionButton>
             </div>
@@ -1651,6 +1652,7 @@ export default function AssignmentSpeedGradingPage() {
                     <div style={{ marginBottom: "6px", fontWeight: 800 }}>
                       {row.student_name}
                     </div>
+                    {row.section_title ? <div style={{ marginBottom: "6px" }}>{row.section_title}</div> : null}
 
                     <div style={{ fontSize: "0.95rem", marginBottom: "6px" }}>
                       Status: {row.submission_status || "None"}
@@ -1783,7 +1785,7 @@ export default function AssignmentSpeedGradingPage() {
                         Student {getSelectedStudentIndex() + 1} of {filteredRows.length}
                       </div>
                       <div style={speedGraderToolbarNameStyle}>
-                        {selectedRow.student_name}
+                        {selectedRow.student_name}{sectionId === "all" && selectedRow.section_title ? ` — ${selectedRow.section_title}` : ""}
                       </div>
                     </div>
 
@@ -1830,7 +1832,7 @@ export default function AssignmentSpeedGradingPage() {
                         fontWeight: 800,
                       }}
                     >
-                      {selectedRow.student_name}
+                      {selectedRow.student_name}{sectionId === "all" && selectedRow.section_title ? ` — ${selectedRow.section_title}` : ""}
                     </h2>
 
                     {kduSaveMessage ? (
@@ -1960,7 +1962,7 @@ export default function AssignmentSpeedGradingPage() {
                           Student Uploaded Files
                         </h3>
                         <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                          Files submitted by {selectedRow.student_name} for this assignment.
+                          Files submitted by {selectedRow.student_name}{sectionId === "all" && selectedRow.section_title ? ` — ${selectedRow.section_title}` : ""} for this assignment.
                         </div>
                       </div>
 

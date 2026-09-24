@@ -36,3 +36,9 @@ test('speed grader offers only sections belonging to the shared assignment', () 
   assert.deepEqual(speedGradingSections(courses, null), []);
   assert.deepEqual(speedGradingSections(courses, 20).map(c => c.id), [20]);
 });
+
+test('master navigation preserves all sections without treating all as a class ID', () => {
+  assert.equal(gradebookPath('/assignments', '?classId=11&view=master'), '/gradebook?classId=11&sectionId=all');
+  assert.equal(gradebookPath('/assignments/100/grade', '?sectionId=all', '11'), '/gradebook?classId=11&sectionId=all');
+  assert.equal(speedGradingPath(100, 'all'), '/assignments/100/grade?sectionId=all');
+});

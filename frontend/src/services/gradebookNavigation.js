@@ -1,9 +1,10 @@
 export function gradebookPath(pathname, search, lastCourseId = "") {
   const query = new URLSearchParams(search);
   const pathCourse = pathname.match(/^\/courses\/(\d+)(?:\/|$)/)?.[1];
-  const courseId = query.get("sectionId") || query.get("courseId") ||
+  const allSections = query.get("sectionId") === "all" || query.get("view") === "master";
+  const courseId = (allSections ? "" : query.get("sectionId")) || query.get("courseId") ||
     query.get("classId") || pathCourse || lastCourseId;
-  return courseId ? `/gradebook?classId=${encodeURIComponent(courseId)}` : "/gradebook";
+  return courseId ? `/gradebook?classId=${encodeURIComponent(courseId)}${allSections ? "&sectionId=all" : ""}` : "/gradebook";
 }
 
 export function speedGradingPath(assignmentId, sectionId) {

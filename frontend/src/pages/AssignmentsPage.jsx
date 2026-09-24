@@ -1124,7 +1124,7 @@ export default function AssignmentsPage() {
   }
 
   function openGradeAssignmentPage(assignmentId) {
-    if (assignmentId) navigate(`/assignments/${assignmentId}/grade?sectionId=${encodeURIComponent(selectedClassId)}`)
+    if (assignmentId) navigate(`/assignments/${assignmentId}/grade?sectionId=${isMasterWorkspace ? "all" : encodeURIComponent(requestedRosterClassId || selectedClassId)}`)
   }
 
   function saveEditedAssignment(assignmentId) {

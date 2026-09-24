@@ -3486,10 +3486,9 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        navigate(`/gradebook?classId=${course.id}&contentClassId=${contentCourseId}&view=spreadsheet`)
+                        navigate(`/gradebook?classId=${course.id}&contentClassId=${contentCourseId}&view=spreadsheet${isMasterWorkspace ? "&sectionId=all" : ""}`)
                       }}
-                      disabled={isMasterWorkspace}
-                      title={isMasterWorkspace ? "Choose a lettered section before opening the gradebook." : ""}
+                      title={isMasterWorkspace ? "Open the gradebook for all linked sections." : ""}
                       style={buttonStyle}
                     >
                       Spreadsheet Mark Entry
@@ -4583,7 +4582,7 @@ export default function CoursesPage() {
 
                                                         <button
                                                           type="button"
-                                                          onClick={() => { window.location.href = `/assignments/${item.assignment_id}/grade` }}
+                                                          onClick={() => { window.location.href = `/assignments/${item.assignment_id}/grade?sectionId=${isMasterWorkspace ? "all" : encodeURIComponent(course.id)}` }}
                                                           style={buttonStyle}
                                                         >
                                                           Open Speed Grading

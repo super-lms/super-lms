@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
 const pool = require("./db");
+const { loadGradingRoster } = require("./gradingRoster");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -7386,21 +7387,8 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
     }
 
     const assignmentCourseId = Number(assignmentResult.rows[0].class_id);
-    const rosterCourseId = Number(req.query.sectionId || assignmentCourseId);
-    const sectionResult = await pool.query(
-      `
-      SELECT id
-      FROM courses
-      WHERE id = $1
-        AND COALESCE(master_course_id, id) = $2
-      LIMIT 1
-      `,
-      [rosterCourseId, assignmentCourseId]
-    );
-
-    if (sectionResult.rows.length === 0) {
-      return res.status(400).json({ error: "Selected section does not belong to this assignment's course" });
-    }
+    const roster = await loadGradingRoster(pool, assignmentCourseId, req.query.sectionId);
+    const sectionTitles = new Map(roster.students.map(student => [student.student_user_id, student.section_title]));
 
     const result = await pool.query(
       `
@@ -7430,10 +7418,8 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
           ELSE 'None'
         END AS submission_status
       FROM assignments a
-      JOIN class_enrollments ce
-        ON ce.class_id = $2
       JOIN users u
-        ON u.id = ce.student_user_id
+        ON u.id = ANY($2::INTEGER[])
       LEFT JOIN LATERAL (
         SELECT submission.*
         FROM submissions submission
@@ -7450,17 +7436,17 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
       WHERE a.id = $1
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
       `,
-      [assignmentId, rosterCourseId]
+      [assignmentId, roster.students.map(student => student.student_user_id)]
     );
 
     return res.json({
       assignment: assignmentResult.rows[0] || null,
-      section_id: rosterCourseId,
-      rows: result.rows,
+      section_id: roster.sectionId,
+      rows: result.rows.map(row => ({ ...row, section_title: sectionTitles.get(row.student_user_id) || "" })),
     });
   } catch (err) {
     console.error("GET /api/assignments/:assignmentId/gradebook failed:", err);
-    return res.status(500).json({ error: "Failed to load assignment gradebook" });
+    return res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to load assignment gradebook" });
   }
 });
 
@@ -13108,20 +13094,17 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
       [contentClassId]
     );
 
+    const roster = await loadGradingRoster(pool, contentClassId, req.query.sectionId === "all" ? "all" : classId);
+    const sectionTitles = new Map(roster.students.map(student => [student.student_user_id, student.section_title]));
     const studentsResult = await pool.query(
-      `
-      SELECT
-        ce.student_user_id,
+      `SELECT u.id AS student_user_id,
         CONCAT(u.first_name, ' ', u.last_name) AS student_name,
         u.email AS student_email
-      FROM class_enrollments ce
-      JOIN users u
-        ON u.id = ce.student_user_id
-      WHERE ce.class_id = $1
-      ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
-      `,
-      [classId]
+       FROM users u WHERE u.id = ANY($1::INTEGER[])
+       ORDER BY u.first_name, u.last_name, u.email`,
+      [roster.students.map(student => student.student_user_id)]
     );
+    studentsResult.rows = studentsResult.rows.map(student => ({ ...student, section_title: sectionTitles.get(student.student_user_id) || "" }));
 
     const submissionsResult = await pool.query(
       `
@@ -13230,6 +13213,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
       return {
         student_user_id: student.student_user_id,
         student_name: student.student_name,
+        section_title: student.section_title,
         student_email: student.student_email,
         assignment_scores: assignmentScores,
         group_breakdown: groupBreakdown,
@@ -13795,11 +13779,15 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
     await ensureAssignmentSectionTables();
 
     const assignmentId = Number(req.params.assignmentId);
-    const rosterCourseId = Number(req.query.sectionId || 0);
+
 
     if (!assignmentId) {
       return res.status(400).json({ error: "Valid assignmentId is required" });
     }
+
+    const assignmentResult = await pool.query("SELECT class_id FROM assignments WHERE id = $1", [assignmentId]);
+    if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found" });
+    const roster = await loadGradingRoster(pool, assignmentResult.rows[0].class_id, req.query.sectionId);
 
     const result = await pool.query(
       `
@@ -13816,28 +13804,17 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
         sss.earned_points,
         sss.converted_competency_level
       FROM assignments a
-      JOIN class_enrollments ce
-        ON ce.class_id = CASE WHEN $2::INTEGER > 0 THEN $2 ELSE a.class_id END
       JOIN users u
-        ON u.id = ce.student_user_id
+        ON u.id = ANY($2::INTEGER[])
       JOIN assignment_sections aps
         ON aps.assignment_id = a.id
       LEFT JOIN student_section_scores sss
         ON sss.assignment_section_id = aps.id
         AND sss.student_user_id = u.id
       WHERE a.id = $1
-        AND (
-          $2::INTEGER = 0
-          OR EXISTS (
-            SELECT 1
-            FROM courses section_course
-            WHERE section_course.id = $2
-              AND COALESCE(section_course.master_course_id, section_course.id) = a.class_id
-          )
-        )
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC, aps.sort_order ASC, aps.id ASC
       `,
-      [assignmentId, rosterCourseId]
+      [assignmentId, roster.students.map(student => student.student_user_id)]
     );
 
     return res.json({
@@ -13847,7 +13824,7 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
     });
   } catch (err) {
     console.error("GET /api/assignments/:assignmentId/section-scores failed:", err);
-    return res.status(500).json({ error: "Failed to load section scores" });
+    return res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to load section scores" });
   }
 });
 

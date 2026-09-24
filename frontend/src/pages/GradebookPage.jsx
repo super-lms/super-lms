@@ -125,6 +125,7 @@ export default function GradebookPage() {
   const queryParams = new URLSearchParams(location.search);
   const requestedClassId = queryParams.get("classId") || queryParams.get("courseId") || window.localStorage.getItem("super-lms-last-course-id") || "";
   const requestedContentClassId = queryParams.get("contentClassId") || requestedClassId;
+  const allSections = queryParams.get("sectionId") === "all";
   const requestedStudentEmail = queryParams.get("studentEmail") || "";
   const requestedStudentName = queryParams.get("studentName") || "";
   const requestedFocus = queryParams.get("focus") || "";
@@ -175,7 +176,7 @@ export default function GradebookPage() {
 
     try {
       const response = await authFetch(
-        `/api/classes/${courseId}/kdu-gradebook?contentClassId=${encodeURIComponent(requestedContentClassId)}`
+        `/api/classes/${courseId}/kdu-gradebook?contentClassId=${encodeURIComponent(requestedContentClassId)}${allSections ? "&sectionId=all" : ""}`
       );
       const data = await response.json();
 
@@ -396,7 +397,7 @@ export default function GradebookPage() {
 
   useEffect(() => {
     loadKduGradebook(selectedCourseId);
-  }, [selectedCourseId]);
+  }, [selectedCourseId, allSections]);
 
   useEffect(() => {
     return () => {
@@ -892,7 +893,7 @@ export default function GradebookPage() {
             </label>
             <select
               id="gradebook-class-select"
-              value={selectedCourseId}
+              value={allSections ? "all" : selectedCourseId}
               onChange={(event) => {
                 const classId = event.target.value;
                 window.localStorage.setItem("super-lms-last-course-id", classId);
@@ -902,6 +903,7 @@ export default function GradebookPage() {
               className="form-input"
             >
               <option value="">Choose a class</option>
+              {allSections ? <option value="all">All sections — {courses.find(course => String(course.id) === String(selectedCourseId))?.master_title || courses.find(course => String(course.id) === String(selectedCourseId))?.class_name || "Master Class"}</option> : null}
               {courses.map((course) => (
                 <option key={course.id} value={course.id}>
                   {course.class_name || course.title}
@@ -1026,7 +1028,7 @@ export default function GradebookPage() {
 
           {activeGradebookSection === "spreadsheet" ? (
           <section className="panel">
-            <h2>Spreadsheet Gradebook</h2>
+            <h2>Spreadsheet Gradebook{allSections ? " — All sections" : ""}</h2>
             <p className="section-subtitle">
               Enter the points earned out of the assignment total, then select Save. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
             </p>
@@ -1176,7 +1178,7 @@ export default function GradebookPage() {
                             type="button"
                             title={`Open ${assignment.title || "Untitled Assignment"} in Speed Grading`}
                             onClick={() => {
-                              window.location.href = speedGradingPath(assignment.id, selectedCourseId);
+                              window.location.href = speedGradingPath(assignment.id, allSections ? "all" : selectedCourseId);
                             }}
                             style={spreadsheetAssignmentButtonStyle}
                           >
@@ -1203,6 +1205,7 @@ export default function GradebookPage() {
                       <tr key={student.student_user_id}>
                         <td style={spreadsheetStudentCellStyle}>
                           <strong>{student.student_name}</strong>
+                          {allSections && student.section_title ? <div>{student.section_title}</div> : null}
                           <div style={spreadsheetStudentEmailStyle}>
                             {student.student_email}
                           </div>
@@ -1308,6 +1311,7 @@ export default function GradebookPage() {
                       >
                         <td>
                           <strong>{student.student_name}</strong>
+                          {allSections && student.section_title ? <div>{student.section_title}</div> : null}
                           <div style={{ fontSize: "0.9rem" }}>
                             {student.student_email}
                           </div>
@@ -1481,7 +1485,8 @@ export default function GradebookPage() {
                       <div style={{ fontWeight: 900, marginBottom: "8px" }}>
                         Snapshot Included
                       </div>
-                      <div>Student: <strong>{student.student_name}</strong></div>
+                      <div>Student: <strong>{student.student_name}</strong>
+                          {allSections && student.section_title ? <div>{student.section_title}</div> : null}</div>
                       <div>Current Grade: <strong>{formatPercent(student.current_percent)}</strong></div>
                       <div>Proficiency: <strong>{getProficiency(student.current_percent)}</strong></div>
                       <div>Assignments: <strong>{assignmentCount}</strong></div>
@@ -1599,7 +1604,7 @@ export default function GradebookPage() {
 
                             <button
                               type="button"
-                              onClick={() => { window.location.href = speedGradingPath(assignment.id, selectedCourseId) }}
+                              onClick={() => { window.location.href = speedGradingPath(assignment.id, allSections ? "all" : selectedCourseId) }}
                               className="btn"
                             >
                               Open Speed Grading / Raw Marks
@@ -1678,6 +1683,7 @@ export default function GradebookPage() {
                             >
                               <td>
                                 <strong>{student.student_name}</strong>
+                          {allSections && student.section_title ? <div>{student.section_title}</div> : null}
                                 {studentMatchesFocus ? (
                                   <div style={focusBadgeStyle}>
                                     Heatmap focus
