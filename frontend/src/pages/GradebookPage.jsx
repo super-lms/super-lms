@@ -903,29 +903,6 @@ export default function GradebookPage() {
   return (
     <>
     <div className="content-area">
-      <div style={floatingPageNavWrapStyle}>
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          style={floatingPageNavButtonStyle}
-        >
-          ↑ Top
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            window.scrollTo({
-              top: document.body.scrollHeight,
-              behavior: "smooth",
-            })
-          }
-          style={floatingPageNavButtonStyle}
-        >
-          ↓ Bottom
-        </button>
-      </div>
-
       <section className="panel">
         <div className="section-header">
           <div>
@@ -1893,28 +1870,6 @@ export default function GradebookPage() {
     </>
   );
 }
-
-const floatingPageNavWrapStyle = {
-  position: "fixed",
-  left: "14px",
-  top: "45%",
-  zIndex: 25,
-  display: "grid",
-  gap: "10px",
-};
-
-const floatingPageNavButtonStyle = {
-  padding: "12px 14px",
-  borderRadius: "12px",
-  border: "2px solid #111",
-  background: "#ffffff",
-  color: "#111",
-  fontSize: "15px",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.14)",
-  minWidth: "110px",
-};
 
 const focusNoticeStyle = {
   border: "2px solid #111",
