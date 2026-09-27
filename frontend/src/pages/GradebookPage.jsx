@@ -1254,9 +1254,9 @@ export default function GradebookPage() {
                     {spreadsheetStudents.map((student) => (
                       <tr key={student.student_user_id}>
                         <td style={spreadsheetStudentCellStyle}>
-                          <strong>{student.student_name}</strong>
-                          {allSections && student.section_title ? <div>{student.section_title}</div> : null}
-                          <div style={spreadsheetStudentEmailStyle}>
+                          <strong style={{ whiteSpace: "nowrap" }}>{student.student_name}</strong>
+                          {allSections && student.section_title ? <div style={spreadsheetStudentDetailStyle} title={student.section_title}>{student.section_title}</div> : null}
+                          <div style={spreadsheetStudentEmailStyle} title={student.student_email}>
                             {student.student_email}
                           </div>
                         </td>
@@ -1311,7 +1311,7 @@ export default function GradebookPage() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <th scope="row" style={spreadsheetStudentCellStyle}>Save remaining edits</th>
+                      <th scope="row" style={spreadsheetStudentCellStyle}>Save edits</th>
                       {spreadsheetAssignments.map((assignment) => {
                         const pendingCount = spreadsheetStudents.filter((student) =>
                           Object.prototype.hasOwnProperty.call(spreadsheetMarkDrafts, getDraftKey(student.student_email, assignment.id))
@@ -2034,7 +2034,9 @@ const spreadsheetStudentHeaderStyle = {
   position: "sticky",
   left: 0,
   zIndex: 3,
-  minWidth: "220px",
+  width: "1px",
+  paddingLeft: "1.5ch",
+  paddingRight: "1.5ch",
   background: "#f8fafc",
   borderRight: "2px solid #cbd5e1",
 };
@@ -2155,12 +2157,25 @@ const spreadsheetStudentCellStyle = {
   position: "sticky",
   left: 0,
   zIndex: 2,
-  minWidth: "220px",
+  width: "1px",
+  paddingLeft: "1.5ch",
+  paddingRight: "1.5ch",
   background: "#ffffff",
   borderRight: "2px solid #cbd5e1",
 };
 
+// Keep secondary details from setting the column's intrinsic width.
+// The unwrapped student names determine its size instead.
+const spreadsheetStudentDetailStyle = {
+  width: 0,
+  minWidth: "100%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const spreadsheetStudentEmailStyle = {
+  ...spreadsheetStudentDetailStyle,
   marginTop: "4px",
   color: "#4b5563",
   fontSize: "0.82rem",
