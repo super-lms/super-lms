@@ -151,6 +151,8 @@ export default function GradebookPage() {
   const autosaveTimersRef = useRef({});
   const spreadsheetInputsRef = useRef({});
   const spreadsheetSavesRef = useRef(new Set());
+  const columnSaveRef = useRef(false);
+  const [savingColumn, setSavingColumn] = useState(null);
 
   async function loadCourses() {
     try {
@@ -345,7 +347,8 @@ export default function GradebookPage() {
     }
   }
 
-  async function saveSpreadsheetMark(student, assignment, match, advance = false) {
+  async function saveSpreadsheetMark(student, assignment, match, advance = false, batch = false) {
+    if (columnSaveRef.current && !batch) return false;
     const key = getDraftKey(student.student_email, assignment.id);
     if (spreadsheetSavesRef.current.has(key)) return;
     const sourceInput = spreadsheetInputsRef.current[key];
@@ -385,7 +388,7 @@ export default function GradebookPage() {
         return next;
       });
       setCellSaveStatus((current) => ({ ...current, [key]: "Saved ✓" }));
-      await loadKduGradebook(selectedCourseId);
+      if (!batch) await loadKduGradebook(selectedCourseId);
       if (advance) {
         requestAnimationFrame(() => {
           // Do not steal focus if the teacher clicked elsewhere while saving.
@@ -397,12 +400,39 @@ export default function GradebookPage() {
           }
         });
       }
+      return true;
     } catch (error) {
       console.error(error);
       setCellSaveStatus((current) => ({ ...current, [key]: error.message || "Save failed" }));
+      return false;
     } finally {
       spreadsheetSavesRef.current.delete(key);
       setSavingKey("");
+    }
+  }
+
+  async function saveSpreadsheetColumn(assignment) {
+    if (columnSaveRef.current || spreadsheetSavesRef.current.size) return;
+    const editedStudents = spreadsheetStudents.filter((student) =>
+      Object.prototype.hasOwnProperty.call(spreadsheetMarkDrafts, getDraftKey(student.student_email, assignment.id))
+    );
+    if (!editedStudents.length) return;
+    columnSaveRef.current = true;
+    setSavingColumn(assignment.id);
+    try {
+      for (const student of editedStudents) {
+        const match = (student.assignment_scores || []).find((item) => item.assignment_id === assignment.id);
+        const saved = await saveSpreadsheetMark(student, assignment, match, false, true);
+        if (!saved) {
+          const input = spreadsheetInputsRef.current[getDraftKey(student.student_email, assignment.id)];
+          input?.focus();
+          break;
+        }
+      }
+      await loadKduGradebook(selectedCourseId);
+    } finally {
+      columnSaveRef.current = false;
+      setSavingColumn(null);
     }
   }
 
@@ -1050,7 +1080,7 @@ export default function GradebookPage() {
           <section className="panel">
             <h2>Spreadsheet Gradebook{allSections ? " — All sections" : ""}</h2>
             <p className="section-subtitle">
-              Enter the points earned, then press Enter to save and move to the next student in the same column, or select Save. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
+              Enter the points earned, then press Enter to save and move to the next student in the same column. Use Save all at the bottom of a column to save any remaining edits. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
             </p>
 
             <div style={spreadsheetToolbarStyle}>
@@ -1245,7 +1275,7 @@ export default function GradebookPage() {
                                     else delete spreadsheetInputsRef.current[markKey];
                                   }}
                                   type="number"
-                                  readOnly={spreadsheetSavesRef.current.has(markKey)}
+                                  readOnly={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
                                   onKeyDown={(event) => {
                                     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
                                     event.preventDefault();
@@ -1266,14 +1296,6 @@ export default function GradebookPage() {
                                 />
                                 <span>/ {getPointsPossible(assignment)}</span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => saveSpreadsheetMark(student, assignment, match)}
-                                disabled={savingKey === markKey}
-                                style={spreadsheetEditMarkButtonStyle}
-                              >
-                                {savingKey === markKey ? "Saving..." : "Save"}
-                              </button>
                               {cellSaveStatus[markKey] ? (
                                 <div style={spreadsheetMarkStatusStyle}>{cellSaveStatus[markKey]}</div>
                               ) : null}
@@ -1287,6 +1309,33 @@ export default function GradebookPage() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row" style={spreadsheetStudentCellStyle}>Save remaining edits</th>
+                      {spreadsheetAssignments.map((assignment) => {
+                        const pendingCount = spreadsheetStudents.filter((student) =>
+                          Object.prototype.hasOwnProperty.call(spreadsheetMarkDrafts, getDraftKey(student.student_email, assignment.id))
+                        ).length;
+                        return (
+                          <td key={assignment.id} style={spreadsheetScoreCellStyle}>
+                            <button
+                              type="button"
+                              onClick={() => saveSpreadsheetColumn(assignment)}
+                              disabled={savingColumn !== null || spreadsheetSavesRef.current.size > 0 || pendingCount === 0}
+                              style={spreadsheetEditMarkButtonStyle}
+                              aria-label={`Save all edited marks for ${assignment.title || "assignment"}`}
+                            >
+                              {savingColumn === assignment.id ? "Saving..." : "Save all"}
+                            </button>
+                            <div style={spreadsheetMarkStatusStyle} role="status">
+                              {pendingCount ? `${pendingCount} unsaved` : "No unsaved edits"}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             )}
