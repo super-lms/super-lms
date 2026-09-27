@@ -149,6 +149,8 @@ export default function GradebookPage() {
   const [communicationRecipient, setCommunicationRecipient] = useState("parent");
   const [communicationNotes, setCommunicationNotes] = useState("");
   const autosaveTimersRef = useRef({});
+  const spreadsheetInputsRef = useRef({});
+  const spreadsheetSavesRef = useRef(new Set());
 
   async function loadCourses() {
     try {
@@ -343,8 +345,13 @@ export default function GradebookPage() {
     }
   }
 
-  async function saveSpreadsheetMark(student, assignment, match) {
+  async function saveSpreadsheetMark(student, assignment, match, advance = false) {
     const key = getDraftKey(student.student_email, assignment.id);
+    if (spreadsheetSavesRef.current.has(key)) return;
+    const sourceInput = spreadsheetInputsRef.current[key];
+    const studentIndex = spreadsheetStudents.findIndex((item) => item.student_email === student.student_email);
+    const nextStudent = spreadsheetStudents[studentIndex + 1];
+    const nextKey = nextStudent ? getDraftKey(nextStudent.student_email, assignment.id) : null;
     const rawMark = spreadsheetMarkDrafts[key] ?? getEarnedPoints(assignment, match);
     let percentage;
     try {
@@ -354,6 +361,7 @@ export default function GradebookPage() {
       return;
     }
 
+    spreadsheetSavesRef.current.add(key);
     setSavingKey(key);
     setCellSaveStatus((current) => ({ ...current, [key]: "Saving..." }));
 
@@ -378,10 +386,22 @@ export default function GradebookPage() {
       });
       setCellSaveStatus((current) => ({ ...current, [key]: "Saved ✓" }));
       await loadKduGradebook(selectedCourseId);
+      if (advance) {
+        requestAnimationFrame(() => {
+          // Do not steal focus if the teacher clicked elsewhere while saving.
+          if (document.activeElement !== sourceInput) return;
+          const nextInput = nextKey && spreadsheetInputsRef.current[nextKey];
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.select();
+          }
+        });
+      }
     } catch (error) {
       console.error(error);
       setCellSaveStatus((current) => ({ ...current, [key]: error.message || "Save failed" }));
     } finally {
+      spreadsheetSavesRef.current.delete(key);
       setSavingKey("");
     }
   }
@@ -1030,7 +1050,7 @@ export default function GradebookPage() {
           <section className="panel">
             <h2>Spreadsheet Gradebook{allSections ? " — All sections" : ""}</h2>
             <p className="section-subtitle">
-              Enter the points earned out of the assignment total, then select Save. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
+              Enter the points earned, then press Enter to save and move to the next student in the same column, or select Save. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
             </p>
 
             <div style={spreadsheetToolbarStyle}>
@@ -1220,7 +1240,18 @@ export default function GradebookPage() {
                             <td key={assignment.id} style={spreadsheetScoreCellStyle}>
                               <div style={spreadsheetMarkEntryStyle}>
                                 <input
+                                  ref={(node) => {
+                                    if (node) spreadsheetInputsRef.current[markKey] = node;
+                                    else delete spreadsheetInputsRef.current[markKey];
+                                  }}
                                   type="number"
+                                  readOnly={spreadsheetSavesRef.current.has(markKey)}
+                                  onKeyDown={(event) => {
+                                    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                                    event.preventDefault();
+                                    if (event.repeat) return;
+                                    saveSpreadsheetMark(student, assignment, match, true);
+                                  }}
                                   min="0"
                                   max={getPointsPossible(assignment)}
                                   step="any"
