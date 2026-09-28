@@ -23,7 +23,13 @@ function createAnnouncementsRouter(pool) {
   router.use(async (req,res,next) => {
     try {
       await ensure();
-      const result = await pool.query('SELECT school_id FROM users WHERE id = $1', [req.user.id]);
+      // Older single-school installations do not have users.school_id. Reading
+      // the optional key from the row JSON preserves their shared school scope
+      // while retaining school isolation wherever the field is present.
+      const result = await pool.query(
+        "SELECT NULLIF(to_jsonb(u)->>'school_id', '')::INTEGER AS school_id FROM users u WHERE u.id = $1",
+        [req.user.id]
+      );
       if (!result.rows.length) return res.status(403).json({error:'Account unavailable'});
       req.schoolId = result.rows[0].school_id;
       next();
