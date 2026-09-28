@@ -1,3 +1,4 @@
+import { downloadStudentWork, printStudentWork } from "../services/studentWorkExport.js";
 import { getEarnedPoints } from "../services/gradebookMarks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -1934,6 +1935,7 @@ export default function AssignmentSpeedGradingPage() {
                     <h3 style={{ marginTop: 0, marginBottom: "8px" }}>
                       Student Written Response
                     </h3>
+                    <WrittenWorkActions assignment={assignment} student={selectedRow} />
                     <div
                       style={{
                         color: selectedRow.content ? "#111827" : "#6b7280",
@@ -2622,6 +2624,7 @@ function SubmissionPreviewPanel({
 
       <section style={submissionPreviewSectionStyle}>
         <h3 style={{ margin: "0 0 8px" }}>Written Response</h3>
+        <WrittenWorkActions assignment={assignment} student={selectedRow} />
         <div style={submissionTextStyle}>
           {selectedRow?.content || "No written response was submitted."}
         </div>
@@ -3236,3 +3239,18 @@ const kduTimestampStyle = {
   color: "#444",
   lineHeight: 1.4,
 };
+
+function WrittenWorkActions({ assignment, student }) {
+  const [error, setError] = useState("");
+  function exportWork(action) {
+    setError("");
+    try { action(assignment, student); } catch (err) { setError(err.message); }
+  }
+  return <>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+      <ActionButton quiet disabled={!String(student?.content || "").trim()} onClick={() => exportWork(downloadStudentWork)}>Download Written Work (.txt)</ActionButton>
+      <ActionButton quiet disabled={!String(student?.content || "").trim()} onClick={() => exportWork(printStudentWork)}>Print / Save as PDF</ActionButton>
+    </div>
+    {error ? <p role="alert" style={{ color: "#991b1b" }}>{error}</p> : null}
+  </>;
+}
