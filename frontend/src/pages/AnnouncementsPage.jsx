@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch.js';
 import './AnnouncementsPage.css';
+import AnnouncementGroupLookup from '../components/AnnouncementGroupLookup.jsx';
 const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[]});
 export default function AnnouncementsPage() {
   const {user}=useAuth();
@@ -72,7 +73,8 @@ export default function AnnouncementsPage() {
     </article>)}
     {preview&&<dialog ref={previewRef} className="announcement-preview" onClose={()=>setPreview(null)}><div className="announcement-actions"><h2>{preview.name}</h2><button autoFocus onClick={()=>setPreview(null)}>Close</button></div>
       {preview.text!==undefined&&<pre>{preview.text}</pre>}
-      {preview.sheets&&<><p>{preview.note}</p>{preview.sheets.map(sheet=><section key={sheet.name}><h3>{sheet.name}</h3><div className="announcement-table"><table><tbody>{sheet.rows.map((row,i)=><tr key={i}>{row.map((cell,j)=>i===0?<th key={j}>{String(cell)}</th>:<td key={j}>{String(cell)}</td>)}</tr>)}</tbody></table></div></section>)}</>}
+      {!!preview.groupings?.length&&<AnnouncementGroupLookup groups={preview.groupings}/>}
+      {preview.sheets&&<><p>{preview.note}</p>{preview.sheets.map(sheet=><section key={sheet.name}><h3>{sheet.name} — document preview</h3><div className="announcement-table"><table><tbody>{sheet.rows.map((row,i)=><tr key={i}>{row.map((cell,j)=>i===0?<th key={j}>{String(cell)}</th>:<td key={j}>{String(cell)}</td>)}</tr>)}</tbody></table></div></section>)}</>}
       {preview.url&&(preview.type?.startsWith('image/')?<img src={preview.url} alt={preview.name}/>:<iframe title={preview.name} src={preview.url}/>)}
     </dialog>}
   </main>;

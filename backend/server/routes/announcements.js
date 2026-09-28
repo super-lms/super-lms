@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('node:path');
 const mammoth = require('mammoth');
 const XLSX = require('xlsx');
+const { readAnnouncementGroups } = require('../announcementGroups');
 const { authenticateJWT, requireRole } = require('../../middleware/auth');
 const types = { '.pdf':'application/pdf', '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.csv':'text/csv', '.txt':'text/plain', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg' };
 function createAnnouncementsRouter(pool) {
@@ -81,8 +82,9 @@ function createAnnouncementsRouter(pool) {
       res.set('Cache-Control','private, no-store'); res.set('X-Content-Type-Options','nosniff');
       if(req.query.preview==='true' && ext==='.docx') return res.json({text:(await mammoth.extractRawText({buffer:file.file_data})).value});
       if(req.query.preview==='true' && ['.xlsx','.csv'].includes(ext)) {
-        const book=XLSX.read(file.file_data,{type:'buffer',sheetRows:501});
-        return res.json({sheets:book.SheetNames.map(name=>({name,rows:XLSX.utils.sheet_to_json(book.Sheets[name],{header:1,defval:'',raw:false}).slice(0,500)})),note:'Preview shows up to 500 rows per sheet. Download for the complete document.'});
+        const book=XLSX.read(file.file_data,{type:'buffer'});
+        const groupings=readAnnouncementGroups(book);
+        return res.json({groupings,sheets:book.SheetNames.map(name=>({name,rows:XLSX.utils.sheet_to_json(book.Sheets[name],{header:1,defval:'',raw:false}).slice(0,500)})),note:'Preview shows up to 500 rows per sheet. Download for the complete document.'});
       }
       if(req.query.preview==='true' && ext==='.txt') return res.json({text:file.file_data.toString('utf8')});
       res.type(file.mime_type); res.attachment(file.filename); res.send(file.file_data);
