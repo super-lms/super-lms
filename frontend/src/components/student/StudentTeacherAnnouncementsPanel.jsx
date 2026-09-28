@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom"
 function SectionHeader({ title, subtitle }) {
   return (
     <div style={{ marginBottom: "16px" }}>
@@ -24,10 +25,11 @@ export default function StudentTeacherAnnouncementsPanel({ selectedCourse = null
   return (
     <section className="panel">
       <SectionHeader
-        title="Teacher Announcements"
-        subtitle="Important course messages from your teacher will appear here."
+        title="School Announcements"
+        subtitle="Read school news, event instructions, and shared documents."
       />
 
+      <p><Link to="/announcements">Open announcements and documents →</Link></p>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1.2fr)", gap: "14px" }}>
         <DetailCard title={selectedCourse?.title || selectedCourse?.class_name || "Selected Course"}>
           <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>

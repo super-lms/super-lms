@@ -145,6 +145,7 @@ export default function AdminLayout() {
           <NavItem to="/admin/student-schedules" style={getNavLinkStyle("/admin/student-schedules")} icon={CalendarDays}>
             Schedule Printer
           </NavItem>
+          <NavItem to="/announcements" style={getNavLinkStyle("/announcements")} icon={CalendarDays}>Announcements</NavItem>
           <NavItem to="/admin/calendar" style={getNavLinkStyle("/admin/calendar")} icon={CalendarDays}>
             School Calendar
           </NavItem>

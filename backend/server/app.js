@@ -200,6 +200,7 @@ app.get("/teacher-audio-feedback/:storedName", async (req, res, next) => {
 });
 app.use("/uploads", express.static(uploadDir));
 app.use("/api/auth", authRoutes);
+app.use("/api/announcements", require("./routes/announcements").createAnnouncementsRouter(pool));
 app.use("/api/demo", demoRoutes);
 app.use("/api/master-students", upload.single("file"), masterStudentRoutes);
 app.use("/api", teacherDesignedRubricImportRoutes);

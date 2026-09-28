@@ -307,6 +307,7 @@ export default function Layout() {
             <NavItem to={attendancePath} style={getNavLinkStyle(attendancePath)} icon={CalendarCheck}>
               Attendance
             </NavItem>
+            <NavItem to="/announcements" style={getNavLinkStyle("/announcements")} icon={FileText}>Announcements</NavItem>
             <NavItem to="/calendar" style={getNavLinkStyle("/calendar")} icon={CalendarDays}>
               School Calendar
             </NavItem>
@@ -348,6 +349,7 @@ export default function Layout() {
             <NavItem to="/student-reports" style={getNavLinkStyle("/student-reports")} icon={FileText}>
               My Reports
             </NavItem>
+            <NavItem to="/announcements" style={getNavLinkStyle("/announcements")} icon={FileText}>Announcements</NavItem>
 
             <div
               style={{
