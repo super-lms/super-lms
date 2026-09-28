@@ -214,7 +214,7 @@ function App() {
       <Route
         path="/calendar"
         element={
-          <ProtectedRoute allowedRoles={["admin", "teacher", "observer", "parent"]}>
+          <ProtectedRoute allowedRoles={["admin", "teacher", "observer", "parent", "student"]}>
             <SchoolCalendarPage />
           </ProtectedRoute>
         }

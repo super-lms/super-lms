@@ -350,6 +350,9 @@ export default function Layout() {
               My Reports
             </NavItem>
             <NavItem to="/announcements" style={getNavLinkStyle("/announcements")} icon={FileText}>Announcements</NavItem>
+            <NavItem to="/calendar" style={getNavLinkStyle("/calendar")} icon={CalendarDays}>
+              School Calendar
+            </NavItem>
 
             <div
               style={{

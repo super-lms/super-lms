@@ -252,13 +252,41 @@ async function ensureSchoolCalendarTables() {
       all_day BOOLEAN NOT NULL DEFAULT false,
       location TEXT NOT NULL DEFAULT '',
       color TEXT NOT NULL DEFAULT '#2563eb',
-      audiences JSONB NOT NULL DEFAULT '["bc_teacher", "chinese_homeroom_teacher", "parent", "observer"]'::jsonb,
+      audiences JSONB NOT NULL DEFAULT '["bc_teacher", "chinese_homeroom_teacher", "parent", "observer", "student"]'::jsonb,
       created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CHECK (ends_at >= starts_at)
     )
   `);
+
+  // Existing events were created before students could use the calendar.
+  // Run this once so staff do not need to recreate or edit those events.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS school_calendar_feature_migrations (
+      migration_key TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  const migration = await pool.query(
+    `SELECT 1 FROM school_calendar_feature_migrations
+     WHERE migration_key = 'calendar-events-visible-to-students-v1'`
+  );
+  if (migration.rowCount === 0) {
+    await pool.query(`
+      UPDATE school_calendar_events
+      SET audiences = CASE
+        WHEN audiences ? 'student' THEN audiences
+        ELSE audiences || '"student"'::jsonb
+      END,
+      updated_at = NOW()
+    `);
+    await pool.query(
+      `INSERT INTO school_calendar_feature_migrations (migration_key)
+       VALUES ('calendar-events-visible-to-students-v1')
+       ON CONFLICT (migration_key) DO NOTHING`
+    );
+  }
 }
 
 function calendarAudienceForUser(user) {
@@ -274,7 +302,7 @@ function calendarAudienceForUser(user) {
 }
 
 function normaliseCalendarAudiences(value) {
-  const allowed = new Set(['bc_teacher', 'chinese_homeroom_teacher', 'parent', 'observer']);
+  const allowed = new Set(['bc_teacher', 'chinese_homeroom_teacher', 'parent', 'observer', 'student']);
   const audiences = Array.isArray(value) ? value.map((item) => String(item || '').trim()) : [];
   return [...new Set(audiences.filter((item) => allowed.has(item)))];
 }
@@ -3496,7 +3524,7 @@ app.post("/api/admin/quick-enroll-student", authenticateJWT, requireRole("admin"
 
 
 /* SCHOOL CALENDAR */
-app.get('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher', 'observer', 'parent'), async (req, res) => {
+app.get('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher', 'observer', 'parent', 'student'), async (req, res) => {
   try {
     await ensureSchoolCalendarTables();
     const userResult = await pool.query(

@@ -9,6 +9,7 @@ const audienceOptions = [
   ["chinese_homeroom_teacher", "Chinese Homeroom Teachers"],
   ["parent", "Parents"],
   ["observer", "Observers"],
+  ["student", "Students"],
 ]
 
 const defaultAudiences = audienceOptions.map(([key]) => key)
@@ -156,7 +157,7 @@ export default function SchoolCalendarPage() {
           <p style={{ margin: "8px 0 0", color: "#536174" }}>School events and key dates for your community.</p>
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-          <button type="button" onClick={() => navigate(String(user?.role).toLowerCase() === "parent" ? "/parent" : String(user?.role).toLowerCase() === "observer" ? "/observer" : "/dashboard")} style={secondaryButtonStyle}>Back to portal</button>
+          <button type="button" onClick={() => navigate(String(user?.role).toLowerCase() === "parent" ? "/parent" : String(user?.role).toLowerCase() === "observer" ? "/observer" : String(user?.role).toLowerCase() === "student" ? "/student" : "/dashboard")} style={secondaryButtonStyle}>Back to portal</button>
           {isAdmin ? <button type="button" onClick={() => openNewEvent()} style={primaryButtonStyle}><Plus size={17} /> New event</button> : null}
         </div>
       </div>

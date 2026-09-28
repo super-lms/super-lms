@@ -1427,6 +1427,12 @@ export default function StudentDashboardPage() {
                 <ActionButton quiet onClick={() => navigate("/student-reports")}>
                   Reports
                 </ActionButton>
+                <ActionButton quiet onClick={() => navigate("/announcements")}>
+                  Announcements
+                </ActionButton>
+                <ActionButton quiet onClick={() => navigate("/calendar")}>
+                  Calendar
+                </ActionButton>
                 <ActionButton onClick={handleLogout}>Logout</ActionButton>
               </div>
             }
@@ -1462,6 +1468,8 @@ export default function StudentDashboardPage() {
           {portalViewMode === "menu" ? (
             <aside style={portalSidebarStyle} aria-label="Student portal menu">
               <div style={{ fontSize: "0.8rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: "8px" }}>Portal Menu</div>
+              <button type="button" onClick={() => navigate("/announcements")} style={portalMenuButtonStyle(false)}>Announcements</button>
+              <button type="button" onClick={() => navigate("/calendar")} style={portalMenuButtonStyle(false)}>Calendar</button>
               {[
                 ["dashboard", "Dashboard"],
                 ["due", "Current Assignments Due"],
