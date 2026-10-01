@@ -948,6 +948,13 @@ export default function AssignmentSpeedGradingPage() {
     }
   }
 
+  const studentWorkRef = useRef(null);
+
+  useEffect(() => {
+    if (!selectedRow?.student_email) return;
+    studentWorkRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [assignmentId, selectedRow?.student_email]);
+
   useEffect(() => {
     loadKduScoresFromSelectedStudent(selectedRow);
   }, [selectedRow?.student_email, assignment?.points_possible]);
@@ -1121,7 +1128,6 @@ export default function AssignmentSpeedGradingPage() {
 
     if (nextRow) {
       setSelectedRow(nextRow);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
 
@@ -1789,7 +1795,7 @@ export default function AssignmentSpeedGradingPage() {
               })}
             </div>
 
-            <div>
+            <div ref={studentWorkRef} style={{ scrollMarginTop: "16px" }}>
               {!selectedRow ? (
                 <div
                   style={{
