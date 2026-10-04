@@ -2141,6 +2141,14 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                             <DetailCard key={assignment.id} title={assignment.title}>
                               <div style={{ display: "grid", gap: "8px" }}>
                                 <StatusPill label={statusLabel} />
+                                <div
+                                  aria-label="Assignment submission and grading counts"
+                                  style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}
+                                >
+                                  <span><strong>Submitted:</strong> {getAssignmentSubmissionCount(assignment)}</span>
+                                  <span><strong>Graded:</strong> {getAssignmentGradedCount(assignment)}</span>
+                                  <span><strong>Ungraded:</strong> {getAssignmentUngradedCount(assignment)}</span>
+                                </div>
                                 <StatusPill label={assignment.is_published === true ? "Published" : "Draft — Hidden from Students"} />
                                 <div>
                                   <strong>Due:</strong> {formatDate(assignment.due_date)}
