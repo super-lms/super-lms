@@ -170,8 +170,60 @@ function getRubricCriterion(criteria, bucket, fallback) {
   return match?.criterion_text || fallback;
 }
 
+function calculateTeacherRubric(rubric, selections = {}) {
+  const criteria = rubric?.criteria_json;
+  const levels = Number(rubric?.level_count);
+  if (![4, 5, 6].includes(levels) || !Array.isArray(criteria) || !criteria.length) {
+    throw new Error("Save a teacher rubric with criteria before grading.");
+  }
+  const buckets = Object.fromEntries(["DO", "KNOW", "UNDERSTAND"].map(key => [key, { weight: 0, earned: 0 }]));
+  const ids = new Set();
+  let totalWeight = 0;
+  let earned = 0;
+  let complete = true;
+  for (const criterion of criteria) {
+    const id = String(criterion.id || "");
+    const weight = Number(criterion.weight);
+    const bucket = criterion.competency_bucket;
+    if (!id || ids.has(id) || !Number.isFinite(weight) || weight <= 0 || !buckets[bucket]) {
+      throw new Error("In Edit Assignment, give every criterion a unique ID, a positive weight, and a DO / KNOW / UNDERSTAND mapping, then save the teacher rubric.");
+    }
+    ids.add(id);
+    totalWeight += weight;
+    buckets[bucket].weight += weight;
+    const selected = selections[id];
+    if (selected === undefined || selected === null || selected === "") {
+      complete = false;
+      continue;
+    }
+    const level = Number(selected);
+    if (!Number.isInteger(level) || level < 1 || level > levels) throw new Error("Choose a valid performance level for each criterion.");
+    const contribution = level / levels * weight;
+    earned += contribution;
+    buckets[bucket].earned += contribution;
+  }
+  if (Math.abs(totalWeight - 100) > 0.01) throw new Error("Criterion weights must total 100% before grading.");
+  if (Object.keys(selections).some(id => !ids.has(id))) throw new Error("The rubric has changed. Clear the selections and score the current criteria.");
+  return {
+    complete,
+    percent: complete ? Number(earned.toFixed(2)) : null,
+    buckets: Object.fromEntries(Object.entries(buckets).map(([key, value]) => [key, {
+      weight: value.weight,
+      percent: complete && value.weight > 0 ? value.earned / value.weight * 100 : null,
+      level: complete && value.weight > 0 ? value.earned / value.weight * 6 : null,
+      contribution: complete ? value.earned : null,
+    }])),
+  };
+}
+
 function getSavedKduSummary(row) {
   const rubricSelection = row?.rubric_selection || {};
+
+  if (rubricSelection.source === "teacher_designed_rubric_ho" && Number.isFinite(rubricSelection.overallScore)) {
+    const percent = rubricSelection.overallScore;
+    const scoreOutOfSix = percent / 100 * 6;
+    return { isGraded: true, percent, scoreOutOfSix, label: `${getProficiencyLabel(scoreOutOfSix)} (${percent.toFixed(1)}%)` };
+  }
 
   const hasRubricSelection =
     rubricSelection.DO !== undefined ||
@@ -328,7 +380,8 @@ export default function AssignmentSpeedGradingPage() {
       knowScore !== String(saved.KNOW ?? saved.knowScore ?? saved.know_score ?? "") ||
       understandScore !== String(saved.UNDERSTAND ?? saved.understandScore ?? saved.understand_score ?? "") ||
       overallScore !== String(savedOverall) || pointsEarned !== savedPoints ||
-      teacherFeedback !== String(selectedRow.feedback || "") || recordedFeedbackAudio
+      teacherFeedback !== String(selectedRow.feedback || "") || recordedFeedbackAudio ||
+      (isTeacherRubric && JSON.stringify(teacherSelections) !== JSON.stringify(saved.teacherRubric?.selections || {}))
     );
     if (hasUnsavedChanges && !window.confirm("You have unsaved marks or feedback. Switch sections and discard these changes?")) return;
     if (nextSectionId !== "all") window.localStorage.setItem("super-lms-last-course-id", nextSectionId);
@@ -344,6 +397,38 @@ export default function AssignmentSpeedGradingPage() {
         : "/assignments"
     );
   }
+
+  const [teacherRubric, setTeacherRubric] = useState(null);
+  const [teacherRubricError, setTeacherRubricError] = useState("");
+  const [teacherRubricLoading, setTeacherRubricLoading] = useState(true);
+  const [teacherSelections, setTeacherSelections] = useState({});
+  const isTeacherRubric = assignment?.scoring_method === "teacher_designed_rubric_ho";
+  const teacherCalculation = useMemo(() => {
+    if (!teacherRubric) return { error: "No teacher rubric is saved. Open Edit Assignment and save the teacher rubric." };
+    try { return calculateTeacherRubric(teacherRubric, teacherSelections); }
+    catch (error) { return { error: error.message }; }
+  }, [teacherRubric, teacherSelections]);
+
+  useEffect(() => {
+    let active = true;
+    setTeacherRubric(null);
+    setTeacherRubricError("");
+    setTeacherRubricLoading(true);
+    authFetch(`${API_BASE}/api/assignments/${assignmentId}/teacher-designed-rubric`)
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load teacher rubric.");
+        if (active) setTeacherRubric(data.rubric || null);
+      })
+      .catch(error => { if (active) setTeacherRubricError(error.message); })
+      .finally(() => { if (active) setTeacherRubricLoading(false); });
+    return () => { active = false; };
+  }, [assignmentId]);
+
+  useEffect(() => {
+    const saved = selectedRow?.rubric_selection?.teacherRubric;
+    setTeacherSelections(saved && saved.revision === teacherRubric?.updated_at ? saved.selections || {} : {});
+  }, [assignmentId, selectedRow?.student_email, teacherRubric]);
 
   const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
 
@@ -863,6 +948,13 @@ export default function AssignmentSpeedGradingPage() {
     }
   }
 
+  const studentWorkRef = useRef(null);
+
+  useEffect(() => {
+    if (!selectedRow?.student_email) return;
+    studentWorkRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [assignmentId, selectedRow?.student_email]);
+
   useEffect(() => {
     loadKduScoresFromSelectedStudent(selectedRow);
   }, [selectedRow?.student_email, assignment?.points_possible]);
@@ -873,6 +965,7 @@ export default function AssignmentSpeedGradingPage() {
 
   useEffect(() => {
     function handleKeyboardShortcut(event) {
+      if (isTeacherRubric) return;
       const activeTagName = String(document.activeElement?.tagName || "").toLowerCase();
 
       if (activeTagName === "input" || activeTagName === "textarea" || activeTagName === "select") {
@@ -961,7 +1054,7 @@ export default function AssignmentSpeedGradingPage() {
     return () => {
       window.removeEventListener("keydown", handleKeyboardShortcut);
     };
-  }, [shortcutBucket, selectedRow?.student_email, doScore, knowScore, understandScore]);
+  }, [shortcutBucket, selectedRow?.student_email, doScore, knowScore, understandScore, isTeacherRubric]);
 
   function getSelectedStudentIndex() {
     if (!selectedRow?.student_email || filteredRows.length === 0) {
@@ -1035,7 +1128,6 @@ export default function AssignmentSpeedGradingPage() {
 
     if (nextRow) {
       setSelectedRow(nextRow);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
 
@@ -1068,7 +1160,12 @@ export default function AssignmentSpeedGradingPage() {
       nextUnderstandScore,
     ].every((value) => String(value ?? "").trim() !== "");
 
-    if (!hasCompleteKduScores) {
+    if (isTeacherRubric && (teacherRubricLoading || teacherRubricError || !teacherCalculation.complete)) {
+      setKduSaveMessage(teacherRubricError || teacherCalculation.error || "Select a performance level for every criterion before saving.");
+      return;
+    }
+
+    if (!isTeacherRubric && !hasCompleteKduScores) {
       setKduSaveMessage(
         "Enter DO, KNOW, and UNDERSTAND scores before saving."
       );
@@ -1090,6 +1187,10 @@ export default function AssignmentSpeedGradingPage() {
           feedback: teacherFeedback,
           ...(Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore")
             ? { pointsEarned } : {}),
+          ...(isTeacherRubric ? {
+            teacherRubricSelections: teacherSelections,
+            teacherRubricRevision: teacherRubric?.updated_at,
+          } : {}),
           doScore: toSafeScore(nextDoScore),
           knowScore: toSafeScore(nextKnowScore),
           understandScore: toSafeScore(nextUnderstandScore),
@@ -1255,6 +1356,14 @@ export default function AssignmentSpeedGradingPage() {
       };
     }
 
+    if (isTeacherRubric) {
+      return {
+        title: "Score the teacher rubric",
+        reason: "Select a performance level for every criterion. Scores use the saved criterion weights and KDU mappings.",
+        action: "Save the completed rubric before moving to the next student.",
+        buttonLabel: "", buttonAction: null,
+      };
+    }
     if (!rubric && !rubricLoading) {
       return {
         title: "Check the assignment setup",
@@ -1283,6 +1392,7 @@ export default function AssignmentSpeedGradingPage() {
     sectionScoreRows,
     rubric,
     rubricLoading,
+    isTeacherRubric,
     assignmentId,
     sectionId,
     navigate,
@@ -1685,7 +1795,7 @@ export default function AssignmentSpeedGradingPage() {
               })}
             </div>
 
-            <div>
+            <div ref={studentWorkRef} style={{ scrollMarginTop: "16px" }}>
               {!selectedRow ? (
                 <div
                   style={{
@@ -1755,7 +1865,7 @@ export default function AssignmentSpeedGradingPage() {
                       </span>
 
                       <span style={contextPillStyle}>
-                        {assignment?.scoring_method === "single_score_kdu" ? "Single Score KDU" : "KDU Rubric"}
+                        {isTeacherRubric ? "Teacher Designed Rubric" : isOneScoreAssignment ? "Single Score KDU" : "KDU Rubric"}
                       </span>
                     </div>
 
@@ -2084,7 +2194,7 @@ export default function AssignmentSpeedGradingPage() {
                     ) : null}
                   </div> : null}
 
-                  {!isOneScoreAssignment ? (
+                  {!isOneScoreAssignment && !isTeacherRubric ? (
                     <>
                       <RawMarkEntryPanel
                         assignmentId={assignmentId}
@@ -2107,6 +2217,44 @@ export default function AssignmentSpeedGradingPage() {
                     </>
                   ) : null}
 
+                  {isTeacherRubric ? (
+                    <div style={{ padding: "18px", border: "1px solid #d7dce5", borderRadius: "14px", marginBottom: "18px" }}>
+                      <h3>Teacher Designed Rubric — {teacherRubric?.title || "Assignment Rubric"}</h3>
+                      {teacherRubricLoading ? <p>Loading saved teacher rubric...</p> : teacherRubricError ? <p role="alert">{teacherRubricError}</p> : (
+                        <>
+                          {selectedRow?.rubric_selection?.teacherRubric && selectedRow.rubric_selection.teacherRubric.revision !== teacherRubric?.updated_at ?
+                            <p role="status">The rubric has changed since this student's saved grade. Their saved grade is retained until you score and save the current rubric.</p> : null}
+                          {teacherCalculation.error ? <p role="alert">{teacherCalculation.error}</p> : null}
+                          {(teacherRubric?.criteria_json || []).map(criterion => (
+                            <fieldset key={criterion.id} disabled={savingKduScores} style={{ marginBottom: "14px", border: "1px solid #d7dce5", borderRadius: "10px" }}>
+                              <legend>{criterion.name} — {criterion.weight}% — {criterion.competency_bucket || "Mapping required"}</legend>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                {Array.from({ length: teacherRubric.level_count }, (_, i) => i + 1).map(level => (
+                                  <button key={level} type="button" aria-pressed={Number(teacherSelections[criterion.id]) === level}
+                                    onClick={() => { setTeacherSelections(current => ({ ...current, [criterion.id]: level })); setKduSaveMessage("Unsaved rubric selections."); }}
+                                    style={{ padding: "12px", maxWidth: "220px", borderRadius: "8px", border: "1px solid #94a3b8", background: Number(teacherSelections[criterion.id]) === level ? "#dbeafe" : "white" }}>
+                                    <strong>{criterion.level_labels?.[level - 1] || `Level ${level}`}</strong><div>{criterion.descriptors?.[`level_${level}`] || ""}</div>
+                                  </button>
+                                ))}
+                              </div>
+                            </fieldset>
+                          ))}
+                          <p><strong>Overall:</strong> {teacherCalculation.complete ? `${teacherCalculation.percent.toFixed(2)}%` : "Select a level for every criterion"}</p>
+                          {teacherCalculation.buckets ? ["DO", "KNOW", "UNDERSTAND"].map(bucket => {
+                            const value = teacherCalculation.buckets[bucket];
+                            return <p key={bucket}><strong>{bucket} ({value.weight}% weight):</strong> {value.percent === null ? (value.weight ? "—" : "Not assessed") : `${value.percent.toFixed(2)}% · ${value.level.toFixed(2)} / 6 · ${value.contribution.toFixed(2)} percentage points overall`}</p>;
+                          }) : null}
+                          <p>Each criterion contributes its selected level ÷ {teacherRubric?.level_count || 6} × its weight. KDU scores average the mapped criteria using their weights.</p>
+                          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                            <ActionButton onClick={() => saveKduScores()} disabled={savingKduScores || !teacherCalculation.complete}>Save Rubric Scores</ActionButton>
+                            <ActionButton quiet onClick={() => saveKduScores({}, null, { advanceToNextStudent: true })} disabled={savingKduScores || !teacherCalculation.complete}>Save & Next Student</ActionButton>
+                            <ActionButton quiet onClick={() => { setTeacherSelections({}); setKduSaveMessage("Selections cleared locally. The saved grade remains until you save a completed rubric."); }} disabled={savingKduScores}>Clear Selections</ActionButton>
+                          </div>
+                        </>
+                      )}
+                      {kduSaveMessage ? <p role="status">{kduSaveMessage}</p> : null}
+                    </div>
+                  ) : (
                   <div
                     style={{
                       border: "1px solid #d7dce5",
@@ -2497,6 +2645,8 @@ export default function AssignmentSpeedGradingPage() {
                       ) : null}
                     </div>
                   </div>
+
+                  )}
 
                   <ActionButton quiet onClick={() => backToAssignmentsPage()}>
                     ← Back to Assignments

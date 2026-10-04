@@ -5832,7 +5832,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
       : Number(req.body.points_possible);
     const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
 
-    const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu"];
+    const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu", "teacher_designed_rubric_ho"];
     const scoringMethod = allowedScoringMethods.includes(String(req.body.scoring_method || "").trim())
       ? String(req.body.scoring_method || "").trim()
       : "rubric";
@@ -7815,6 +7815,52 @@ app.post(
   }
 );
 
+function calculateTeacherRubric(rubric, selections = {}) {
+  const criteria = rubric?.criteria_json;
+  const levels = Number(rubric?.level_count);
+  if (![4, 5, 6].includes(levels) || !Array.isArray(criteria) || !criteria.length) {
+    throw new Error("Save a teacher rubric with criteria before grading.");
+  }
+  const buckets = Object.fromEntries(["DO", "KNOW", "UNDERSTAND"].map(key => [key, { weight: 0, earned: 0 }]));
+  const ids = new Set();
+  let totalWeight = 0;
+  let earned = 0;
+  let complete = true;
+  for (const criterion of criteria) {
+    const id = String(criterion.id || "");
+    const weight = Number(criterion.weight);
+    const bucket = criterion.competency_bucket;
+    if (!id || ids.has(id) || !Number.isFinite(weight) || weight <= 0 || !buckets[bucket]) {
+      throw new Error("In Edit Assignment, give every criterion a unique ID, a positive weight, and a DO / KNOW / UNDERSTAND mapping, then save the teacher rubric.");
+    }
+    ids.add(id);
+    totalWeight += weight;
+    buckets[bucket].weight += weight;
+    const selected = selections[id];
+    if (selected === undefined || selected === null || selected === "") {
+      complete = false;
+      continue;
+    }
+    const level = Number(selected);
+    if (!Number.isInteger(level) || level < 1 || level > levels) throw new Error("Choose a valid performance level for each criterion.");
+    const contribution = level / levels * weight;
+    earned += contribution;
+    buckets[bucket].earned += contribution;
+  }
+  if (Math.abs(totalWeight - 100) > 0.01) throw new Error("Criterion weights must total 100% before grading.");
+  if (Object.keys(selections).some(id => !ids.has(id))) throw new Error("The rubric has changed. Clear the selections and score the current criteria.");
+  return {
+    complete,
+    percent: complete ? Number(earned.toFixed(2)) : null,
+    buckets: Object.fromEntries(Object.entries(buckets).map(([key, value]) => [key, {
+      weight: value.weight,
+      percent: complete && value.weight > 0 ? value.earned / value.weight * 100 : null,
+      level: complete && value.weight > 0 ? value.earned / value.weight * 6 : null,
+      contribution: complete ? value.earned : null,
+    }])),
+  };
+}
+
 /* SAVE KDU SCORES */
 app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
@@ -7923,6 +7969,47 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       percentScore = Number(Number(overallScore).toFixed(2));
       saveFeedback = `Direct spreadsheet mark: ${percentScore}%.`;
       saveContent = `Teacher-entered percentage mark: ${percentScore}%.`;
+    } else if (assignment.scoring_method === "teacher_designed_rubric_ho") {
+      const saved = await pool.query(
+        "SELECT id, title, level_count, criteria_json, updated_at FROM teacher_designed_rubrics WHERE assignment_id = $1",
+        [assignmentId]
+      );
+      const teacherRubric = saved.rows[0];
+      if (!teacherRubric) return res.status(400).json({ error: "No teacher rubric is saved for this assignment. Save it in Edit Assignment." });
+      if (String(req.body.teacherRubricRevision || "") !== new Date(teacherRubric.updated_at).toISOString()) {
+        return res.status(409).json({ error: "The teacher rubric has changed. Reload SpeedGrader before grading." });
+      }
+      const selections = req.body.teacherRubricSelections;
+      if (!selections || typeof selections !== "object" || Array.isArray(selections)) {
+        return res.status(400).json({ error: "Teacher rubric selections are required." });
+      }
+      let calculated;
+      try {
+        calculated = calculateTeacherRubric(teacherRubric, selections);
+        if (!calculated.complete) throw new Error("Select a performance level for every criterion before saving.");
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+      percentScore = calculated.percent;
+      weightedScore = percentScore / 100 * 6;
+      rubricSelection = {
+        DO: calculated.buckets.DO.level,
+        KNOW: calculated.buckets.KNOW.level,
+        UNDERSTAND: calculated.buckets.UNDERSTAND.level,
+        overallScore: percentScore,
+        source: "teacher_designed_rubric_ho",
+        teacherRubric: {
+          id: teacherRubric.id,
+          revision: new Date(teacherRubric.updated_at).toISOString(),
+          title: teacherRubric.title,
+          level_count: teacherRubric.level_count,
+          criteria_json: teacherRubric.criteria_json,
+          selections,
+          buckets: calculated.buckets,
+        },
+      };
+      saveFeedback = "Teacher designed rubric scores saved.";
+      saveContent = "Teacher-entered teacher designed rubric score.";
     } else if (isSingleScoreKdu) {
       const convertedKduLevel = convertPercentToKduLevel(overallScore);
 
@@ -8129,9 +8216,15 @@ app.put("/api/assignments/:assignmentId/teacher-designed-rubric", authenticateJW
   }
 
   try {
+    calculateTeacherRubric({ level_count: levelCount, criteria_json: criteria });
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
+
+  try {
     const result = await pool.query(
       `
-        INSERT INTO teacher_designed_rubrics (
+        WITH saved AS (INSERT INTO teacher_designed_rubrics (
           assignment_id,
           title,
           level_count,
@@ -8146,6 +8239,11 @@ app.put("/api/assignments/:assignmentId/teacher-designed-rubric", authenticateJW
           criteria_json = EXCLUDED.criteria_json,
           updated_at = NOW()
         RETURNING id, assignment_id, title, level_count, criteria_json, created_at, updated_at
+        ), linked AS (
+          UPDATE assignments SET scoring_method = 'teacher_designed_rubric_ho'
+          WHERE id = $1 RETURNING id
+        )
+        SELECT saved.* FROM saved JOIN linked ON linked.id = saved.assignment_id
       `,
       [assignmentId, title, levelCount, JSON.stringify(criteria)]
     );

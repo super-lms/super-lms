@@ -3,7 +3,7 @@ import authFetch from "../../services/authFetch";
 
 export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
   const [title, setTitle] = useState("");
-  const [levelCount, setLevelCount] = useState("4");
+  const [levelCount, setLevelCount] = useState("6");
   const [levelLabels, setLevelLabels] = useState([]);
   const [criteria, setCriteria] = useState([]);
   const [criterionName, setCriterionName] = useState("");
@@ -130,7 +130,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
         throw new Error(data.error || "Failed to save teacher rubric.");
       }
 
-      setMessage("Teacher Designed Rubric saved.");
+      setMessage("Teacher Designed Rubric saved and selected for this assignment.");
     } catch (err) {
       setError(err.message || "Failed to save teacher rubric.");
     } finally {
@@ -303,6 +303,19 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
                   </div>
                 </div>
 
+                <label style={labelStyle}>
+                  KDU Mapping
+                  <select
+                    value={criterion.competency_bucket || ""}
+                    onChange={(event) => updateCriterion(criterion.id, "competency_bucket", event.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="">Select the area this criterion measures</option>
+                    <option value="DO">DO</option>
+                    <option value="KNOW">KNOW</option>
+                    <option value="UNDERSTAND">UNDERSTAND</option>
+                  </select>
+                </label>
                 <div style={{ ...descriptorGridStyle, gridTemplateColumns: `repeat(${numericLevelCount}, minmax(0, 1fr))` }}>
                   {Array.from({ length: numericLevelCount }, (_, index) => index + 1).map(
                     (level) => (
