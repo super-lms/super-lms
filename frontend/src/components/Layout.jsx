@@ -149,6 +149,7 @@ export default function Layout() {
     if (location.pathname === "/lessons") return "Lessons"
     if (location.pathname === "/assignments") return "Assignments"
     if (location.pathname === "/import-emergency-assignment") return "Import from Emergency Assignment"
+    if (location.pathname === "/quiz-builder") return "Quiz & Test Builder"
     if (location.pathname === "/assessments") return "Assessments"
     if (location.pathname === "/question-banks") return "Question Banks"
     if (location.pathname.startsWith("/assignments/") && location.pathname.endsWith("/edit")) {
@@ -254,6 +255,9 @@ export default function Layout() {
             </NavItem>
             <NavItem to="/import-emergency-assignment" style={getNavLinkStyle("/import-emergency-assignment")} icon={Upload}>
               Import from Emergency Assignment
+            </NavItem>
+            <NavItem to="/quiz-builder" style={getNavLinkStyle("/quiz-builder")} icon={ClipboardCheck}>
+              Quiz &amp; Test Builder
             </NavItem>
             <NavItem to="/assessments" style={getNavLinkStyle("/assessments")} icon={ClipboardCheck}>
               Assessments
@@ -370,7 +374,7 @@ export default function Layout() {
         )}
       </div>
 
-      <div style={{ flex: 1, background: "#f7f7f7" }}>
+      <div style={{ flex: 1, minWidth: 0, background: "#f7f7f7" }}>
         {!isStudentRoute && location.pathname !== dashboardPath ? (
           <Link to={dashboardPath} style={floatingDashboardButtonStyle}>
             ← Dashboard

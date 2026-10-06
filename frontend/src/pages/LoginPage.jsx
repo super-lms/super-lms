@@ -64,7 +64,7 @@ export default function LoginPage() {
       requestedPath &&
       requestedPath !== "/login" &&
       ((normalizedRole === "teacher" || normalizedRole === "admin") ||
-        (normalizedRole === "student" && requestedPath.startsWith("/student")) ||
+        (normalizedRole === "student" && (requestedPath.startsWith("/student") || requestedPath.startsWith("/quizzes/"))) ||
         ((normalizedRole === "observer" || normalizedRole === "parent") && requestedPath.startsWith("/observer")))
     ) {
       navigate(requestedPath, { replace: true })

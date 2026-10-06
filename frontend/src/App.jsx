@@ -64,7 +64,8 @@ function LoginRoute() {
   if (!user) return <LoginPage />;
 
   if (user.role === "student") {
-    return <Navigate to="/student" replace />;
+    const quizPath=location.state?.from?.pathname;
+    return <Navigate to={quizPath?.startsWith("/quizzes/") ? quizPath : "/student"} replace />;
   }
 
   if (user.role === "parent") {
@@ -102,6 +103,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
+      <Route path="/quizzes/:surveyId" element={<ProtectedRoute allowedRoles={["student", "teacher", "admin"]}><SurveyStudio publicSurvey quizMode /></ProtectedRoute>} />
       <Route path="/surveys/:surveyId" element={<SurveyStudio publicSurvey />} />
 
       <Route
@@ -125,6 +127,7 @@ function App() {
       <Route element={<TeacherProtectedLayout />}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/quiz-builder" element={<SurveyStudio quizMode />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/courses" element={<CoursesPage />} />
         <Route path="/course-assignments/:courseId" element={<CourseAssignmentsPage />} />
