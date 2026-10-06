@@ -37,7 +37,7 @@ const IEReportSingle = forwardRef(function IEReport({ data, onMessage }, ref) {
   return <section ref={editorRef} style={{background:'#fff',padding:24,border:'1px solid #ddd',borderRadius:12,marginTop:24}}>
     <h2>IE — Insufficient Evidence</h2>
     {validation && <p role="alert" style={{color:"#b91c1c"}}>{validation}</p>}
-    <p>Choose the assignments for this term, then complete the final due dates and directions. Assignments that are not submitted or have a score below 50% are selected automatically; you can change the selection. Changes here affect this printed report only. Keep this page open until you print or save the PDF; edits are not saved to the LMS.</p>
+    <p>Choose the assignments for this term, then complete the final due dates and directions. Only assignments that are not submitted or have a recorded score below 40% appear here. Submitted work awaiting marking and scores of 40% or higher are excluded. You can deselect qualifying assignments. Changes here affect this printed report only. Keep this page open until you print or save the PDF; edits are not saved to the LMS.</p>
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16,marginBottom:20}}>
       {[['date','Date','date'],['term','Term','text'],['name','Student name','text'],['email','Email','email'],['grade','Grade','text'],['className','Class (e.g. 10A)','text']].map(([key,label,type]) => <label key={key}>{label}<input name={key} aria-label={label} aria-invalid={validation && !String(meta[key]).trim() && key !== "term" ? true : undefined} type={type} value={meta[key]} onChange={e=>setMeta({...meta,[key]:e.target.value})} style={input}/></label>)}
     </div>
@@ -47,8 +47,8 @@ const IEReportSingle = forwardRef(function IEReport({ data, onMessage }, ref) {
       <td style={cell}><input type="checkbox" aria-label={`Include assignment ${i+1}`} checked={r.included} onChange={e=>update(r.id,'included',e.target.checked)}/></td>
       <td style={cell}><input aria-label={`Assignment ${i+1} title`} value={r.title} onChange={e=>update(r.id,'title',e.target.value)} style={input}/></td>
       <td style={cell}><input aria-label={`Assignment ${i+1} original date`} type="date" value={dateField(r.originalDate)} onChange={e=>update(r.id,'originalDate',e.target.value)} style={input}/></td>
-      <td style={cell}><select aria-label={`Assignment ${i+1} submission status`} value={String(r.submitted)} onChange={e=>update(r.id,'submitted',e.target.value==='true')} style={input}><option value="true">Submitted</option><option value="false">Not submitted</option></select></td>
-      <td style={cell}><input aria-label={`Assignment ${i+1} score`} disabled={!r.submitted} value={r.submitted?r.score:''} onChange={e=>update(r.id,'score',e.target.value)} placeholder={r.submitted?'Not graded':''} style={input}/></td>
+      <td style={cell}>{r.submitted ? 'Submitted' : 'Not submitted'}</td>
+      <td style={cell}>{r.submitted ? r.score : ''}</td>
       <td style={cell}><input aria-label={`Assignment ${i+1} final due date`} type="date" value={r.finalDate} onChange={e=>update(r.id,'finalDate',e.target.value)} style={input}/></td>
       <td style={cell}><textarea aria-label={`Assignment ${i+1} directions`} value={r.directions} onChange={e=>update(r.id,'directions',e.target.value)} rows={3} style={{...input,minWidth:200}}/></td>
     </tr>)}
@@ -78,7 +78,7 @@ const IEReport = forwardRef(function IEReports({data,onMessage}, ref) {
   }
   useImperativeHandle(ref,()=>({print}));
   return <section style={{marginTop:24}}><h2>Students meeting IE criteria</h2>
-    <p>Students with at least one assignment not submitted or scored below 50% are listed below. Choose one student or a batch. Each printed student report starts on a new page.</p>
+    <p>Students with at least one assignment not submitted or scored below 40% are listed below. Choose one student or a batch. Each printed student report starts on a new page.</p>
     <div style={{display:'flex',gap:12,marginBottom:16}}><button onClick={()=>setSelected(new Set(eligible.map(s=>s.student_user_id)))}>Select all IE students</button><button onClick={()=>setSelected(new Set())}>Clear students</button><button onClick={print}>Print selected IE reports / Save PDF</button></div>
     {!eligible.length && <p>No students meet the IE criteria for the selected course, category, and level.</p>}
     {eligible.map(student=><div key={student.student_user_id}><label><input type="checkbox" checked={selected.has(student.student_user_id)} onChange={e=>setSelected(current=>{const next=new Set(current);if(e.target.checked)next.add(student.student_user_id);else next.delete(student.student_user_id);return next;})}/> Include {student.student_name} ({student.student_email})</label>
