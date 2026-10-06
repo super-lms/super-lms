@@ -12,8 +12,8 @@ test('IE print contains only selected work, safely escapes text and includes fou
  assert.ok(html.includes('A4 landscape'));
 });
 
-test('IE only shows missing work and strictly below 40%, excluding all not-marked values',()=>{
- const scores=[0,39.99,40,45,50,80,'',null,'Not Marked','   '];
+test('IE only shows missing work and strictly below 50%, excluding all not-marked values',()=>{
+ const scores=[0,49.99,50,55,60,80,'',null,'Not Marked','   '];
  const rows=ieRows([{assignment_id:'missing',submitted:false,score:''},...scores.map((score,i)=>({assignment_id:i,submitted:true,score}))]);
  assert.deepEqual(rows.map(r=>r.id),['missing',0,1]);
  assert.ok(rows.every(r=>r.included));

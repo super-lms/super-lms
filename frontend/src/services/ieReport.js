@@ -8,7 +8,7 @@ export function localReportDate() {
 export function meetsIECriteria(assignment) {
   if (!assignment.submitted) return true;
   const value = String(assignment.score ?? '').trim().replace(/%$/, '').trim();
-  return value !== '' && Number.isFinite(Number(value)) && Number(value) < 40;
+  return value !== '' && Number.isFinite(Number(value)) && Number(value) < 50;
 }
 export function ieRows(assignments = []) {
   return assignments.map((a, index) => ({...a, id: a.assignment_id ?? `assignment-${index}`}))
