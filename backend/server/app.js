@@ -12904,7 +12904,9 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
         CONCAT(u.first_name, ' ', u.last_name) AS student_name,
         u.email AS student_email,
         u.student_id,
-        u.parent_email
+        u.parent_email,
+        COALESCE(to_jsonb(u)->>'grade_level', to_jsonb(u)->>'grade', '') AS student_grade,
+        COALESCE(to_jsonb(u)->>'class_name', to_jsonb(u)->>'homeroom', '') AS student_class
       FROM class_enrollments ce
       JOIN users u
         ON u.id = ce.student_user_id
@@ -12920,6 +12922,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
         a.id AS assignment_id,
         a.title AS assignment_title,
         a.due_date,
+        COALESCE(to_jsonb(a)->>'available_from', to_jsonb(a)->>'created_at') AS original_assignment_date,
         cc.name AS category_name,
         cs.name AS level_name,
         ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS calculated_weight_percent
@@ -12957,6 +12960,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
       JOIN assignments a
         ON a.id = s.assignment_id
       WHERE a.class_id = $1
+      ORDER BY s.id ASC
       `,
       [contentCourseId]
     );
@@ -13055,6 +13059,10 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
 
           return {
             submission_id: submission?.submission_id || null,
+            assignment_id: assignment.assignment_id,
+            original_assignment_date: assignment.original_assignment_date || "",
+            original_due_date: assignment.due_date || "",
+            submitted: Boolean(submission && (submission.has_submitted_content || numericScore !== null)),
             assignment_title: assignment.assignment_title || "",
             lesson_title: "",
             category_name: assignment.category_name || "Unlinked",
@@ -13089,6 +13097,8 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
         student_email: student.student_email,
         student_id: student.student_id,
         parent_email: student.parent_email,
+        student_grade: student.student_grade,
+        student_class: student.student_class,
         current_grade: currentGrade,
         progress_percent: progressPercent,
         graded_assignment_count: gradedAssignmentCount,

@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import authFetch from "../services/authFetch";
 
+import IEReport from "../components/IEReport.jsx";
+
 function ReportsPage() {
+  const ieReportRef = useRef(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const commentSaveTimersRef = useRef({});
@@ -349,7 +352,7 @@ function ReportsPage() {
       return;
     }
 
-    if (reportScope === "student" && !selectedStudent) {
+    if (reportScope !== "class" && !selectedStudent) {
       setMessage("Please select a student");
       return;
     }
@@ -359,7 +362,7 @@ function ReportsPage() {
       studentEmail: selectedStudent?.student_email || "",
       categoryName: selectedCategoryName,
       levelName: selectedLevelName,
-      reportScope,
+      reportScope: reportScope === "ie" ? "student" : reportScope,
     });
     const selectedCourseRecord = courses.find(
       (course) => String(course.id) === String(selectedCourse)
@@ -792,6 +795,11 @@ function ReportsPage() {
   }
 
   function exportPDF() {
+    if (reportScope === "ie") {
+      if (!reportData) return setMessage("Generate an IE report first");
+      ieReportRef.current?.print();
+      return;
+    }
     if (!reportData) {
       setMessage("Generate a report first");
       return;
@@ -989,10 +997,11 @@ function ReportsPage() {
             >
               <option value="student">Student Report</option>
               <option value="class">Class Report</option>
+              <option value="ie">IE — Insufficient Evidence</option>
             </select>
           </div>
 
-          {reportScope === "student" && (
+          {reportScope !== "class" && (
             <div>
               <label style={labelStyle}>Student</label>
               <select
@@ -1065,11 +1074,11 @@ function ReportsPage() {
             Export PDF
           </button>
 
-          <button onClick={exportCSV} style={buttonStyle}>
+          <button hidden={reportScope === "ie"} onClick={exportCSV} style={buttonStyle}>
             Export CSV
           </button>
 
-          <button onClick={downloadWebtessFile} style={buttonStyle}>
+          <button hidden={reportScope === "ie"} onClick={downloadWebtessFile} style={buttonStyle}>
             Download WebTESS File (.txt)
           </button>
         </div>
@@ -1201,7 +1210,10 @@ function ReportsPage() {
         </div>
       </div>
 
-{reportData && (
+{reportData && reportScope === "ie" && (
+        <IEReport key={`${reportData.course_id}-${reportData.students?.[0]?.student_user_id}`} ref={ieReportRef} data={reportData} onMessage={setMessage} />
+      )}
+      {reportData && reportScope !== "ie" && (
         <div style={sectionStyle}>
           <div style={{ marginBottom: "18px" }}>
             <h2 style={sectionTitleStyle}>
