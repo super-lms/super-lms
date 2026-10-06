@@ -5,29 +5,41 @@ const input = {width:'100%',boxSizing:'border-box',padding:8,border:'1px solid #
 const cell = {padding:8,border:'1px solid #d1d5db',verticalAlign:'top'};
 const IEReportSingle = forwardRef(function IEReport({ data, onMessage }, ref) {
   const student = data.students?.[0];
+  const editorRef = useRef(null);
+  const [validation, setValidation] = useState('');
   const [meta, setMeta] = useState({date:localReportDate(),name:student?.student_name || '',email:student?.student_email || '',grade:student?.student_grade || '',className:student?.student_class || '',term:'',course:data.course_title || ''});
   const [rows, setRows] = useState(() => ieRows(student?.assignments));
   function update(id, field, value) {setRows(current => current.map(r => r.id === id ? {...r,[field]:value} : r));}
   function html() {
     if (!rows.some(r => r.included)) throw new Error(`Select at least one assignment for ${meta.name}.`);
-    if (!meta.date || !meta.name || !meta.email || !meta.grade || !meta.className) throw new Error(`Complete date, name, email, grade, and class for ${meta.name}.`);
+    const labels = {date:'Date',name:'Student name',email:'Email',grade:'Grade',className:'Class'};
+    const missing=Object.keys(labels).find(key=>!String(meta[key]).trim());
+    if (missing) {
+      const message=`Enter ${labels[missing]} for ${meta.name} in the highlighted field below.`;
+      setValidation(message);
+      const field=editorRef.current?.querySelector(`[name="${missing}"]`);
+      field?.scrollIntoView({behavior:'smooth',block:'center'});field?.focus({preventScroll:true});
+      throw new Error(message);
+    }
+    setValidation('');
     return iePrintHtml(meta, rows);
   }
   function print() {
-    if (!rows.some(r => r.included)) return onMessage('Select at least one assignment for the IE report.');
-    if (!meta.date || !meta.name || !meta.email || !meta.grade || !meta.className) return onMessage('Complete the report date, student name, email, grade, and class before printing.');
+    let documentHtml;
+    try { documentHtml=html(); } catch(error) {return onMessage(error.message);}
     const popup = window.open('', '_blank', 'width=1200,height=800');
     if (!popup) return onMessage('Allow pop-ups for the LMS site to print the IE report.');
-    popup.document.write(iePrintHtml(meta, rows)); popup.document.close();
+    popup.document.write(documentHtml); popup.document.close();
     popup.focus(); popup.setTimeout(() => popup.print(), 300);
   }
   useImperativeHandle(ref, () => ({print, html}));
   if (!student) return <p>No student found. Select a student and generate the report again.</p>;
-  return <section style={{background:'#fff',padding:24,border:'1px solid #ddd',borderRadius:12,marginTop:24}}>
+  return <section ref={editorRef} style={{background:'#fff',padding:24,border:'1px solid #ddd',borderRadius:12,marginTop:24}}>
     <h2>IE — Insufficient Evidence</h2>
+    {validation && <p role="alert" style={{color:"#b91c1c"}}>{validation}</p>}
     <p>Choose the assignments for this term, then complete the final due dates and directions. Assignments that are not submitted or have a score below 50% are selected automatically; you can change the selection. Changes here affect this printed report only. Keep this page open until you print or save the PDF; edits are not saved to the LMS.</p>
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:16,marginBottom:20}}>
-      {[['date','Date','date'],['term','Term','text'],['name','Student name','text'],['email','Email','email'],['grade','Grade','text'],['className','Class (e.g. 10A)','text']].map(([key,label,type]) => <label key={key}>{label}<input aria-label={label} type={type} value={meta[key]} onChange={e=>setMeta({...meta,[key]:e.target.value})} style={input}/></label>)}
+      {[['date','Date','date'],['term','Term','text'],['name','Student name','text'],['email','Email','email'],['grade','Grade','text'],['className','Class (e.g. 10A)','text']].map(([key,label,type]) => <label key={key}>{label}<input name={key} aria-label={label} aria-invalid={validation && !String(meta[key]).trim() && key !== "term" ? true : undefined} type={type} value={meta[key]} onChange={e=>setMeta({...meta,[key]:e.target.value})} style={input}/></label>)}
     </div>
     <div style={{display:'flex',gap:12,marginBottom:12}}><button onClick={()=>setRows(rows.map(r=>({...r,included:true})))}>Include all</button><button onClick={()=>setRows(rows.map(r=>({...r,included:false})))}>Clear selection</button><button onClick={print}>Print IE / Save PDF</button></div>
     <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:1000}}><thead><tr>{['Include','Assignment Title','Original Assignment Date','Submitted / Not submitted','Score if submitted','Final Due Date','Directions to Student'].map(label=><th key={label} style={cell}>{label}</th>)}</tr></thead><tbody>

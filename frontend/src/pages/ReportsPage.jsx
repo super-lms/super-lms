@@ -7,6 +7,7 @@ import IEReport from "../components/IEReport.jsx";
 
 function ReportsPage() {
   const ieReportRef = useRef(null);
+  const ieEditorRef = useRef(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const commentSaveTimersRef = useRef({});
@@ -41,6 +42,10 @@ function ReportsPage() {
   const [commentSaveTimes, setCommentSaveTimes] = useState({});
   const [hasUnsavedCommentChanges, setHasUnsavedCommentChanges] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (reportScope === "ie" && reportData) ieEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [reportData, reportScope]);
 
   useEffect(() => {
     function warnBeforeLeaving(event) {
@@ -379,7 +384,9 @@ function ReportsPage() {
       .then((data) => {
         setReportData(data);
         setMessage(
-          reportScope === "student"
+          reportScope === "ie"
+            ? (selectedStudent ? `IE report ready for ${selectedStudent.student_name}. Review the editable fields below.` : "Batch IE reports ready. Choose students and review the editable fields below.")
+            : reportScope === "student"
             ? `Report loaded for ${selectedStudent?.student_name || "student"}`
             : `Class report loaded successfully`
         );
@@ -1085,13 +1092,19 @@ function ReportsPage() {
 
         <div style={messageStyle}>{message}</div>
 
+        {reportData && reportScope === "ie" && (
+          <div ref={ieEditorRef} style={{scrollMarginTop:24}}>
+            <IEReport key={JSON.stringify(reportData)} ref={ieReportRef} data={reportData} onMessage={setMessage} />
+          </div>
+        )}
+
         {hasUnsavedCommentChanges ? (
           <div style={unsavedWarningStyle}>
             Unsaved comment changes detected. Autosave will run shortly.
           </div>
         ) : null}
 
-        <div style={webtessHelpStyle}>
+        <div hidden={reportScope === "ie"} style={webtessHelpStyle}>
           Downloads a ready-to-upload tab-delimited .txt file with the required columns:
           StudentID, Mark, Work, Abs, Com1, Com2. Marks are rounded to whole numbers.
         </div>
@@ -1210,9 +1223,7 @@ function ReportsPage() {
         </div>
       </div>
 
-{reportData && reportScope === "ie" && (
-        <IEReport key={`${reportData.course_id}-${reportData.students?.[0]?.student_user_id}`} ref={ieReportRef} data={reportData} onMessage={setMessage} />
-      )}
+
       {reportData && reportScope !== "ie" && (
         <div style={sectionStyle}>
           <div style={{ marginBottom: "18px" }}>
