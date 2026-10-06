@@ -67,6 +67,7 @@ export default function AdminLayout() {
     if (location.pathname === "/admin/calendar") return "School Calendar"
     if (location.pathname === "/admin/departments") return "Departments"
     if (location.pathname === "/admin/gradebooks") return "School Gradebooks"
+    if (location.pathname === "/admin/surveys") return "Survey Studio"
     if (location.pathname === "/admin/reports") return "School Reports"
     if (location.pathname === "/admin/analytics") return "Analytics"
     if (location.pathname === "/admin/settings") return "School Settings"
@@ -158,6 +159,7 @@ export default function AdminLayout() {
           <NavItem to="/admin/gradebooks" style={getNavLinkStyle("/admin/gradebooks")} icon={ClipboardList}>
             Gradebooks
           </NavItem>
+          <NavItem to="/admin/surveys" style={getNavLinkStyle("/admin/surveys")} icon={ClipboardList}>Surveys</NavItem>
           <NavItem to="/admin/reports" style={getNavLinkStyle("/admin/reports")} icon={FileText}>
             Reports
           </NavItem>

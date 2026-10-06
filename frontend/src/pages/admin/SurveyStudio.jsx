@@ -1,0 +1,115 @@
+import { useParams } from "react-router-dom";
+import authFetch from "../../services/authFetch";
+import API_BASE from "../../apiBase";
+import "./SurveyStudio.css";
+const surveyFetch = (url, opts) => location.pathname.includes("/admin/") ? authFetch(url, opts) : fetch(API_BASE + url, opts);
+import { useEffect, useState } from 'react';
+const types = ['Multiple Choice', 'Essay', 'Matching', 'Ranking', 'Form', 'Essay matching', 'Rating', 'Scale', 'Scoring', 'Range', 'Date / Time', 'Image Choice'];
+const makeQ = () => ({ id: crypto.randomUUID(), title: '', type: 'Multiple Choice', required: true, options: ['Option 1', 'Option 2'], targets: ['Answer 1', 'Answer 2'] });
+const esc = (x) => String(x ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function report(r, title) { const st = JSON.parse(r.student), a = JSON.parse(r.answers), qs = JSON.parse(r.questions); return `<article><h1>${esc(title)}</h1><h2>${esc(st.name)} ${esc(st.chineseName)}</h2><p>${esc(st.email)} · Grade ${esc(st.grade)} · ${esc(st.class)} · ${esc(st.gender)}</p><p>Submitted ${esc(new Date(r.created).toLocaleString())}</p>${qs.map((q, i) => `<section><h3>${i + 1}. ${esc(q.title)}</h3>${Array.isArray(a[q.id]) ? a[q.id].map((v, j) => `<p>${esc(q.type === 'Ranking' ? j + 1 : q.options[j])}: ${esc(v)}</p>`).join('') : `<p>${esc(a[q.id] ?? 'No response').replace(/\n/g, '<br>')}</p>`}</section>`).join('')}</article>`; }
+function printReports(rs, title) { const win = window.open('', '_blank'); if (!win)
+    return alert('Allow popups to print reports.'); win.document.write(`<html><head><title>Student responses</title><style>body{font:14px Arial;line-height:1.6;color:#172c35}article{page-break-after:always}article:last-child{page-break-after:auto}section{break-inside:avoid;border-top:1px solid #ddd}section p{white-space:pre-wrap}h1{font-size:24px}@page{size:A4;margin:18mm}</style></head><body>${rs.map(r => report(r, title)).join('')}</body></html>`); win.document.close(); win.focus(); setTimeout(() => win.print(), 300); }
+async function api(b) { const r = await surveyFetch('/api/surveys/studio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); const v = await r.json(); if (!r.ok)
+    throw Error(v.error); return v; }
+export default function Studio({ publicSurvey = false }) {
+    const { surveyId } = useParams();
+    const [importWarnings, setImportWarnings] = useState([]), [importSource, setImportSource] = useState('');
+    const [surveys, setSurveys] = useState([]), [responses, setResponses] = useState([]), [view, setView] = useState('overview'), [active, setActive] = useState(null), [questions, setQuestions] = useState([]), [title, setTitle] = useState(''), [description, setDescription] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [filter, setFilter] = useState(''), [grade, setGrade] = useState(''), [gender, setGender] = useState(''), [selected, setSelected] = useState([]), [student, setStudent] = useState({ name: '', chineseName: '', email: '', grade: '', class: '', gender: '' }), [answers, setAnswers] = useState({}), [done, setDone] = useState(null), [link, setLink] = useState('');
+    async function load() { try {
+        const r = await surveyFetch('/api/surveys/studio');
+        const v = await r.json();
+        if (!r.ok)
+            throw Error(v.error);
+        setSurveys(v.surveys);
+        setResponses(v.responses);
+        setError('');
+    }
+    catch (e) {
+        setError(e.message);
+    } }
+    useEffect(() => { const id = publicSurvey ? surveyId : null; if (id) {
+        setView('student');
+        surveyFetch('/api/surveys/studio?survey=' + encodeURIComponent(id)).then(async (r) => { const v = await r.json(); if (!r.ok)
+            throw Error(v.error); setActive(v); setQuestions(JSON.parse(v.questions)); setTitle(v.title); setDescription(v.description); }).catch(e => setError(e.message));
+    }
+    else
+        load(); }, []);
+    async function act(b) { setBusy(true); setError(''); try {
+        await api(b);
+        await load();
+    }
+    catch (e) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }
+    async function importPdf(file) { setBusy(true); setError(''); try {
+        const form = new FormData();
+        form.append('file', file);
+        const r = await authFetch('/api/surveys/import-pdf', { method: 'POST', body: form });
+        const v = await r.json();
+        if (!r.ok)
+            throw Error(v.error);
+        setTitle(title || v.title);
+        setImportWarnings(v.warnings || []);
+        setImportSource(v.sourceText || '');
+        setQuestions(old => [...old.filter(q => q.title.trim()), ...v.questions]);
+    }
+    catch (e) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }
+    function edit(s) { setImportWarnings([]); setImportSource(''); setActive(s || null); setTitle(s?.title || ''); setDescription(s?.description || ''); setQuestions(s ? JSON.parse(s.questions) : [makeQ()]); setView('builder'); }
+    function patch(i, k, v) { setQuestions(qs => qs.map((q, j) => j === i ? { ...q, [k]: v } : q)); }
+    const filtered = responses.filter(r => { const st = JSON.parse(r.student); return (!active || r.survey_id === active.id) && (!filter || [st.name, st.email, st.class, st.chineseName].some(x => String(x).toLowerCase().includes(filter.toLowerCase()))) && (!grade || st.grade === grade) && (!gender || st.gender === gender); });
+    function word(rs) { const blob = new Blob([`<html><meta charset="utf-8"><style>article{page-break-after:always}article:last-child{page-break-after:auto}section p{white-space:pre-wrap}</style><body>${rs.map(r => report(r, active?.title || surveys.find(s => s.id === r.survey_id)?.title || 'Survey')).join('')}</body></html>`], { type: 'application/msword' }); const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'student-responses.doc'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    function control(q) { const val = answers[q.id], set = (v) => setAnswers((a) => ({ ...a, [q.id]: v })); if (['Multiple Choice', 'Image Choice'].includes(q.type))
+        return <div className="choices">{q.options.map(o => <label key={o}><input type="radio" name={q.id} required={q.required} checked={val === o} onChange={() => set(o)}/>{q.type === 'Image Choice' ? <img src={o} alt={'Image option ' + (q.options.indexOf(o) + 1)} width="160"/> : o}</label>)}</div>; if (q.type === 'Essay')
+        return <textarea required={q.required} value={val || ''} onChange={e => set(e.target.value)} rows={5}/>; if (['Matching', 'Form', 'Essay matching'].includes(q.type))
+        return <div>{q.options.map((o, i) => <label className="rowfield" key={o}><span>{o}</span>{q.type === 'Matching' ? <select required={q.required} value={val?.[i] || ''} onChange={e => { const a = val ? [...val] : q.options.map(() => ''); a[i] = e.target.value; set(a); }}><option value="">Select a match</option>{q.targets.map(t => <option key={t}>{t}</option>)}</select> : <textarea required={q.required} value={val?.[i] || ''} onChange={e => { const a = val ? [...val] : q.options.map(() => ''); a[i] = e.target.value; set(a); }} rows={q.type === 'Form' ? 1 : 3}/>}</label>)}</div>; if (q.type === 'Ranking') {
+        const a = val || q.options;
+        return <div>{a.map((o, i) => <div className="rank" key={o}><span>{i + 1}</span><b>{o}</b><button type="button" disabled={i === 0} onClick={() => { const n = [...a]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; set(n); }} aria-label={'Move ' + o + ' up'}>↑</button><button type="button" disabled={i === a.length - 1} onClick={() => { const n = [...a]; [n[i], n[i + 1]] = [n[i + 1], n[i]]; set(n); }} aria-label={'Move ' + o + ' down'}>↓</button></div>)}</div>;
+    } if (q.type === 'Date / Time')
+        return <input type="datetime-local" required={q.required} value={val || ''} onChange={e => set(e.target.value)}/>; return <input type="number" min={q.type === 'Scoring' ? undefined : 1} max={q.type === 'Rating' ? 5 : q.type === 'Scoring' ? undefined : 10} required={q.required} placeholder={q.type === 'Rating' ? '1–5' : q.type === 'Scoring' ? 'Enter a score' : '1–10'} value={val ?? ''} onChange={e => set(e.target.value)}/>; }
+    if (view === 'student')
+        return <div className="lms-survey studentwrap"><header><div className="logo">S<span>Survey Studio</span></div><small>SUPER-LMS · STUDENT SURVEY</small></header>{error && <div role="alert" className="error">{error}</div>}{!active ? <p>{error?'Please contact your teacher for an available survey link.':'Loading survey…'}</p> : done ? <div className="card"><div className="eyebrow">RESPONSE RECEIVED</div><h1>Thank you, {student.name}.</h1><p>Your answers have been submitted to your teacher.</p><button className="primary" onClick={() => printReports([done], title)}>Print / save as PDF</button><button onClick={() => word([done])}>Download for Word</button></div> : <form onSubmit={async (e) => { e.preventDefault(); setBusy(true); try {
+            const final = { ...answers };
+            questions.filter(q => q.type === 'Ranking').forEach(q => { if (!final[q.id])
+                final[q.id] = q.options; });
+            const v = await api({ action: 'submit', surveyId: active.id, student, answers: final });
+            setDone({ id: v.id, survey_id: active.id, student: JSON.stringify(student), answers: JSON.stringify(final), questions: active.questions, created: new Date().toISOString() });
+        }
+        catch (e) {
+            setError(e.message);
+        }
+        finally {
+            setBusy(false);
+        } }}><div className="card"><div className="eyebrow">YOUR VOICE MATTERS</div><h1>{title}</h1><p>{description}</p><h3>Student details</h3><div className="grid">{[['name', 'English name'], ['chineseName', 'Chinese name (optional)'], ['email', 'Email'], ['class', 'Class (e.g. 10A)']].map(([k, l]) => <label key={k}>{l}<input required={k !== 'chineseName'} type={k === 'email' ? 'email' : 'text'} value={student[k]} onChange={e => setStudent({ ...student, [k]: e.target.value })}/></label>)}<label>Grade<select required value={student.grade} onChange={e => setStudent({ ...student, grade: e.target.value })}><option value="">Select grade</option>{Array.from({ length: 12 }, (_, i) => String(i + 1)).map(g => <option key={g}>{g}</option>)}</select></label><label>Gender<select required value={student.gender} onChange={e => setStudent({ ...student, gender: e.target.value })}><option value="">Select</option>{['Male', 'Female', 'Prefer not to say'].map(g => <option key={g}>{g}</option>)}</select></label></div><p className="muted">Your details and answers are shared with your survey administrator.</p></div>{questions.map((q, i) => <section className="card" key={q.id}><small>QUESTION {i + 1} OF {questions.length}</small><h2>{q.title} {q.required && <em>*</em>}</h2>{control(q)}</section>)}<button className="primary" disabled={busy}>{busy ? 'Submitting…' : 'Submit responses →'}</button></form>}</div>;
+    return <div className="lms-survey shell"><aside><div className="logo">S<span>Survey Studio<small>SUPER-LMS</small></span></div><div className="navlabel">WORKSPACE</div>{[['overview', '◫', 'Overview'], ['surveys', '▤', 'My surveys'], ['results', '▥', 'Responses'], ['analytics', '◷', 'Question insights']].map(([v, icon, l]) => <button key={v} className={view === v ? 'nav active' : 'nav'} onClick={() => { setView(v); setActive(null); }}><span>{icon}</span>{l}</button>)}<div className="asidebottom"><b>Built for the classroom</b><p>Every student. Every answer.<br />All in one place.</p></div></aside><main><div className="topbar"><span>Workspace / {view === 'builder' ? 'Survey builder' : view}</span><span className="badge">Administrator workspace</span></div>{error && <div className="error" role="alert">{error}</div>}<div className="heading"><div><div className="eyebrow">LISTEN. UNDERSTAND. ACT.</div><h1>{view === 'builder' ? 'Make room for student voices.' : view === 'results' ? 'Student responses' : view === 'analytics' ? 'Question insights' : 'Your classroom, in focus.'}</h1><p>{view === 'builder' ? 'Build a survey that asks the right questions.' : 'Create thoughtful surveys. Turn student responses into useful insights.'}</p></div>{view !== 'builder' && <button className="primary" onClick={() => edit()}>＋ Create survey</button>}</div>
+    {view === 'overview' && <><div className="stats">{[['Total surveys', surveys.length], ['Open for responses', surveys.filter(s => s.status === 'open').length], ['Student responses', responses.length]].map(([l, n]) => <div className="card" key={l}><span>{l}</span><strong>{n}</strong><small>{l === 'Student responses' ? 'Ready to review and print' : 'In your workspace'}</small></div>)}</div><div className="banner"><div><span className="eyebrow">FROM QUESTION TO CONVERSATION</span><h2>A simple way to hear<br />from every student.</h2><p>Share a QR code, collect responses, and bring<br />individual reports into your next conversation.</p><button onClick={() => edit()}>Build your first survey ↗</button></div><div className="paper"><span>STUDENT VOICE</span><h3>A better learning experience</h3><div>◉ Your perspective matters</div><div>○ Your ideas shape our classroom</div><div>○ A few minutes. A meaningful change.</div><footer>01 — LISTEN & LEARN</footer></div></div></>}
+    {['overview', 'surveys'].includes(view) && <section><div className="sectionhead"><h2>Your surveys <small>{surveys.length}</small></h2><span>Manage, share, and review</span></div>{!surveys.length ? <div className="empty"><h3>Your first survey starts here.</h3><p>Add your questions, then open the survey when you’re ready.</p><button onClick={() => edit()}>Create a survey →</button></div> : surveys.map(s => <div className="surveyrow" key={s.id}><div className="surveyicon">▤</div><div className="grow"><h3>{s.title}</h3><p>{JSON.parse(s.questions).length} questions · {responses.filter(r => r.survey_id === s.id).length} responses</p></div><span className={'status ' + s.status}>{s.status}</span><button onClick={() => edit(s)}>Edit</button><button disabled={busy} onClick={() => act({ action: 'status', id: s.id, status: s.status === 'open' ? 'closed' : 'open' })}>{s.status === 'open' ? 'Close' : 'Open'}</button><button disabled={s.status !== 'open'} onClick={() => { setActive(s); setLink(location.origin + import.meta.env.BASE_URL + 'surveys/' + s.id); setView('share'); }}>Share QR</button><button onClick={() => { setActive(s); setView('results'); }}>Results →</button></div>)}</section>}
+    {view === 'builder' && <div><div className="card"><h3>Import questions from a PDF</h3><p>Upload a text-based PDF with numbered questions. Suggested question types and response fields remain editable.</p><label>PDF document<input type="file" accept="application/pdf,.pdf" disabled={busy} onChange={e => { const f = e.target.files?.[0]; if (f)
+        importPdf(f); e.target.value = ''; }}/></label>{busy && <p>Reading your document…</p>}{importWarnings.map((message, i) => <p key={i} className="importnotice">{message}</p>)}{importSource && <details><summary>Compare with extracted PDF text</summary><pre style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>{importSource}</pre></details>}</div><div className="card"><label>Survey title<input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Learning experience survey"/></label><label>Introduction<textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Tell students what this survey is about."/></label></div>{questions.map((q, i) => <div className="card" key={q.id}><div className="sectionhead"><h3>Question {i + 1}</h3><button onClick={() => setQuestions(questions.filter((_, j) => i !== j))}>Remove</button></div>{q.source && <details><summary>Original PDF question {q.sourceNumber}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{q.source}</pre></details>}{(q.issues || []).map((message, j) => <p className="importnotice" key={j}>{message}</p>)}<div className="grid"><label>Question<input value={q.title} onChange={e => patch(i, 'title', e.target.value)} placeholder="What would you like to ask?"/></label><label>Question type<select value={q.type} onChange={e => patch(i, 'type', e.target.value)}>{types.map(t => <option key={t}>{t}</option>)}</select></label></div>{['Multiple Choice', 'Image Choice', 'Matching', 'Ranking', 'Form', 'Essay matching'].includes(q.type) && <label>{['Form', 'Essay matching'].includes(q.type) ? 'Row labels (one per line)' : q.type === 'Image Choice' ? 'HTTPS image URLs (one per line)' : 'Options / prompts (one per line)'}<textarea value={q.options.join('\n')} onChange={e => patch(i, 'options', e.target.value.split('\n'))}/></label>}{q.type === 'Matching' && <label>Matching answers (one per line)<textarea value={q.targets.join('\n')} onChange={e => patch(i, 'targets', e.target.value.split('\n'))}/></label>}<label className="check"><input type="checkbox" checked={q.required} onChange={e => patch(i, 'required', e.target.checked)}/>Required</label></div>)}<div className="actions"><button onClick={() => setQuestions([...questions, makeQ()])}>＋ Add question</button><button className="primary" disabled={busy} onClick={async () => { setBusy(true); try {
+        const v = await api({ action: 'save', id: active?.id, title, description, questions: questions.map(q => ({ ...q, options: q.options.map(o => o.trim()).filter(Boolean), targets: q.targets.map(o => o.trim()).filter(Boolean) })) });
+        await load();
+        setView('surveys');
+        setActive(null);
+    }
+    catch (e) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }}>{busy ? 'Saving…' : 'Save survey'}</button></div><p className="muted">Save first, then open the survey to accept responses. Existing reports retain the questions students answered.</p></div>}
+    {view === 'share' && <div className="card share"><div className="eyebrow">SCAN. ANSWER. SUBMIT.</div><h2>{active?.title}</h2><img width="240" height="240" alt="Survey QR code" src={API_BASE+'/api/surveys/qr/'+active?.id+'?url='+encodeURIComponent(link)}/><label>Student link<input readOnly value={link}/></label><button className="primary" onClick={() => navigator.clipboard.writeText(link).then(() => alert('Link copied')).catch(() => alert('Copy the link from the field above.'))}>Copy link</button><a className="button" href={link} target="_blank">Preview as student ↗</a><p className="muted">Students use this link without an LMS account.</p><button onClick={() => { const win = window.open('', '_blank'); if (win) {
+        win.document.write('<h1>' + esc(active?.title) + '</h1><img width="400" src="' + esc(API_BASE+'/api/surveys/qr/'+active?.id+'?url='+encodeURIComponent(link)) + '"><p>' + esc(link) + '</p>');
+        win.document.close();
+        win.onload = () => win.print();
+    } }}>Print QR poster</button></div>}
+    {['results', 'analytics'].includes(view) && <><div className="filters"><select value={active?.id || ''} onChange={e => { setActive(surveys.find(s => s.id === e.target.value) || null); setSelected([]); }}><option value="">All surveys</option>{surveys.map(s => <option value={s.id} key={s.id}>{s.title}</option>)}</select><input placeholder="Search name, email, or class…" value={filter} onChange={e => {setFilter(e.target.value);setSelected([])}}/><select value={grade} onChange={e => {setGrade(e.target.value);setSelected([])}}><option value="">All grades</option>{Array.from({ length: 12 }, (_, i) => String(i + 1)).map(g => <option key={g}>{g}</option>)}</select><select value={gender} onChange={e => {setGender(e.target.value);setSelected([])}}><option value="">All genders</option>{['Male', 'Female', 'Prefer not to say'].map(g => <option key={g}>{g}</option>)}</select></div>{view === 'results' ? <><div className="actions"><span>{filtered.length} responses · {selected.length} selected</span><button disabled={!filtered.length} onClick={() => printReports(filtered.filter(r => !selected.length || selected.includes(r.id)), active?.title || 'Student survey responses')}>Print {selected.length ? 'selected' : 'filtered'} / PDF</button><button disabled={!filtered.length} onClick={() => word(filtered.filter(r => !selected.length || selected.includes(r.id)))}>Download for Word</button></div><div className="tablewrap"><table><thead><tr><th><input aria-label="Select all filtered responses" type="checkbox" checked={!!filtered.length && filtered.every(r => selected.includes(r.id))} onChange={e => setSelected(e.target.checked ? filtered.map(r => r.id) : [])}/></th><th>Student</th><th>Grade / class</th><th>Gender</th><th>Submitted</th><th>Report</th></tr></thead><tbody>{filtered.map(r => { const st = JSON.parse(r.student); return <tr key={r.id}><td><input aria-label={'Select ' + st.name} type="checkbox" checked={selected.includes(r.id)} onChange={e => setSelected(e.target.checked ? [...selected, r.id] : selected.filter(id => id !== r.id))}/></td><td><b>{st.name} {st.chineseName}</b><small>{st.email}</small></td><td>{st.grade} / {st.class}</td><td>{st.gender}</td><td>{new Date(r.created).toLocaleDateString()}</td><td><button onClick={() => printReports([r], surveys.find(s => s.id === r.survey_id)?.title || 'Survey')}>Print / PDF</button></td></tr>; })}</tbody></table>{!filtered.length && <div className="empty">No responses match these filters.</div>}</div><p className="muted">Choose “Save as PDF” in the print dialog. Word downloads are compatible .doc documents. Batch printing puts each student on a separate report.</p></> : !active ? <div className="empty">Select a survey to see its question summaries.</div> : JSON.parse(active.questions).map((q, i) => { const vals = filtered.map(r => JSON.parse(r.answers)[q.id]).filter(v => v !== undefined && v !== ''); const counts = {}; vals.forEach(v => { const key = Array.isArray(v) ? v.map((x, j) => q.type === 'Ranking' ? `${j + 1}. ${x}` : `${q.options[j]}: ${x}`).join(' · ') : String(v); counts[key] = (counts[key] || 0) + 1; }); const numeric = ['Rating', 'Scale', 'Scoring', 'Range'].includes(q.type); return <div className="card" key={q.id}><small>{q.type} · {vals.length} answers</small><h2>{i + 1}. {q.title}</h2>{numeric && vals.length > 0 && <p>Average: {(vals.reduce((a, v) => a + Number(v), 0) / vals.length).toFixed(2)}</p>}{Object.entries(counts).map(([v, n]) => <div className="insight" key={v}><div><span>{v}</span><b>{n} · {Math.round(n / vals.length * 100)}%</b></div><div className="track"><div style={{ width: n / vals.length * 100 + '%' }}/></div></div>)}{!vals.length && <p className="muted">Responses will appear here as students submit.</p>}</div>; })}</>}
+    <footer className="mainfooter">SUPER-LMS SURVEY STUDIO <span>Make every response count.</span></footer></main></div>;
+}

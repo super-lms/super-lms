@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import Layout from "./components/Layout.jsx";
+import SurveyStudio from "./pages/admin/SurveyStudio.jsx";
 import AdminLayout from "./components/admin/AdminLayout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 
@@ -101,6 +102,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
+      <Route path="/surveys/:surveyId" element={<SurveyStudio publicSurvey />} />
 
       <Route
         path="/assignments/:assignmentId/grade"
@@ -157,6 +159,7 @@ function App() {
 
       <Route element={<AdminProtectedLayout />}>
         <Route path="/admin" element={<AdminDashboardPage />} />
+        <Route path="/admin/surveys" element={<SurveyStudio />} />
         <Route path="/admin/courses" element={<AdminCoursesPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/teachers" element={<AdminTeachersPage />} />
