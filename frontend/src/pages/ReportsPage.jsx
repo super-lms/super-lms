@@ -352,7 +352,7 @@ function ReportsPage() {
       return;
     }
 
-    if (reportScope !== "class" && !selectedStudent) {
+    if (reportScope === "student" && !selectedStudent) {
       setMessage("Please select a student");
       return;
     }
@@ -362,7 +362,7 @@ function ReportsPage() {
       studentEmail: selectedStudent?.student_email || "",
       categoryName: selectedCategoryName,
       levelName: selectedLevelName,
-      reportScope: reportScope === "ie" ? "student" : reportScope,
+      reportScope: reportScope === "ie" ? (selectedStudent ? "student" : "class") : reportScope,
     });
     const selectedCourseRecord = courses.find(
       (course) => String(course.id) === String(selectedCourse)
@@ -1013,7 +1013,7 @@ function ReportsPage() {
                 }}
                 style={inputStyle}
               >
-                <option value="">Select Student</option>
+                <option value="">{reportScope === "ie" ? "All students meeting IE criteria (batch)" : "Select Student"}</option>
                 {visibleStudents.map((student) => {
                   const studentKey = student.student_email || `name:${student.student_name}`;
 
