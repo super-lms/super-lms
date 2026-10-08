@@ -1,6 +1,6 @@
 export const frequencyLabels = ['Never', 'Almost Never', 'Sometimes', 'Most of the times', 'Always'];
 export function changeQuestionType(q, type) {
-  return {...q, type, issues: [], answerKey: '',
+  return {...q, type, issues: [], answerKey: '', gradingMode: 'manual',
     ...(type === 'Rating' && !q.ratingLabels?.some(x => x.trim()) ? {ratingLabels:[...frequencyLabels]} : {}),
     ...(['Multiple Choice','Ranking'].includes(type) && !q.options?.some(x => x.trim()) ? {options:[...frequencyLabels]} : {})};
 }
