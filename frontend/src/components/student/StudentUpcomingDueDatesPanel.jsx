@@ -1,3 +1,4 @@
+import { displayAssignmentTime } from "../../services/assignmentTime.js"
 function SectionHeader({ title, subtitle }) {
   return (
     <div style={{ marginBottom: "16px" }}>
@@ -32,10 +33,7 @@ function DetailCard({ title, children }) {
 }
 
 function formatDueDate(value) {
-  if (!value) return "No due date"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
-  return date.toLocaleDateString()
+  return value ? displayAssignmentTime(value) : "No due date"
 }
 
 export default function StudentUpcomingDueDatesPanel({

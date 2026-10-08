@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
 const pool = require("./db");
+const { ensureAssignmentTimeZones } = require("./assignmentTime");
 const { loadGradingRoster } = require("./gradingRoster");
 const multer = require("multer");
 const path = require("path");
@@ -1564,6 +1565,7 @@ async function ensureCourseStructureTemplateTables() {
 async function ensureAssignmentSectionTables() {
   await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS available_from TIMESTAMP`);
   await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100`);
+  await ensureAssignmentTimeZones(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assignment_sections (
@@ -5480,6 +5482,7 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
       ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
     `);
 
+    await ensureAssignmentTimeZones(pool);
     const { class_id, teacher_id, title, description, available_from, due_date, subcategory_id } = req.body;
     const isPublished = req.body.is_published === true;
     const pointsPossible = Number(req.body.points_possible ?? 100);
@@ -5823,6 +5826,7 @@ app.post("/api/assignments/:assignmentId/reorder", authenticateJWT, requireRole(
 /* UPDATE ASSIGNMENT */
 app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
+    await ensureAssignmentTimeZones(pool);
     const assignmentId = Number(req.params.assignmentId);
     const title = String(req.body.title || "").trim();
     const description = String(req.body.description || "").trim();

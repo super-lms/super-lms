@@ -1,3 +1,4 @@
+import { displayAssignmentTime } from "../services/assignmentTime.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -1213,7 +1214,7 @@ export default function GradebookPage() {
                           </button>
                           <div style={spreadsheetAssignmentMetaStyle}>
                             {assignment.due_date
-                              ? `Due ${new Date(assignment.due_date).toLocaleDateString()}`
+                              ? `Due ${displayAssignmentTime(assignment.due_date)}`
                               : "No due date"}
                           </div>
                           <div

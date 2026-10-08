@@ -1,3 +1,4 @@
+import { displayAssignmentTime, beijingDateTime } from "../services/assignmentTime.js"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import API_BASE from "../apiBase"
@@ -512,10 +513,7 @@ function getLessonCourseId(lesson) {
 }
 
 function formatDueDate(value) {
-  if (!value) return "No due date"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
-  return date.toLocaleDateString()
+  return value ? displayAssignmentTime(value) : "No due date"
 }
 
 function getAssignmentStatus(dueDateValue) {
@@ -525,10 +523,10 @@ function getAssignmentStatus(dueDateValue) {
   if (Number.isNaN(dueDate.getTime())) return "Scheduled"
 
   const now = new Date()
-  const dueOnly = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate())
-  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const diffMs = dueOnly.getTime() - todayOnly.getTime()
-  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+  if (dueDate.getTime() < now.getTime()) return "Past due"
+  const dueDay = beijingDateTime(dueDate.toISOString()).slice(0,10)
+  const today = beijingDateTime(now.toISOString()).slice(0,10)
+  const diffDays = Math.round((Date.parse(dueDay)-Date.parse(today))/86400000)
 
   if (diffDays < 0) return "Past due"
   if (diffDays === 0) return "Due today"

@@ -1,3 +1,5 @@
+import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
+import { beijingDateTime, assignmentInstant } from "../services/assignmentTime.js";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -232,14 +234,10 @@ export default function EditAssignmentPage() {
       setTitle(foundAssignment.title || "");
       setDescription(foundAssignment.description || "");
       setAvailableFrom(
-        foundAssignment.available_from
-          ? String(foundAssignment.available_from).slice(0, 10)
-          : ""
+        beijingDateTime(foundAssignment.available_from)
       );
       setDueDate(
-        foundAssignment.due_date
-          ? String(foundAssignment.due_date).slice(0, 10)
-          : ""
+        beijingDateTime(foundAssignment.due_date)
       );
       setPointsPossible(String(foundAssignment.points_possible || 100));
       setIsPublished(foundAssignment.is_published === true);
@@ -709,8 +707,8 @@ export default function EditAssignmentPage() {
 
       const cleanTitle = String(title || "").trim();
       const cleanDescription = String(description || "").trim();
-      const cleanAvailableFrom = availableFrom || null;
-      const cleanDueDate = dueDate || null;
+      const cleanAvailableFrom = assignmentInstant(availableFrom);
+      const cleanDueDate = assignmentInstant(dueDate);
 
       const res = await authFetch(`/api/assignments/${assignmentId}`, {
         method: "PUT",
@@ -758,8 +756,8 @@ export default function EditAssignmentPage() {
       setAssignment(refreshedAssignment);
       setTitle(cleanTitle);
       setDescription(cleanDescription);
-      setAvailableFrom(cleanAvailableFrom ? String(cleanAvailableFrom).slice(0, 10) : "");
-      setDueDate(cleanDueDate ? String(cleanDueDate).slice(0, 10) : "");
+      setAvailableFrom(beijingDateTime(cleanAvailableFrom));
+      setDueDate(beijingDateTime(cleanDueDate));
       setGeneratedRubricTitle(`${cleanTitle || "Assignment"} KDU Rubric`);
       setMessage("Assignment updated successfully.");
 
@@ -1334,22 +1332,12 @@ export default function EditAssignmentPage() {
                 </div>
                 <div>
                   <EditAssignmentFieldLabel>Available From</EditAssignmentFieldLabel>
-                  <input
-                    type="date"
-                    value={availableFrom}
-                    onChange={(e) => setAvailableFrom(e.target.value)}
-                    style={inputStyle}
-                  />
+                  <AssignmentDateTime value={availableFrom} onChange={setAvailableFrom} style={inputStyle} />
                 </div>
                 <div>
                   <EditAssignmentFieldLabel>Due Date</EditAssignmentFieldLabel>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    min={availableFrom || undefined}
-                    style={inputStyle}
-                  />
+                  <AssignmentDateTime value={dueDate} onChange={setDueDate} min={availableFrom || undefined}
+                    style={inputStyle} />
                 </div>
               </div>
 

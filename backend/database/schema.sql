@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   description TEXT,
   points_possible NUMERIC NOT NULL DEFAULT 100,
   available_from TIMESTAMP,
-  due_date TIMESTAMP,
+  due_date TIMESTAMPTZ,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

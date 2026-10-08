@@ -1,3 +1,5 @@
+import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
+import { beijingDateTime, assignmentInstant, displayAssignmentTime } from "../services/assignmentTime.js";
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
@@ -332,7 +334,7 @@ export default function AssignmentsPage() {
 
   function formatDate(value) {
     if (!value) return "No due date"
-    return String(value).slice(0, 10)
+    return displayAssignmentTime(value)
   }
 
   function resetTeacherFormState() {
@@ -884,8 +886,8 @@ export default function AssignmentsPage() {
         teacher_id: user.id,
         title: title.trim(),
         description: sanitizeRichText(description),
-        available_from: availableFrom || null,
-        due_date: dueDate || null,
+        available_from: assignmentInstant(availableFrom),
+        due_date: assignmentInstant(dueDate),
         points_possible: Number(pointsPossible),
         is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
@@ -1016,8 +1018,8 @@ export default function AssignmentsPage() {
     setEditingAssignmentId(String(assignment.id))
     setEditTitle(assignment.title || "")
     setEditDescription(assignment.description || "")
-    setEditAvailableFrom(assignment.available_from ? String(assignment.available_from).slice(0, 10) : "")
-    setEditDueDate(assignment.due_date ? String(assignment.due_date).slice(0, 10) : "")
+    setEditAvailableFrom(beijingDateTime(assignment.available_from))
+    setEditDueDate(beijingDateTime(assignment.due_date))
     setEditPointsPossible(String(assignment.points_possible || 100))
     setEditIsPublished(assignment.is_published === true)
     setError("")
@@ -1154,8 +1156,8 @@ export default function AssignmentsPage() {
       body: JSON.stringify({
         title: String(editTitle || "").trim(),
         description: sanitizeRichText(editDescription),
-        available_from: editAvailableFrom || null,
-        due_date: editDueDate || null,
+        available_from: assignmentInstant(editAvailableFrom),
+        due_date: assignmentInstant(editDueDate),
         points_possible: Number(editPointsPossible),
         is_published: editIsPublished,
       }),
@@ -1958,10 +1960,10 @@ export default function AssignmentsPage() {
 
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
                             <InputBlock label="Available From">
-                              <input type="date" value={availableFrom} onChange={(e) => setAvailableFrom(e.target.value)} />
+                              <AssignmentDateTime value={availableFrom} onChange={setAvailableFrom} />
                             </InputBlock>
                             <InputBlock label="Due Date">
-                              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} min={availableFrom || undefined} />
+                              <AssignmentDateTime value={dueDate} onChange={setDueDate} min={availableFrom || undefined} />
                             </InputBlock>
                           </div>
 
@@ -2209,10 +2211,10 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                       <RichTextEditor value={editDescription} onChange={setEditDescription} placeholder="Enter assignment description." />
                                     </InputBlock>
                                     <InputBlock label="Available From">
-                                      <input type="date" value={editAvailableFrom} onChange={(e) => setEditAvailableFrom(e.target.value)} />
+                                      <AssignmentDateTime value={editAvailableFrom} onChange={setEditAvailableFrom} />
                                     </InputBlock>
                                     <InputBlock label="Due Date">
-                                      <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} min={editAvailableFrom || undefined} />
+                                      <AssignmentDateTime value={editDueDate} onChange={setEditDueDate} min={editAvailableFrom || undefined} />
                                     </InputBlock>
                                     <InputBlock label="Points Possible">
                                       <input type="number" min="0.01" step="0.01" value={editPointsPossible} onChange={(e) => setEditPointsPossible(e.target.value)} />
