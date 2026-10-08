@@ -12463,6 +12463,29 @@ app.get("/api/classes/:classId/attendance", authenticateJWT, requireRole("admin"
   }
 });
 
+/* PRINTABLE ATTENDANCE RANGE REPORT */
+app.get("/api/classes/:classId/attendance-report", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  try {
+    const classId = Number(req.params.classId);
+    const { start, end } = req.query;
+    const validDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+    if (!Number.isInteger(classId) || classId <= 0 || !validDate(start) || !validDate(end) || start > end || (Date.parse(end)-Date.parse(start))/86400000 > 366) return res.status(400).json({error:'Choose a valid attendance date range of up to one year.'});
+    const course = await pool.query(`SELECT c.id, c.title FROM courses c
+      WHERE c.id = $1 AND ($2 = 'admin' OR c.teacher_id = $3
+        OR EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id IN (c.id, COALESCE(c.master_course_id,c.id)) AND ct.teacher_id = $3)
+        OR EXISTS (SELECT 1 FROM courses m WHERE m.id = c.master_course_id AND m.teacher_id = $3))`, [classId, String(req.user.role).toLowerCase(), Number(req.user.id)]);
+    if (!course.rows.length) return res.status(403).json({error:'You do not have access to this class.'});
+    const students = await pool.query(`SELECT DISTINCT u.id AS student_user_id, COALESCE(NULLIF(TRIM(u.name),''), NULLIF(TRIM(CONCAT_WS(' ',u.first_name,u.last_name)),''),u.email) AS student_name, u.email AS student_email
+      FROM class_enrollments ce JOIN users u ON u.id = ce.student_user_id WHERE ce.class_id = $1 ORDER BY student_name, student_email`, [classId]);
+    const sessions = await pool.query(`SELECT id, TO_CHAR(attendance_date,'YYYY-MM-DD') AS date FROM attendance_sessions WHERE course_id = $1 AND attendance_date BETWEEN $2::date AND $3::date ORDER BY attendance_date`, [classId,start,end]);
+    const records = await pool.query(`SELECT TO_CHAR(s.attendance_date,'YYYY-MM-DD') AS date, r.student_email, r.status, r.note FROM attendance_sessions s JOIN attendance_records r ON r.attendance_session_id = s.id WHERE s.course_id = $1 AND s.attendance_date BETWEEN $2::date AND $3::date ORDER BY s.attendance_date`, [classId,start,end]);
+    return res.json({class:course.rows[0],start,end,students:students.rows,sessions:sessions.rows,records:records.rows});
+  } catch (error) {
+    console.error('Attendance report failed:',error);
+    return res.status(500).json({error:'Could not load the attendance report.'});
+  }
+});
+
 /* SAVE CLASS ATTENDANCE */
 app.post("/api/classes/:classId/attendance", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const client = await pool.connect();
