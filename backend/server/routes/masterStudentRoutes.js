@@ -5,6 +5,24 @@ const pool = require("../db");
 
 const router = express.Router();
 
+const { authenticateJWT, requireRole } = require('../../middleware/auth');
+const { previewPens } = require('../penImport');
+router.post('/pen-import', authenticateJWT, requireRole('admin'), async (req,res) => {
+  let client;
+  try {
+    client=await pool.connect();
+    await client.query('BEGIN');
+    const result=await client.query('SELECT id, student_id, pen, display_name FROM master_students FOR UPDATE');
+    const preview=previewPens(req.body.rows,result.rows);
+    if(req.body.apply===true) {
+      if(preview.some(r=>r.issue)) {await client.query('ROLLBACK');return res.status(400).json({error:'Resolve all review rows before importing.',preview});}
+      for(const row of preview.filter(r=>r.status==='Ready'))await client.query('UPDATE master_students SET pen=$1,updated_at=NOW() WHERE id=$2',[row.pen,row.master_id]);
+    }
+    await client.query('COMMIT');
+    res.json({preview,updated:req.body.apply===true?preview.filter(r=>r.status==='Ready').length:0});
+  }catch(error){if(client)await client.query('ROLLBACK');res.status(400).json({error:error.message});}finally{client?.release();}
+});
+
 const REQUIRED_COLUMNS = [
   "pen",
   "student_id",

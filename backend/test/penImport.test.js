@@ -1,0 +1,6 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {previewPens}=require('../server/penImport');
+const roster=[{id:1,student_id:'1001',display_name:'Amy',pen:null},{id:2,student_id:'1002',display_name:'Amy',pen:'123456789'}];
+test('matches student IDs rather than shared names and preserves leading zeros',()=>{const [r]=previewPens([{student_id:'1001',name:'Amy',pen:'012345678'}],roster);assert.equal(r.master_id,1);assert.equal(r.pen,'012345678');assert.equal(r.status,'Ready');});
+test('missing IDs, conflicting existing PENs and already assigned PENs block import',()=>{assert.ok(previewPens([{student_id:'999',pen:'012345678'}],roster)[0].issue);assert.ok(previewPens([{student_id:'1002',pen:'012345678'}],roster)[0].issue);assert.ok(previewPens([{student_id:'1001',pen:'123456789'}],roster)[0].issue);});
+test('ambiguous IDs, invalid numbers and repeated uploads are handled safely',()=>{assert.ok(previewPens([{student_id:'1001',pen:'012345678'}],[...roster,{id:3,student_id:'1001'}])[0].issue);assert.ok(previewPens([{student_id:'1001',pen:'123'}],roster)[0].issue);assert.equal(previewPens([{student_id:'1002',pen:'123456789'}],roster)[0].status,'Already set');assert.ok(previewPens([{student_id:'1001',pen:'012345678'},{student_id:'1001',pen:'012345678'}],roster).some(r=>r.issue));});
