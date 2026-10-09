@@ -1,33 +1,37 @@
+import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
+import {beijingDateTime,assignmentInstant,displayAssignmentTime} from "../services/assignmentTime.js";
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch.js';
 import './AnnouncementsPage.css';
 import AnnouncementGroupLookup from '../components/AnnouncementGroupLookup.jsx';
-const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[]});
+const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[],course_id:'',publish_at:'',expires_at:'',is_published:true});
 export default function AnnouncementsPage() {
   const {user}=useAuth();
   const canPublish=['admin','teacher'].includes(user?.role);
   const [items,setItems]=useState([]), [loading,setLoading]=useState(true), [error,setError]=useState('');
   const [query,setQuery]=useState(''), [draft,setDraft]=useState(null), [files,setFiles]=useState([]), [remove,setRemove]=useState([]);
   const [busy,setBusy]=useState(false), [notice,setNotice]=useState(''), [preview,setPreview]=useState(null);
+  const [courses,setCourses]=useState([]);
   const previewRef=useRef(null);
   async function load() {
     setError('');
     try { const res=await authFetch('/api/announcements'); const data=await res.json(); if(!res.ok)throw Error(data.error); setItems(data); }
     catch(err){setError(err.message||'Could not load announcements.');} finally {setLoading(false);}
   }
-  useEffect(()=>{load();},[]);
+  useEffect(()=>{load();if(canPublish)authFetch('/api/courses').then(r=>r.json()).then(data=>setCourses(Array.isArray(data)?data:[])).catch(()=>setError('Could not load your classes.'));},[]);
   useEffect(()=>{ if(preview)previewRef.current?.showModal(); return ()=>{if(preview?.url)URL.revokeObjectURL(preview.url);}; },[preview]);
-  function edit(item=blank()) {setDraft({...item,event_date:item.event_date?.slice(0,10)||''});setFiles([]);setRemove([]);setError('');}
+  function edit(item=blank()) {setDraft({...item,event_date:item.event_date?.slice(0,10)||'',publish_at:beijingDateTime(item.publish_at),expires_at:beijingDateTime(item.expires_at)});setFiles([]);setRemove([]);setError('');}
   async function save(event) {
     event.preventDefault();setBusy(true);setError('');setNotice('');
     try {
-      const data=new FormData(); for(const key of ['title','body','event_date','pinned'])data.append(key,String(draft[key]??''));
+      const data=new FormData(); for(const key of ['title','body','event_date','pinned','course_id','is_published'])data.append(key,String(draft[key]??''));
+      data.append('publish_at',assignmentInstant(draft.publish_at)||'');data.append('expires_at',assignmentInstant(draft.expires_at)||'');
       data.append('remove_files',JSON.stringify(remove));for(const file of files)data.append('files',file);
       const res=await authFetch(`/api/announcements${draft.id?`/${draft.id}`:''}`,{method:draft.id?'PUT':'POST',body:data});
       const result=await res.json();if(!res.ok)throw Error(result.error);
-      setDraft(null);setNotice('Announcement published. Students can now read it.');await load();
+      setDraft(null);setNotice(!draft.is_published?'Draft saved.':draft.publish_at&&Date.parse(assignmentInstant(draft.publish_at))>Date.now()?'Announcement scheduled.':'Announcement published.');await load();
     }catch(err){setError(err.message);}finally{setBusy(false);}
   }
   async function deleteItem(item) {
@@ -52,7 +56,11 @@ export default function AnnouncementsPage() {
     {error&&<div role="alert" className="announcement-error">{error} <button onClick={load}>Retry loading</button></div>}
     {notice&&<p role="status">{notice}</p>}
     {draft&&<form className="announcement-card announcement-editor" onSubmit={save}>
-      <h2>{draft.id?'Edit announcement':'New announcement'}</h2><p>Visible to all students and staff in your school.</p>
+      <h2>{draft.id?'Edit announcement':'New announcement'}</h2><p>Select the class and choose when students can read this announcement.</p>
+      <label>Class<select required={user.role==='teacher'} value={draft.course_id||''} onChange={e=>setDraft({...draft,course_id:e.target.value})}><option value="">{user.role==='admin'?'Whole school':'Choose your class'}</option>{courses.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
+      <label>Publish from (blank means immediately)<AssignmentDateTime value={draft.publish_at} onChange={value=>setDraft({...draft,publish_at:value})}/></label>
+      <label>End time (optional)<AssignmentDateTime value={draft.expires_at} min={draft.publish_at} onChange={value=>setDraft({...draft,expires_at:value})}/></label>
+      <label className="announcement-check"><input type="checkbox" checked={draft.is_published!==false} onChange={e=>setDraft({...draft,is_published:e.target.checked})}/>Publish to students or schedule for the time above (uncheck to save a draft)</label>
       <label>Title<input required maxLength={200} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
       <label>Message<textarea required rows={6} maxLength={20000} value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="What do students need to know?"/></label>
       <label>Event date (optional)<input type="date" value={draft.event_date} onChange={e=>setDraft({...draft,event_date:e.target.value})}/></label>
@@ -61,11 +69,12 @@ export default function AnnouncementsPage() {
       <small>PDF, Word (.docx), Excel (.xlsx), CSV, text, or images. Up to 5 files, 15 MB each.</small>
       {draft.files.filter(f=>!remove.includes(f.id)).map(f=><div key={f.id}>{f.filename} <button type="button" onClick={()=>setRemove([...remove,f.id])}>Remove attachment</button></div>)}
       {files.map((f,i)=><div key={i}>{f.name}</div>)}
-      <div className="announcement-actions"><button className="btn" disabled={busy}>{busy?'Publishing…':'Publish announcement'}</button><button type="button" className="btn secondary" disabled={busy} onClick={()=>setDraft(null)}>Cancel</button></div>
+      <div className="announcement-actions"><button className="btn" disabled={busy}>{busy?'Saving…':'Save announcement'}</button><button type="button" className="btn secondary" disabled={busy} onClick={()=>setDraft(null)}>Cancel</button></div>
     </form>}
     <label className="announcement-search">Search announcements<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search titles, messages, or document names"/></label>
     {loading?<p role="status">Loading announcements…</p>:visible.length===0?<div className="announcement-card">{query?'No announcements match your search.':'No announcements yet.'}</div>:visible.map(item=><article className="announcement-card" key={item.id}>
       <div className="announcement-meta">{item.pinned&&<strong>Pinned · </strong>}{new Date(item.created_at).toLocaleDateString()} · {item.author_name||'School staff'}</div>
+      <p><strong>{item.class_name||'Whole school'}</strong>{canPublish&&<> · {!item.is_published?'Draft':item.expires_at&&Date.parse(item.expires_at)<=Date.now()?'Ended':item.publish_at&&Date.parse(item.publish_at)>Date.now()?'Scheduled':'Published'}</>}{item.publish_at&&<> · From {displayAssignmentTime(item.publish_at)}</>}{item.expires_at&&<> · Until {displayAssignmentTime(item.expires_at)}</>}</p>
       <h2>{item.title}</h2>{item.event_date&&<p><strong>Event:</strong> {new Date(`${item.event_date.slice(0,10)}T12:00:00`).toLocaleDateString()}</p>}
       <p className="announcement-message">{item.body}</p>
       {!!item.files.length&&<section aria-label="Documents"><h3>Documents</h3>{item.files.map(file=><div className="announcement-file" key={file.id}><span>{file.filename}</span><div className="announcement-actions"><button disabled={busy} onClick={()=>openFile(file)}>Open / Read</button><button disabled={busy} onClick={()=>openFile(file,true)}>Download</button></div></div>)}</section>}

@@ -16,7 +16,10 @@ function createAnnouncementsRouter(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
       CREATE TABLE IF NOT EXISTS school_announcement_files (
       id SERIAL PRIMARY KEY, announcement_id INTEGER NOT NULL REFERENCES school_announcements(id) ON DELETE CASCADE,
-      filename TEXT NOT NULL, mime_type TEXT NOT NULL, file_data BYTEA NOT NULL);`).catch(error => { ready = null; throw error; });
+      filename TEXT NOT NULL, mime_type TEXT NOT NULL, file_data BYTEA NOT NULL);
+      ALTER TABLE school_announcements ADD COLUMN IF NOT EXISTS course_id INTEGER REFERENCES courses(id),
+      ADD COLUMN IF NOT EXISTS publish_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT true;`).catch(error => { ready = null; throw error; });
     return ready;
   }
   router.use(authenticateJWT, requireRole('admin','teacher','student'));
@@ -35,15 +38,24 @@ function createAnnouncementsRouter(pool) {
       next();
     } catch(error) { next(error); }
   });
-  const upload = multer({ storage:multer.memoryStorage(), limits:{fileSize:15*1024*1024,files:5,fields:10},
+  const upload = multer({ storage:multer.memoryStorage(), limits:{fileSize:15*1024*1024,files:5,fields:16},
     fileFilter(req,file,done) { if(!types[path.extname(file.originalname).toLowerCase()]) return done(Object.assign(new Error('Unsupported file. Use PDF, DOCX, XLSX, CSV, text, or an image.'),{status:400})); done(null,true); } }).array('files',5);
+  const visibility = `a.school_id IS NOT DISTINCT FROM $1 AND (
+    $2 = 'admin' OR a.author_id = $3 OR (
+      a.is_published = true AND (a.publish_at IS NULL OR a.publish_at <= NOW())
+      AND (a.expires_at IS NULL OR a.expires_at > NOW()) AND (
+        a.course_id IS NULL OR ($2 = 'student' AND EXISTS (SELECT 1 FROM class_enrollments ce WHERE ce.class_id = a.course_id AND ce.student_user_id = $3))
+        OR ($2 = 'teacher' AND EXISTS (SELECT 1 FROM courses c WHERE c.id = a.course_id AND (c.teacher_id = $3 OR EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id IN (c.id, COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$3))))
+      )
+    ))`;
+  const visibilityArgs = req => [req.schoolId, req.user.role, req.user.id];
   router.get('/', async (req,res,next) => {
     try {
-      const result = await pool.query(`SELECT a.*, CONCAT(u.first_name, ' ', u.last_name) AS author_name,
+      const result = await pool.query(`SELECT a.*, (SELECT title FROM courses WHERE id=a.course_id) AS class_name, CONCAT(u.first_name, ' ', u.last_name) AS author_name,
         COALESCE((SELECT json_agg(json_build_object('id',f.id,'filename',f.filename,'mime_type',f.mime_type) ORDER BY f.id)
         FROM school_announcement_files f WHERE f.announcement_id=a.id),'[]'::json) AS files
         FROM school_announcements a JOIN users u ON u.id=a.author_id
-        WHERE a.school_id IS NOT DISTINCT FROM $1 ORDER BY a.pinned DESC,a.created_at DESC,a.id DESC`,[req.schoolId]);
+        WHERE ${visibility} ORDER BY a.pinned DESC,a.created_at DESC,a.id DESC`,visibilityArgs(req));
       res.json(result.rows);
     } catch(error) { next(error); }
   });
@@ -52,16 +64,27 @@ function createAnnouncementsRouter(pool) {
     const eventDate=req.body.event_date||null;
     if (!title || title.length>200 || !body || body.length>20000) return res.status(400).json({error:'Enter a title (up to 200 characters) and message (up to 20,000 characters).'});
     if (eventDate && (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate) || !Number.isFinite(Date.parse(eventDate)))) return res.status(400).json({error:'Choose a valid event date.'});
+    const courseId = req.body.course_id ? Number(req.body.course_id) : null;
+    const publishAt = req.body.publish_at || null, expiresAt = req.body.expires_at || null;
+    const isPublished = req.body.is_published !== 'false';
+    if ((publishAt && !Number.isFinite(Date.parse(publishAt))) || (expiresAt && !Number.isFinite(Date.parse(expiresAt))) || (expiresAt && Date.parse(expiresAt) <= (publishAt ? Date.parse(publishAt) : Date.now()))) return res.status(400).json({error:'Choose valid publishing and end times. The end must be after publishing.'});
+    if (req.user.role === 'teacher' && !courseId) return res.status(400).json({error:'Choose the class receiving this announcement.'});
+    try {
+    if(courseId) {
+      const access = await pool.query(`SELECT c.id FROM courses c WHERE c.id=$1 AND (c.school_id IS NOT DISTINCT FROM $2 OR $2 IS NULL) AND ($3='admin' OR c.teacher_id=$4 OR EXISTS (SELECT 1 FROM course_teachers ct WHERE ct.course_id IN (c.id, COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$4))`,[courseId,req.schoolId,req.user.role,req.user.id]);
+      if(!access.rows.length) return res.status(403).json({error:'You can only announce to your assigned classes.'});
+    }
+    } catch(error) { return next(error); }
     let client;
     try {
       client=await pool.connect(); await client.query('BEGIN');
       let id=req.params.id;
       if (id) {
-        const result=await client.query(`UPDATE school_announcements SET title=$1,body=$2,event_date=$3,pinned=$4,updated_at=NOW()
-          WHERE id=$5 AND school_id IS NOT DISTINCT FROM $6 AND (author_id=$7 OR $8) RETURNING id`,[title,body,eventDate,req.body.pinned==='true',id,req.schoolId,req.user.id,req.user.role==='admin']);
+        const result=await client.query(`UPDATE school_announcements SET title=$1,body=$2,event_date=$3,pinned=$4,course_id=$9,publish_at=$10,expires_at=$11,is_published=$12,updated_at=NOW()
+          WHERE id=$5 AND school_id IS NOT DISTINCT FROM $6 AND (author_id=$7 OR $8) RETURNING id`,[title,body,eventDate,req.body.pinned==='true',id,req.schoolId,req.user.id,req.user.role==='admin',courseId,publishAt,expiresAt,isPublished]);
         if (!result.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({error:'Announcement not found or cannot be edited.'}); }
       } else {
-        const result=await client.query('INSERT INTO school_announcements (title,body,event_date,pinned,school_id,author_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',[title,body,eventDate,req.body.pinned==='true',req.schoolId,req.user.id]); id=result.rows[0].id;
+        const result=await client.query('INSERT INTO school_announcements (title,body,event_date,pinned,school_id,author_id,course_id,publish_at,expires_at,is_published) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',[title,body,eventDate,req.body.pinned==='true',req.schoolId,req.user.id,courseId,publishAt,expiresAt,isPublished]); id=result.rows[0].id;
       }
       const remove=JSON.parse(req.body.remove_files||'[]');
       if (!Array.isArray(remove) || remove.some(id=>!Number.isInteger(id))) throw new Error('Invalid attachment selection');
@@ -82,7 +105,7 @@ function createAnnouncementsRouter(pool) {
   router.get('/files/:id',async(req,res,next)=>{
     try {
       const result=await pool.query(`SELECT f.* FROM school_announcement_files f JOIN school_announcements a ON a.id=f.announcement_id
-        WHERE f.id=$1 AND a.school_id IS NOT DISTINCT FROM $2`,[req.params.id,req.schoolId]);
+        WHERE f.id=$4 AND ${visibility}`,[...visibilityArgs(req),req.params.id]);
       const file=result.rows[0]; if(!file) return res.status(404).json({error:'Document not found'});
       const ext=path.extname(file.filename).toLowerCase();
       res.set('Cache-Control','private, no-store'); res.set('X-Content-Type-Options','nosniff');

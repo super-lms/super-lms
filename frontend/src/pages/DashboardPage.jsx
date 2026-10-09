@@ -814,6 +814,7 @@ export default function DashboardPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
             <DashboardActionCard title="Student View" description="Preview an enrolled student's course experience without changing their work." meta="Preview" onClick={() => goTo("/student-view")} active={loadingRoute === "/student-view"} />
+            <DashboardActionCard title="Class Announcements" description="Choose your class, share documents, and schedule messages in Beijing time." meta="Open" onClick={() => goTo("/announcements")} active={loadingRoute === "/announcements"} />
             <DashboardActionCard title="Quiz & Test Builder" description="Build quizzes, import PDF questions, share QR codes, and mark your students’ results." meta="Open" onClick={() => goTo("/quiz-builder")} active={loadingRoute === "/quiz-builder"} />
             <DashboardActionCard title="Create New Course" description="Add a new teaching course." meta="Start" onClick={() => goTo("/courses?startCreate=1")} active={loadingRoute === "/courses?startCreate=1"} />
             <DashboardActionCard title="Assignments" description="Current assignment workflow." meta="Open" onClick={() => goTo(courses.length > 0 && courses[0]?.id ? `/courses/${courses[0].id}/assignments` : "/assignments")} active={Boolean(loadingRoute)} />

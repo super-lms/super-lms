@@ -12,7 +12,8 @@ for (const schoolId of [7, null]) test(`announcement access, publishing, attachm
     if(sql.includes('AS school_id FROM users u'))return {rows:[{school_id:schoolId}]};
     if(sql.startsWith('INSERT INTO school_announcements'))return {rows:[{id:42}]};
     if(sql.startsWith('SELECT COUNT'))return {rows:[{count:0}]};
-    if(sql.startsWith('SELECT f.*'))return {rows:params[0]==='1'?[{filename:'instructions.txt',mime_type:'text/plain',file_data:Buffer.from('Orange Shirt Day')}]:[]};
+    if(sql.startsWith('SELECT c.id FROM courses'))return {rows:params[0]===12?[{id:12}]:[]};
+    if(sql.startsWith('SELECT f.*'))return {rows:params[3]==='1'?[{filename:'instructions.txt',mime_type:'text/plain',file_data:Buffer.from('Orange Shirt Day')}]:[]};
     return {rows:[]};
   },async connect(){return {...this,release(){}};}};
   const app=express();app.use('/api/announcements',createAnnouncementsRouter(pool));
@@ -22,18 +23,29 @@ for (const schoolId of [7, null]) test(`announcement access, publishing, attachm
   try{
     assert.equal((await fetch(base)).status,401);
     assert.equal((await fetch(base,{headers:headers('student')})).status,200);
-    assert.deepEqual(calls.find(c=>c.sql.includes('FROM school_announcements a JOIN')).params,[schoolId]);
+    assert.deepEqual(calls.find(c=>c.sql.includes('FROM school_announcements a JOIN')).params,[schoolId,'student',3]);
     assert.equal((await fetch(base,{method:'POST',headers:headers('student')})).status,403);
-    const form=new FormData();form.append('title','Orange Shirt Day');form.append('body','Read the attached instructions.');form.append('files',new Blob(['School instructions']), 'instructions.txt');
+    const form=new FormData();form.append('course_id','12');form.append('publish_at','2026-10-09T01:30:00.000Z');form.append('title','Orange Shirt Day');form.append('body','Read the attached instructions.');form.append('files',new Blob(['School instructions']), 'instructions.txt');
     const published=await fetch(base,{method:'POST',headers:headers('teacher'),body:form});assert.equal(published.status,200);assert.equal((await published.json()).id,42);
     assert.ok(calls.some(c=>c.sql.startsWith('INSERT INTO school_announcement_files')&&c.params[0]===42));
     assert.ok(calls.some(c=>c.sql==='COMMIT'));
+    const insertion=calls.find(c=>c.sql.startsWith('INSERT INTO school_announcements'));
+    assert.equal(insertion.params[6],12);assert.equal(insertion.params[7],'2026-10-09T01:30:00.000Z');
+    const visibility=calls.find(c=>c.sql.includes('FROM school_announcements a JOIN')).sql;
+    assert.match(visibility,/class_enrollments/);assert.match(visibility,/publish_at <= NOW/);assert.match(visibility,/expires_at > NOW/);assert.match(visibility,/is_published = true/);
+    const wrongClass=new FormData();wrongClass.append('title','Test');wrongClass.append('body','Test');wrongClass.append('course_id','99');
+    assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:wrongClass})).status,403);
+    const missingClass=new FormData();missingClass.append('title','Test');missingClass.append('body','Test');
+    assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:missingClass})).status,400);
+    const invalidTimes=new FormData();invalidTimes.append('title','Test');invalidTimes.append('body','Test');invalidTimes.append('course_id','12');invalidTimes.append('publish_at','2027-01-01T10:00:00Z');invalidTimes.append('expires_at','2027-01-01T09:00:00Z');
+    assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:invalidTimes})).status,400);
+
     const unsupported=new FormData();unsupported.append('title','Test');unsupported.append('body','Test');unsupported.append('files',new Blob(['<script>']), 'bad.html');
     assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:unsupported})).status,400);
     assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:new FormData()})).status,400);
     const preview=await fetch(`${base}/files/1?preview=true`,{headers:headers('student')});assert.equal((await preview.json()).text,'Orange Shirt Day');
     const file=await fetch(`${base}/files/1`,{headers:headers('student')});assert.match(file.headers.get('content-disposition'),/attachment/);assert.equal(await file.text(),'Orange Shirt Day');
-    assert.deepEqual(calls.find(c=>c.sql.startsWith('SELECT f.*')).params,['1',schoolId]);
+    assert.deepEqual(calls.find(c=>c.sql.startsWith('SELECT f.*')).params,[schoolId,'student',3,'1']);
     assert.equal((await fetch(`${base}/files/2`,{headers:headers('student')})).status,404);
     assert.equal((await fetch(`${base}/42`,{method:'DELETE',headers:headers('student')})).status,403);
     assert.equal((await fetch(`${base}/42`,{method:'DELETE',headers:headers('teacher')})).status,404);
