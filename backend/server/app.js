@@ -1,3 +1,4 @@
+const {loadCourseRisk} = require('./dashboardRisk');
 const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
@@ -11910,6 +11911,7 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
       students,
       grades,
       kdu_heatmap: kduHeatmap,
+      course_risk: await loadCourseRisk(pool,coursesResult.rows,students),
     });
   } catch (err) {
     console.error("GET /api/teachers/:teacherId/dashboard failed:", err);

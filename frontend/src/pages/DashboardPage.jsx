@@ -412,12 +412,12 @@ function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStudent, on
   )
 }
 
-function AtRiskAlertsPanel({ alerts, students, onOpenGradebook, active }) {
+function AtRiskAlertsPanel({ alerts, students, studentCount, onOpenGradebook, active }) {
   return (
     <section className="panel" style={shellCardStyle}>
       <SectionHeading
         title="Student Risk Alerts"
-        subtitle="Demo-ready teacher signals generated from current grade evidence."
+        subtitle="Alerts based on current weighted course marks."
         actionLabel="Open Gradebook"
         onAction={onOpenGradebook}
         actionActive={active}
@@ -440,7 +440,7 @@ function AtRiskAlertsPanel({ alerts, students, onOpenGradebook, active }) {
           }}
         >
           <div style={{ fontSize: "2rem", fontWeight: 900, lineHeight: 1 }}>
-            {students.length}
+            {studentCount ?? "—"}
           </div>
           <div style={{ marginTop: "8px", fontWeight: 800 }}>
             Students needing attention
@@ -461,7 +461,7 @@ function AtRiskAlertsPanel({ alerts, students, onOpenGradebook, active }) {
                 fontWeight: 700,
               }}
             >
-              No at-risk signals detected from the currently loaded grade records.
+              No course marks below 67% found. Students without marked work have no calculated course mark yet.
             </div>
           ) : null}
 
@@ -602,62 +602,10 @@ export default function DashboardPage() {
   }, [grades.length, averageGrade])
 
   const atRiskSummary = useMemo(() => {
-    const lowGradeMap = new Map()
-
-    grades.forEach((grade) => {
-      const numericValue = getNumericGrade(getGradeValue(grade))
-
-      if (numericValue === null || numericValue >= 67) {
-        return
-      }
-
-      const studentName = grade.student_name || "Unnamed student"
-      const courseTitle = grade.course_title || "Course"
-      const key = `${studentName}::${courseTitle}`
-      const existing = lowGradeMap.get(key)
-
-      if (!existing || numericValue < existing.value) {
-        lowGradeMap.set(key, {
-          studentName,
-          courseTitle,
-          value: numericValue,
-          label: getAtRiskLabel(numericValue),
-        })
-      }
-    })
-
-    const lowGradeStudents = Array.from(lowGradeMap.values())
-      .sort((a, b) => a.value - b.value)
-      .slice(0, 6)
-
-    const alerts = []
-
-    if (lowGradeStudents.length > 0) {
-      alerts.push({
-        title: `${lowGradeStudents.length} student signal${lowGradeStudents.length === 1 ? "" : "s"} need attention`,
-        detail: "These students have at least one current grade record below the safe proficiency range.",
-      })
-    }
-
-    if (averageGrade !== null && averageGrade < 67) {
-      alerts.push({
-        title: "Class average is below the target range",
-        detail: `Current loaded average is ${formatAverage(averageGrade)}. This is a useful dashboard prompt before opening the gradebook.`,
-      })
-    }
-
-    if (grades.length === 0) {
-      alerts.push({
-        title: "No grade records loaded yet",
-        detail: "Once grading evidence exists, this panel will show students who may need support.",
-      })
-    }
-
-    return {
-      alerts,
-      students: lowGradeStudents,
-    }
-  }, [grades, averageGrade])
+    const risk = dashboardData?.course_risk
+    if (!risk) return {students:[],student_count:null,alerts:[{title:"Course risk marks unavailable",detail:"Refresh the dashboard to load course marks."}]}
+    return {...risk,alerts:risk.students.length ? [{title:`${risk.student_count} students need attention`,detail:"Course marks below 50% are failing; 50–59.99% are at risk and 60–66.99% are watched closely. Unmarked work is not counted as zero."}] : []}
+  }, [dashboardData])
 
   const primaryClassRosterPath = useMemo(() => {
     const primaryCourseId = courses[0]?.id
@@ -824,6 +772,7 @@ export default function DashboardPage() {
         </section>
 
         <AtRiskAlertsPanel
+          studentCount={atRiskSummary.student_count}
           alerts={atRiskSummary.alerts}
           students={atRiskSummary.students}
           onOpenGradebook={() => goTo(primaryGradebookPath)}
