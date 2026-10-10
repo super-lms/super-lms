@@ -1,7 +1,10 @@
+import {useSearchParams} from 'react-router-dom'
 import { useEffect, useMemo, useState } from "react"
 import authFetch from "../../services/authFetch"
 
 export default function AdminGradebooksPage() {
+  const [params] = useSearchParams()
+  const requestedClassId = params.get("classId") || ""
   const [classes, setClasses] = useState([])
   const [selectedClassId, setSelectedClassId] = useState("")
   const [gradebook, setGradebook] = useState(null)
@@ -25,7 +28,7 @@ export default function AdminGradebooksPage() {
         if (isMounted) {
           const classList = Array.isArray(data) ? data : []
           setClasses(classList)
-          setSelectedClassId(classList[0]?.id ? String(classList[0].id) : "")
+          setSelectedClassId(classList.some(c=>String(c.id)===requestedClassId) ? requestedClassId : classList[0]?.id ? String(classList[0].id) : "")
           setStatus("ready")
         }
       } catch (err) {
@@ -41,7 +44,7 @@ export default function AdminGradebooksPage() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [requestedClassId])
 
   useEffect(() => {
     if (!selectedClassId) return

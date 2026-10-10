@@ -53,6 +53,7 @@ function getRtiSsoSecret() {
 
 app.use(cors());
 app.use(express.json({ limit: "75mb" }));
+app.use('/api/admin/risk-alerts',require('./routes/adminRiskRoutes').createAdminRiskRouter(pool));
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
