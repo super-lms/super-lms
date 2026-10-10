@@ -8,7 +8,7 @@ module.exports = function reportCardRoutes({pool,authenticateJWT,requireRole,ens
   const result=await pool.query(`SELECT c.id,c.title,c.master_course_id,c.section_code FROM courses c WHERE c.id=ANY($1::integer[]) AND ($2='admin' OR c.teacher_id=$3 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$3) OR EXISTS(SELECT 1 FROM courses m WHERE m.id=c.master_course_id AND m.teacher_id=$3))`,[ids,String(req.user.role).toLowerCase(),Number(req.user.id)]);
   if(result.rows.length!==ids.length) {const error=new Error('You do not have access to every selected class.');error.status=403;throw error;}return result.rows;
  }
- function courseIds(req){const ids=[...new Set(String(req.query.courseIds||req.params.classId).split(',').map(Number))];if(!ids.length||ids.length>50||ids.some(id=>!Number.isInteger(id)||id<=0))throw new Error('Choose up to 50 valid courses.');return ids;}
+ function courseIds(req){const ids=[...new Set(String(req.query.courseIds||req.params.classId).split(',').map(Number))];if(!ids.length||ids.length>100||ids.some(id=>!Number.isInteger(id)||id<=0))throw new Error('Choose up to 100 valid courses.');return ids;}
  router.get('/:classId/report-cards',async(req,res)=>{try{
   const config=validatePeriod(req.query),classId=Number(req.params.classId),ids=courseIds(req);
   const courses=await access(req,[...new Set([classId,...ids])]);await ensure();
