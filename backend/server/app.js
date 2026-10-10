@@ -33,6 +33,7 @@ const {
 const { shouldShowCourseForTeacher } = require("./teacherCourseVisibility");
 const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, TextRun } = require("docx");
 
+const submissionDeadlines = require('./submissionDeadline').createSubmissionDeadline(pool);
 const app = express();
 const port = 3000;
 const RTI_APP_URL = String(
@@ -53,6 +54,7 @@ function getRtiSsoSecret() {
 
 app.use(cors());
 app.use(express.json({ limit: "75mb" }));
+app.use('/api/assignments',require('./routes/lateSubmissionRoutes').createLateSubmissionRouter(pool,submissionDeadlines));
 app.use('/api/admin/risk-alerts',require('./routes/adminRiskRoutes').createAdminRiskRouter(pool));
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
@@ -6765,7 +6767,9 @@ app.get(
 );
 
 /* SAVE STUDENT SUBMISSION */
-app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requireRole("admin", "student"), async (req, res) => {
+app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requireRole("admin", "student"), submissionDeadlines.middleware, async (req, res) => {
+  let submissionClient;
+    let submissionCommitted=false;
   try {
     const assignmentId = Number(req.params.assignmentId);
     let studentName = String(req.body.student_name || "").trim();
@@ -6839,10 +6843,15 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       return res.status(403).json({ error: "This course section is not live yet" });
     }
 
+    if(req.user.role==='student') {
+      try { req.deadlineAcceptance=await submissionDeadlines.check(assignmentId,studentUserId); }
+      catch(error){return res.status(error.status||500).json({error:error.status?error.message:'Unable to check the deadline.',code:error.code});}
+    }
+    submissionClient=await pool.connect();await submissionClient.query('BEGIN');
     const existingResult = existingAttachmentSubmissionResult;
 
     if (existingResult.rows.length > 0) {
-      const updatedResult = await pool.query(
+      const updatedResult = await submissionClient.query(
         `
         UPDATE submissions
         SET
@@ -6868,7 +6877,10 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
         [studentUserId, studentName, studentEmail, content, existingResult.rows[0].id]
       );
 
+      await submissionDeadlines.record(req.deadlineAcceptance,assignmentId,studentUserId,updatedResult.rows[0].id,'text',submissionClient);
+      await submissionClient.query('COMMIT');submissionCommitted=true;
       return res.json({
+        accepted_past_due:!!req.deadlineAcceptance?.late,
         success: true,
         submission_status: "submitted",
         assignment: assignmentResult.rows[0],
@@ -6889,7 +6901,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       return res.status(400).json({ error: "Assignment class_id is required" });
     }
 
-    const insertedResult = await pool.query(
+    const insertedResult = await submissionClient.query(
       `
       INSERT INTO submissions (
         assignment_id,
@@ -6942,16 +6954,20 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       ]
     );
 
+    await submissionDeadlines.record(req.deadlineAcceptance,assignmentId,studentUserId,insertedResult.rows[0].id,'text',submissionClient);
+      await submissionClient.query('COMMIT');submissionCommitted=true;
     return res.json({
+      accepted_past_due:!!req.deadlineAcceptance?.late,
       success: true,
       submission_status: "submitted",
       assignment: assignmentResult.rows[0],
       submission: insertedResult.rows[0],
     });
   } catch (err) {
+    if(submissionClient)await submissionClient.query('ROLLBACK').catch(()=>{});
     console.error("POST /api/assignments/:assignmentId/student-submit failed:", err);
     return res.status(500).json({ error: "Failed to save student submission" });
-  }
+  } finally {if(submissionClient&&!submissionCommitted)await submissionClient.query('ROLLBACK').catch(()=>{});submissionClient?.release();}
 });
 
 
@@ -7029,8 +7045,11 @@ app.post(
   "/api/assignments/:assignmentId/student-attachments",
   authenticateJWT,
   requireRole("admin", "student"),
+  submissionDeadlines.middleware,
   handleStudentAttachmentUpload,
   async (req, res) => {
+    let submissionClient;
+    let submissionCommitted=false;
     try {
       await ensureSubmissionAttachmentsTable();
 
@@ -7086,7 +7105,13 @@ app.post(
         return res.status(403).json({ error: "This course section is not live yet" });
       }
 
-      const submissionResult = await pool.query(
+      // Recheck after receiving the file so uploads crossing the deadline are rejected.
+      if(req.user.role==='student') {
+        try { req.deadlineAcceptance=await submissionDeadlines.check(assignmentId,studentUserId); }
+        catch(error) { fs.unlink(req.file.path,()=>{});return res.status(error.status||500).json({error:error.status?error.message:'Unable to check the deadline.',code:error.code}); }
+      }
+      submissionClient=await pool.connect();await submissionClient.query('BEGIN');
+      const submissionResult = await submissionClient.query(
         `
         SELECT id
         FROM submissions
@@ -7102,7 +7127,7 @@ app.post(
       if (!submissionId) {
         const studentName = userResult.rows[0]?.name || studentEmail;
 
-        const insertedSubmissionResult = await pool.query(
+        const insertedSubmissionResult = await submissionClient.query(
           `
           INSERT INTO submissions (
             assignment_id,
@@ -7145,7 +7170,7 @@ app.post(
 
         submissionId = insertedSubmissionResult.rows[0].id;
       } else {
-        await pool.query(
+        await submissionClient.query(
           `UPDATE submissions SET student_id = $1, student_email = $2 WHERE id = $3`,
           [studentUserId, studentEmail, submissionId]
         );
@@ -7158,7 +7183,7 @@ app.post(
       const sizeBytes = Number(req.file.size || 0);
       const fileData = fs.readFileSync(req.file.path);
 
-      const attachmentResult = await pool.query(
+      const attachmentResult = await submissionClient.query(
         `
         INSERT INTO submission_attachments (
           submission_id,
@@ -7197,14 +7222,19 @@ app.post(
         ]
       );
 
+      await submissionDeadlines.record(req.deadlineAcceptance,assignmentId,studentUserId,submissionId,'attachment',submissionClient);
+      await submissionClient.query('COMMIT');submissionCommitted=true;
       return res.json({
+        accepted_past_due:!!req.deadlineAcceptance?.late,
         success: true,
         attachment: attachmentResult.rows[0],
       });
     } catch (err) {
+      if(submissionClient)await submissionClient.query('ROLLBACK').catch(()=>{});
+      if(req.file?.path)fs.unlink(req.file.path,()=>{});
       console.error("POST /api/assignments/:assignmentId/student-attachments failed:", err);
       return res.status(500).json({ error: "Failed to upload student attachment" });
-    }
+    } finally {if(submissionClient&&!submissionCommitted)await submissionClient.query('ROLLBACK').catch(()=>{});submissionClient?.release();}
   }
 );
 
@@ -7368,7 +7398,8 @@ app.delete("/api/student-attachments/:attachmentId", authenticateJWT, requireRol
       SELECT
         id,
         stored_name,
-        file_path
+        file_path,
+        assignment_id, student_email
       FROM submission_attachments
       WHERE id = $1
       LIMIT 1
@@ -7381,6 +7412,11 @@ app.delete("/api/student-attachments/:attachmentId", authenticateJWT, requireRol
     }
 
     const attachment = attachmentResult.rows[0];
+    if(req.user.role==='student') {
+      if(String(attachment.student_email||'').toLowerCase()!==String(req.user.email||'').toLowerCase())return res.status(403).json({error:'Attachment unavailable.'});
+      try { await submissionDeadlines.check(attachment.assignment_id,req.user.id); }
+      catch(error){return res.status(error.status||500).json({error:error.status?error.message:'Unable to check the deadline.',code:error.code});}
+    }
 
     await pool.query(
       `

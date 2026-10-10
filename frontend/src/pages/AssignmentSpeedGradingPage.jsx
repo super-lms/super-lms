@@ -1,3 +1,4 @@
+import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
 import { downloadStudentWork, printStudentWork } from "../services/studentWorkExport.js";
 import { getEarnedPoints } from "../services/gradebookMarks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1960,6 +1961,8 @@ export default function AssignmentSpeedGradingPage() {
                       </div>
                     ) : null}
                   </div>
+
+                    <LateSubmissionApproval key={`${assignmentId}:${selectedRow.student_email}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} />
 
                   <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
                     <strong>Submission:</strong>{" "}

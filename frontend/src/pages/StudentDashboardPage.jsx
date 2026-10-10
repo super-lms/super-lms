@@ -1093,7 +1093,7 @@ export default function StudentDashboardPage() {
       }
 
       await loadSubmissionAttachments(assignmentId, studentEmail)
-      const successMessage = `File attached successfully: ${file.name}`
+      const successMessage = data.accepted_past_due ? `File accepted PAST DUE with teacher approval: ${file.name}` : `File attached successfully: ${file.name}`
       setAttachmentSuccessText(successMessage)
       setSubmissionHasUnsavedChanges(false)
       setAttachmentSuccessByAssignmentId((current) => ({
@@ -1167,7 +1167,7 @@ export default function StudentDashboardPage() {
       }))
       setSubmissionDraftText(data?.submission?.content || "")
       setSubmissionHasUnsavedChanges(false)
-      setSubmissionSaveMessage("Submission successful.")
+      setSubmissionSaveMessage(data.accepted_past_due ? "Submission accepted PAST DUE with teacher approval." : "Submission successful.")
     } catch (err) {
       console.error("Error saving student submission:", err)
       setSubmissionErrorText("Failed to save submission.")
