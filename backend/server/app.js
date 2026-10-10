@@ -12917,6 +12917,8 @@ app.post("/api/classes/:classId/seed-rubric-demo", authenticateJWT, requireRole(
 
 
 /* REPORTS API - CURRENT KDU STRUCTURE */
+app.use('/api/classes', require('./routes/reportCardRoutes')({pool,authenticateJWT,requireRole,ensureStudentInfoColumns,ensureStudentReportCommentsTable}));
+
 app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const courseId = Number(req.params.courseId);

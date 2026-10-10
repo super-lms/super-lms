@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import authFetch from "../services/authFetch";
 
+import ReportCardBuilder from "../components/ReportCardBuilder.jsx";
 import AttendanceReport from "../components/AttendanceReport.jsx";
 import IEReport from "../components/IEReport.jsx";
 
 function ReportsPage() {
   const attendanceReportRef = useRef(null);
+  const reportCardRef = useRef(null);
   const ieReportRef = useRef(null);
   const ieEditorRef = useRef(null);
   const { user } = useAuth();
@@ -356,6 +358,7 @@ function ReportsPage() {
   }
 
   function generateReport() {
+    if (reportScope === "reportcard") return reportCardRef.current?.generate();
     if (reportScope === "attendance") return attendanceReportRef.current?.generate();
     if (!selectedCourse) {
       setMessage("Please select a course");
@@ -807,6 +810,7 @@ function ReportsPage() {
   }
 
   function exportPDF() {
+    if (reportScope === "reportcard") return reportCardRef.current?.print();
     if (reportScope === "attendance") return attendanceReportRef.current?.print();
     if (reportScope === "ie") {
       if (!reportData) return setMessage("Generate an IE report first");
@@ -1012,6 +1016,7 @@ function ReportsPage() {
               <option value="class">Class Report</option>
               <option value="ie">IE — Insufficient Evidence</option>
               <option value="attendance">Attendance Report</option>
+              <option value="reportcard">Report Cards</option>
             </select>
           </div>
 
@@ -1027,7 +1032,7 @@ function ReportsPage() {
                 }}
                 style={inputStyle}
               >
-                <option value="">{reportScope === "attendance" ? "All students (class attendance)" : reportScope === "ie" ? "All students meeting IE criteria (batch)" : "Select Student"}</option>
+                <option value="">{reportScope === "reportcard" ? "All students (batch report cards)" : reportScope === "attendance" ? "All students (class attendance)" : reportScope === "ie" ? "All students meeting IE criteria (batch)" : "Select Student"}</option>
                 {visibleStudents.map((student) => {
                   const studentKey = student.student_email || `name:${student.student_name}`;
 
@@ -1042,7 +1047,7 @@ function ReportsPage() {
             </div>
           )}
 
-          <div hidden={reportScope === "attendance"}>
+          <div hidden={["attendance", "reportcard"].includes(reportScope)}>
             <label style={labelStyle}>Category</label>
             <select
               value={selectedCategoryId}
@@ -1058,7 +1063,7 @@ function ReportsPage() {
             </select>
           </div>
 
-          <div hidden={reportScope === "attendance"}>
+          <div hidden={["attendance", "reportcard"].includes(reportScope)}>
             <label style={labelStyle}>Level</label>
             <select
               value={selectedLevelName}
@@ -1079,6 +1084,8 @@ function ReportsPage() {
           </div>
         </div>
 
+        {reportScope === "reportcard" && <ReportCardBuilder key={`${selectedCourse}:${selectedStudentKey}`} ref={reportCardRef} courseId={selectedCourse} courses={courses} studentEmail={selectedStudent?.student_email || ""} onMessage={setMessage} />}
+
         {reportScope === "attendance" && <AttendanceReport key={`${selectedCourse}:${selectedStudentKey}`} ref={attendanceReportRef} courseId={selectedCourse} studentEmail={selectedStudent?.student_email || ''} onMessage={setMessage} />}
 
         <div style={buttonRowStyle}>
@@ -1090,11 +1097,11 @@ function ReportsPage() {
             Export PDF
           </button>
 
-          <button hidden={["ie", "attendance"].includes(reportScope)} onClick={exportCSV} style={buttonStyle}>
+          <button hidden={["ie", "attendance", "reportcard"].includes(reportScope)} onClick={exportCSV} style={buttonStyle}>
             Export CSV
           </button>
 
-          <button hidden={["ie", "attendance"].includes(reportScope)} onClick={downloadWebtessFile} style={buttonStyle}>
+          <button hidden={["ie", "attendance", "reportcard"].includes(reportScope)} onClick={downloadWebtessFile} style={buttonStyle}>
             Download WebTESS File (.txt)
           </button>
         </div>
@@ -1113,7 +1120,7 @@ function ReportsPage() {
           </div>
         ) : null}
 
-        <div hidden={["ie", "attendance"].includes(reportScope)} style={webtessHelpStyle}>
+        <div hidden={["ie", "attendance", "reportcard"].includes(reportScope)} style={webtessHelpStyle}>
           Downloads a ready-to-upload tab-delimited .txt file with the required columns:
           StudentID, Mark, Work, Abs, Com1, Com2. Marks are rounded to whole numbers.
         </div>
@@ -1233,7 +1240,7 @@ function ReportsPage() {
       </div>
 
 
-      {reportData && !["ie", "attendance"].includes(reportScope) && (
+      {reportData && !["ie", "attendance", "reportcard"].includes(reportScope) && (
         <div style={sectionStyle}>
           <div style={{ marginBottom: "18px" }}>
             <h2 style={sectionTitleStyle}>
