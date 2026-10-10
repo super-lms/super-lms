@@ -12,7 +12,7 @@ for (const schoolId of [7, null]) test(`announcement access, publishing, attachm
     if(sql.includes('AS school_id FROM users u'))return {rows:[{school_id:schoolId}]};
     if(sql.startsWith('INSERT INTO school_announcements'))return {rows:[{id:42}]};
     if(sql.startsWith('SELECT COUNT'))return {rows:[{count:0}]};
-    if(sql.startsWith('SELECT c.id FROM courses'))return {rows:params[0]===12?[{id:12}]:[]};
+    if(sql.startsWith('SELECT c.id, COALESCE'))return {rows:params[0]===12?[{id:12,content_course_id:10}]:[]};
     if(sql.startsWith('SELECT f.*'))return {rows:params[3]==='1'?[{filename:'instructions.txt',mime_type:'text/plain',file_data:Buffer.from('Orange Shirt Day')}]:[]};
     return {rows:[]};
   },async connect(){return {...this,release(){}};}};
@@ -33,6 +33,12 @@ for (const schoolId of [7, null]) test(`announcement access, publishing, attachm
     assert.equal(insertion.params[6],12);assert.equal(insertion.params[7],'2026-10-09T01:30:00.000Z');
     const visibility=calls.find(c=>c.sql.includes('FROM school_announcements a JOIN')).sql;
     assert.match(visibility,/class_enrollments/);assert.match(visibility,/publish_at <= NOW/);assert.match(visibility,/expires_at > NOW/);assert.match(visibility,/is_published = true/);
+    const masterForm=new FormData();masterForm.append('title','All sections');masterForm.append('body','Read this.');masterForm.append('course_id','12');masterForm.append('course_scope','master');
+    assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:masterForm})).status,200);
+    const masterInsert=calls.filter(c=>c.sql.startsWith('INSERT INTO school_announcements')).at(-1);
+    assert.equal(masterInsert.params[6],10);assert.equal(masterInsert.params[10],'master');
+    assert.equal(insertion.params[10],'section');
+    assert.match(visibility,/a.course_scope='master' AND enrolled.master_course_id=a.course_id/);
     const wrongClass=new FormData();wrongClass.append('title','Test');wrongClass.append('body','Test');wrongClass.append('course_id','99');
     assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:wrongClass})).status,403);
     const missingClass=new FormData();missingClass.append('title','Test');missingClass.append('body','Test');

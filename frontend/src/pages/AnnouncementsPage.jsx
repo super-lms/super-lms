@@ -1,3 +1,4 @@
+import {groupCoursesByMaster} from '../services/courseSections.js';
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
 import {beijingDateTime,assignmentInstant,displayAssignmentTime} from "../services/assignmentTime.js";
 import { useEffect, useRef, useState } from 'react';
@@ -6,7 +7,7 @@ import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch.js';
 import './AnnouncementsPage.css';
 import AnnouncementGroupLookup from '../components/AnnouncementGroupLookup.jsx';
-const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[],course_id:'',publish_at:'',expires_at:'',is_published:true});
+const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[],course_id:'',course_scope:'section',publish_at:'',expires_at:'',is_published:true});
 export default function AnnouncementsPage() {
   const {user}=useAuth();
   const canPublish=['admin','teacher'].includes(user?.role);
@@ -26,7 +27,7 @@ export default function AnnouncementsPage() {
   async function save(event) {
     event.preventDefault();setBusy(true);setError('');setNotice('');
     try {
-      const data=new FormData(); for(const key of ['title','body','event_date','pinned','course_id','is_published'])data.append(key,String(draft[key]??''));
+      const data=new FormData(); for(const key of ['title','body','event_date','pinned','course_id','course_scope','is_published'])data.append(key,String(draft[key]??''));
       data.append('publish_at',assignmentInstant(draft.publish_at)||'');data.append('expires_at',assignmentInstant(draft.expires_at)||'');
       data.append('remove_files',JSON.stringify(remove));for(const file of files)data.append('files',file);
       const res=await authFetch(`/api/announcements${draft.id?`/${draft.id}`:''}`,{method:draft.id?'PUT':'POST',body:data});
@@ -57,7 +58,8 @@ export default function AnnouncementsPage() {
     {notice&&<p role="status">{notice}</p>}
     {draft&&<form className="announcement-card announcement-editor" onSubmit={save}>
       <h2>{draft.id?'Edit announcement':'New announcement'}</h2><p>Select the class and choose when students can read this announcement.</p>
-      <label>Class<select required={user.role==='teacher'} value={draft.course_id||''} onChange={e=>setDraft({...draft,course_id:e.target.value})}><option value="">{user.role==='admin'?'Whole school':'Choose your class'}</option>{courses.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}</select></label>
+      <label>Class or master course<select required={user.role==='teacher'} value={draft.course_id ? `${draft.course_scope || 'section'}:${draft.course_id}` : ''} onChange={e=>{const [scope,id]=e.target.value.split(':');setDraft({...draft,course_id:id||'',course_scope:scope||'section'});}}><option value="">{user.role==='admin'?'Whole school':'Choose your class or master course'}</option>{groupCoursesByMaster(courses).map(group=><optgroup key={group.key} label={group.masterTitle}>{group.isMultiSection&&<option value={`master:${group.contentCourse.id}`}>{group.masterTitle} — Master (all sections)</option>}{group.sections.map(c=><option key={c.id} value={`section:${c.id}`}>{c.title}</option>)}</optgroup>)}</select></label>
+      {draft.course_scope==='master'&&<p>This announcement will reach students in every section of this master course.</p>}
       <label>Publish from (blank means immediately)<AssignmentDateTime value={draft.publish_at} onChange={value=>setDraft({...draft,publish_at:value})}/></label>
       <label>End time (optional)<AssignmentDateTime value={draft.expires_at} min={draft.publish_at} onChange={value=>setDraft({...draft,expires_at:value})}/></label>
       <label className="announcement-check"><input type="checkbox" checked={draft.is_published!==false} onChange={e=>setDraft({...draft,is_published:e.target.checked})}/>Publish to students or schedule for the time above (uncheck to save a draft)</label>
