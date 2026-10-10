@@ -27,4 +27,14 @@ function courseMark(assignments, submissions, student, config) {
   const mark = weight ? total/weight : scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
   return {calculated_mark:mark===null?null:Math.round(mark*100)/100,graded_count:scores.length,assignment_count:eligible.length,unlinked_graded_count:eligible.filter(a=>{const s=latest.get(String(a.id));return s?.score!=null && (!a.subcategory_id || !(Number(a.course_weight_percent)>0));}).length};
 }
-module.exports = {validatePeriod,courseMark};
+function courseIdentity(course) {
+  const title=String(course.title||'').trim();
+  const explicit=title.match(/\bgrade\s+(\d{1,2})(?:\s*\/\s*(\d{1,2}))?/i);
+  const suffix=title.match(/\b(9|10|11|12)(?:\s*\/\s*(9|10|11|12))?\s*([A-D])?\s*$/i);
+  const match=explicit||suffix;
+  const grade=match?[match[1],match[2]].filter(Boolean).join('/'):'';
+  const section=String(course.section_code||suffix?.[3]||'').toUpperCase();
+  const className=/^\d{1,2}(?:\/\d{1,2})?[A-D]$/.test(section)?section:grade&&/^[A-D]$/.test(section)?grade+section:'';
+  return {student_grade:grade,student_class:className};
+}
+module.exports = {validatePeriod,courseMark,courseIdentity};

@@ -1,5 +1,5 @@
 const express = require('express');
-const {validatePeriod,courseMark} = require('../reportCards');
+const {validatePeriod,courseMark,courseIdentity} = require('../reportCards');
 module.exports = function reportCardRoutes({pool,authenticateJWT,requireRole,ensureStudentInfoColumns,ensureStudentReportCommentsTable}) {
  const router=express.Router();
  router.use(authenticateJWT,requireRole('admin','teacher'));
@@ -13,7 +13,8 @@ module.exports = function reportCardRoutes({pool,authenticateJWT,requireRole,ens
   const config=validatePeriod(req.query),classId=Number(req.params.classId),ids=courseIds(req);
   const courses=await access(req,[...new Set([classId,...ids])]);await ensure();
   const students=await pool.query(`SELECT DISTINCT u.id AS student_user_id, COALESCE(NULLIF(TRIM(u.name),''),NULLIF(TRIM(CONCAT_WS(' ',u.first_name,u.last_name)),''),u.email) AS student_name,u.email AS student_email,COALESCE(NULLIF(u.student_id,''),ms.student_id,'') AS student_id,COALESCE(ms.pen,'') AS pen,COALESCE(ms.current_grade::text,to_jsonb(u)->>'grade_level','') AS student_grade,COALESCE(ms.current_homeform,to_jsonb(u)->>'class_name','') AS student_class FROM class_enrollments ce JOIN users u ON u.id=ce.student_user_id LEFT JOIN LATERAL(SELECT directory.* FROM master_students directory WHERE (NULLIF(u.student_id,'') IS NOT NULL AND directory.student_id=u.student_id) OR (NULLIF(u.email,'') IS NOT NULL AND LOWER(directory.student_email)=LOWER(u.email)) ORDER BY CASE WHEN directory.student_id=NULLIF(u.student_id,'') THEN 0 ELSE 1 END,directory.id LIMIT 1) ms ON TRUE WHERE ce.class_id=$1 ORDER BY student_name,student_email`,[classId]);
-  const cards=students.rows.map(s=>({...s,courses:[]}));
+  const identity=courseIdentity(courses.find(c=>c.id===classId));
+  const cards=students.rows.map(s=>({...s,...identity,courses:[]}));
   for(const course of courses.filter(c=>ids.includes(c.id))){
    const contentId=course.master_course_id||course.id;
    const assignments=await pool.query(`SELECT a.id,a.subcategory_id,((cc.weight_percent*cs.weight_percent_of_parent)/100.0) AS course_weight_percent,TO_CHAR(COALESCE(a.due_date,(to_jsonb(a)->>'available_from')::timestamptz,(to_jsonb(a)->>'created_at')::timestamptz) AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD') AS reporting_date FROM assignments a LEFT JOIN category_subcategories cs ON cs.id=a.subcategory_id LEFT JOIN course_categories cc ON cc.id=cs.course_category_id WHERE a.class_id=$1 ORDER BY a.id`,[contentId]);
