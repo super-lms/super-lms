@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import authFetch from "../services/authFetch";
 
@@ -14,6 +14,7 @@ function ReportsPage() {
   const ieEditorRef = useRef(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { courseId: routeCourseId } = useParams();
   const commentSaveTimersRef = useRef({});
   const initialCourseLoadedRef = useRef(false);
 
@@ -21,6 +22,7 @@ function ReportsPage() {
   const dashboardPath = normalizedRole === "admin" ? "/admin" : "/dashboard";
 
   const requestedCourseId =
+    routeCourseId ||
     new URLSearchParams(window.location.search).get("courseId") ||
     window.localStorage.getItem("super-lms-last-course-id") ||
     "";
@@ -37,7 +39,10 @@ function ReportsPage() {
   const [selectedLevelName, setSelectedLevelName] = useState("");
 
   const [selectedStudentKey, setSelectedStudentKey] = useState("");
-  const [reportScope, setReportScope] = useState("student");
+  const [reportScope, setReportScope] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("reportType");
+    return ["student", "class", "ie", "attendance", "reportcard"].includes(requested) ? requested : "student";
+  });
 
   const [reportData, setReportData] = useState(null);
   const [reportComments, setReportComments] = useState([]);

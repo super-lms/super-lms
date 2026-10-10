@@ -65,16 +65,28 @@ export default function AdminReportsPage() {
 
   const reportCards = [
     {
+      title: "Student Report Cards",
+      description: "Create Interim, Semester and Year Final cards with PEN, course marks, attendance and comments. Print one student or a batch.",
+      status: "Available now",
+      to: "/admin/print-reports?reportType=reportcard",
+    },
+    {
+      title: "IE Reports",
+      description: "Review and print Insufficient Evidence reports for missing assignments or marks below 50%, individually or in batches.",
+      status: "Available now",
+      to: "/admin/print-reports?reportType=ie",
+    },
+    {
       title: "Course Reports",
       description: "Open course-level report tools for student progress, comments, and class reporting.",
       status: "Available now",
-      to: "/admin/courses",
+      to: "/admin/print-reports?reportType=class",
     },
     {
       title: "Student Reports",
-      description: "Use the Master Student Directory as the starting point for student-specific review.",
+      description: "Generate and print an individual student progress report from the same reporting tools available to teachers.",
       status: "Available now",
-      to: "/admin/students",
+      to: "/admin/print-reports?reportType=student",
     },
     {
       title: "Gradebook Reports",
@@ -90,9 +102,9 @@ export default function AdminReportsPage() {
     },
     {
       title: "Attendance Reports",
-      description: "Course attendance reporting is available from individual course workspaces.",
-      status: "Course-level",
-      to: "/admin/courses",
+      description: "Print class or individual attendance for weekly, monthly, term and semester periods.",
+      status: "Available now",
+      to: "/admin/print-reports?reportType=attendance",
     },
     {
       title: "Export Center",

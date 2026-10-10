@@ -172,6 +172,7 @@ function App() {
         <Route path="/admin/calendar" element={<SchoolCalendarPage />} />
         <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
+        <Route path="/admin/print-reports" element={<ReportsPage />} />
         <Route path="/admin/safe-reports" element={<AdminSafeReportsPage />} />
         <Route path="/admin/analytics" element={<AdminAnalyticsPage />} />
         <Route path="/admin/settings" element={<AdminSchoolSettingsPage />} />
