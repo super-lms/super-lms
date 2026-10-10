@@ -310,6 +310,7 @@ export default function AssignmentsPage() {
   const [editSaving, setEditSaving] = useState(false)
 
   const [classStudents, setClassStudents] = useState([])
+  const [sectionCounts,setSectionCounts]=useState(null)
   const [rosterLoading, setRosterLoading] = useState(false)
   const [rosterSaving, setRosterSaving] = useState(false)
   const [rosterStudentName, setRosterStudentName] = useState("")
@@ -557,7 +558,7 @@ export default function AssignmentsPage() {
 
     setRosterLoading(true)
 
-    return authFetch(`/api/class-roster/${classId}`)
+    return authFetch(`/api/class-roster/${classId}?scope=${isMasterWorkspace ? "all" : "section"}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load class roster")
         return res.json()
@@ -1411,11 +1412,22 @@ export default function AssignmentsPage() {
     ? `master:${selectedContentClassId}`
     : selectedClassId
 
+  useEffect(() => {
+    let active=true;
+    setSectionCounts(null);
+    if(!selectedClassId)return;
+    authFetch(`/api/classes/${selectedClassId}/assignment-counts?scope=${isMasterWorkspace ? 'all' : 'section'}`)
+      .then(async res=>{const data=await res.json();if(!res.ok)throw new Error(data.error);return data;})
+      .then(data=>{if(active)setSectionCounts(data);})
+      .catch(error=>{if(active)setError(error.message);});
+    return ()=>{active=false;};
+  },[selectedClassId,isMasterWorkspace,assignments]);
+
   const teacherAssignments = useMemo(() => {
     const safeAssignments = Array.isArray(assignments) ? assignments : []
     if (!selectedContentClassId) return []
-    return safeAssignments.filter((assignment) => String(assignment.class_id) === String(selectedContentClassId))
-  }, [assignments, selectedContentClassId])
+    return safeAssignments.filter((assignment) => String(assignment.class_id) === String(selectedContentClassId)).map(assignment => {const counts=sectionCounts?.assignments?.find(row=>String(row.id)===String(assignment.id));return {...assignment,submission_count:counts?.submission_count ?? 0,graded_count:counts?.graded_count ?? 0,ungraded_count:counts?.ungraded_count ?? 0,not_submitted_count:counts?.not_submitted_count ?? 0};})
+  }, [assignments, selectedContentClassId, sectionCounts])
 
   const classHasCategories = categories.length > 0
   const classHasAssignments = teacherAssignments.length > 0
@@ -2147,7 +2159,8 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   aria-label="Assignment submission and grading counts"
                                   style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}
                                 >
-                                  <span><strong>Submitted:</strong> {getAssignmentSubmissionCount(assignment)}</span>
+                                  <span><strong>Submitted:</strong> {sectionCounts ? getAssignmentSubmissionCount(assignment) : "Loading…"}</span>
+                                  <span><strong>Not submitted:</strong> {sectionCounts ? assignment.not_submitted_count : "Loading…"}</span>
                                   <span><strong>Graded:</strong> {getAssignmentGradedCount(assignment)}</span>
                                   <span><strong>Ungraded:</strong> {getAssignmentUngradedCount(assignment)}</span>
                                 </div>

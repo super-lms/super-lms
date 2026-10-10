@@ -1,0 +1,11 @@
+const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+function load({allowed=true,students=[{student_user_id:10},{student_user_id:11}],rows=[{id:5,submission_count:1,graded_count:1}]}={}){
+ let route;const calls=[];
+ const source=fs.readFileSync(path.join(__dirname,'../server/app.js'),'utf8');const start=source.indexOf("app.get('/api/classes/:classId/assignment-counts'");const end=source.indexOf('/* CREATE ASSIGNMENT */',start);
+ vm.runInNewContext(source.slice(start,end),{app:{get:(url,...handlers)=>route=handlers.at(-1)},authenticateJWT:()=>{},requireRole:()=>()=>{},authorizeCourseModuleAccess:async()=>({allowed,status:403,courseId:94}),loadGradingRoster:async(pool,course,section)=>{calls.push({course,section});return {students};},pool:{query:async(sql,params)=>{calls.push({sql,params});return {rows};}},console});
+ return {route,calls};
+}
+const res=()=>({statusCode:200,status(v){this.statusCode=v;return this},json(v){this.body=v;return this}});
+test('lettered section passes only its roster IDs to shared assignment counts',async()=>{const {route,calls}=load();const response=res();await route({params:{classId:'96'},query:{}},response);assert.equal(calls[0].section,96);assert.deepEqual(Array.from(calls[1].params[1]),[10,11]);assert.equal(calls[1].params[0],94);assert.equal(response.body.assignments[0].not_submitted_count,1);assert.match(calls[1].sql,/DISTINCT ON \(u.id\)/);assert.match(calls[1].sql,/submission_attachments/);});
+test('master totals require explicit all scope and empty rosters remain zero',async()=>{const {route,calls}=load({students:[],rows:[{id:5,submission_count:0,graded_count:0}]});const response=res();await route({params:{classId:'94'},query:{scope:'all'}},response);assert.equal(calls[0].section,'all');assert.equal(response.body.roster_count,0);assert.equal(response.body.assignments[0].not_submitted_count,0);});
+test('unauthorized class request cannot read roster or submissions',async()=>{const {route,calls}=load({allowed:false});const response=res();await route({params:{classId:'96'},query:{}},response);assert.equal(response.statusCode,403);assert.equal(calls.length,0);});

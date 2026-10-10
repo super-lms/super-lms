@@ -5469,6 +5469,32 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
 });
 
 
+app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole('admin','teacher'), async (req,res) => {
+  try {
+    const classId=Number(req.params.classId);
+    const access=await authorizeCourseModuleAccess(req,classId);
+    if(!access.allowed)return res.status(access.status).json({error:'Class unavailable.'});
+    const roster=await loadGradingRoster(pool,access.courseId,req.query.scope==='all'?'all':classId);
+    const ids=roster.students.map(s=>Number(s.student_user_id));
+    const result=await pool.query(`SELECT a.id,
+      COUNT(s.id)::integer AS submission_count,
+      COUNT(s.id) FILTER (WHERE s.score IS NOT NULL OR NULLIF(TRIM(COALESCE(s.grade,'')),'') IS NOT NULL OR s.rubric_selection IS NOT NULL)::integer AS graded_count
+      FROM assignments a
+      LEFT JOIN LATERAL (
+        SELECT DISTINCT ON (u.id) sub.* FROM users u JOIN submissions sub
+        ON sub.student_id=u.id OR LOWER(sub.student_email)=LOWER(u.email)
+        WHERE u.id=ANY($2::integer[]) AND sub.assignment_id=a.id
+        AND (NULLIF(TRIM(COALESCE(sub.content,'')),'') IS NOT NULL OR sub.score IS NOT NULL
+          OR NULLIF(TRIM(COALESCE(sub.grade,'')),'') IS NOT NULL
+          OR EXISTS(SELECT 1 FROM submission_attachments sa WHERE sa.submission_id=sub.id))
+        ORDER BY u.id,sub.id DESC
+      ) s ON TRUE
+      WHERE a.class_id=$1 AND COALESCE(a.source_type,'assignment')<>'assessment'
+      GROUP BY a.id`,[access.courseId,ids]);
+    res.json({class_id:classId,roster_count:ids.length,assignments:result.rows.map(r=>({...r,ungraded_count:r.submission_count-r.graded_count,not_submitted_count:Math.max(ids.length-r.submission_count,0)}))});
+  }catch(error){console.error('Class assignment counts:',error);res.status(error.status||500).json({error:'Could not load class submission counts.'});}
+});
+
 /* CREATE ASSIGNMENT */
 app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
