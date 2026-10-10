@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch.js';
 import './AnnouncementsPage.css';
 import AnnouncementGroupLookup from '../components/AnnouncementGroupLookup.jsx';
-const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[],course_id:'',course_scope:'section',publish_at:'',expires_at:'',is_published:true});
+const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[],course_id:'',course_scope:'section',audiences:[],publish_at:'',expires_at:'',is_published:true});
 export default function AnnouncementsPage() {
   const {user}=useAuth();
   const canPublish=['admin','teacher'].includes(user?.role);
@@ -23,11 +23,12 @@ export default function AnnouncementsPage() {
   }
   useEffect(()=>{load();if(canPublish)authFetch('/api/courses').then(r=>r.json()).then(data=>setCourses(Array.isArray(data)?data:[])).catch(()=>setError('Could not load your classes.'));},[]);
   useEffect(()=>{ if(preview)previewRef.current?.showModal(); return ()=>{if(preview?.url)URL.revokeObjectURL(preview.url);}; },[preview]);
-  function edit(item=blank()) {setDraft({...item,event_date:item.event_date?.slice(0,10)||'',publish_at:beijingDateTime(item.publish_at),expires_at:beijingDateTime(item.expires_at)});setFiles([]);setRemove([]);setError('');}
+  function edit(item=blank()) {setDraft({...item,audiences:item.audiences || (item.course_id ? [{course_id:Number(item.course_id),scope:item.course_scope || 'section'}] : []),event_date:item.event_date?.slice(0,10)||'',publish_at:beijingDateTime(item.publish_at),expires_at:beijingDateTime(item.expires_at)});setFiles([]);setRemove([]);setError('');}
   async function save(event) {
     event.preventDefault();setBusy(true);setError('');setNotice('');
     try {
       const data=new FormData(); for(const key of ['title','body','event_date','pinned','course_id','course_scope','is_published'])data.append(key,String(draft[key]??''));
+      data.append('audiences',JSON.stringify(draft.audiences || []));
       data.append('publish_at',assignmentInstant(draft.publish_at)||'');data.append('expires_at',assignmentInstant(draft.expires_at)||'');
       data.append('remove_files',JSON.stringify(remove));for(const file of files)data.append('files',file);
       const res=await authFetch(`/api/announcements${draft.id?`/${draft.id}`:''}`,{method:draft.id?'PUT':'POST',body:data});
@@ -58,8 +59,10 @@ export default function AnnouncementsPage() {
     {notice&&<p role="status">{notice}</p>}
     {draft&&<form className="announcement-card announcement-editor" onSubmit={save}>
       <h2>{draft.id?'Edit announcement':'New announcement'}</h2><p>Select the class and choose when students can read this announcement.</p>
-      <label>Class or master course<select required={user.role==='teacher'} value={draft.course_id ? `${draft.course_scope || 'section'}:${draft.course_id}` : ''} onChange={e=>{const [scope,id]=e.target.value.split(':');setDraft({...draft,course_id:id||'',course_scope:scope||'section'});}}><option value="">{user.role==='admin'?'Whole school':'Choose your class or master course'}</option>{groupCoursesByMaster(courses).map(group=><optgroup key={group.key} label={group.masterTitle}>{group.isMultiSection&&<option value={`master:${group.contentCourse.id}`}>{group.masterTitle} — Master (all sections)</option>}{group.sections.map(c=><option key={c.id} value={`section:${c.id}`}>{c.title}</option>)}</optgroup>)}</select></label>
-      {draft.course_scope==='master'&&<p>This announcement will reach students in every section of this master course.</p>}
+      <fieldset><legend>Classes and master courses</legend><p>Select one or more audiences. Master courses include every section.</p>
+        {user.role==='admin'&&<label className="announcement-check"><input type="checkbox" checked={!draft.audiences.length} onChange={()=>setDraft({...draft,audiences:[],course_id:'',course_scope:'section'})}/>Whole school</label>}
+        {groupCoursesByMaster(courses).map(group=><div key={group.key}><strong>{group.masterTitle}</strong>{(group.isMultiSection ? [{id:group.contentCourse.id,title:`${group.masterTitle} — Master (all sections)`,scope:'master'},...group.sections.map(c=>({...c,scope:'section'}))] : group.sections.map(c=>({...c,scope:'master'}))).map(c=><label className="announcement-check" key={`${c.scope}:${c.id}`}><input type="checkbox" checked={draft.audiences.some(t=>t.scope===c.scope&&Number(t.course_id)===Number(c.id))} onChange={e=>setDraft({...draft,course_id:'',course_scope:'section',audiences:e.target.checked ? [...draft.audiences,{course_id:Number(c.id),scope:c.scope}] : draft.audiences.filter(t=>!(t.scope===c.scope&&Number(t.course_id)===Number(c.id)))})}/>{c.title}</label>)}</div>)}
+      </fieldset>
       <label>Publish from (blank means immediately)<AssignmentDateTime value={draft.publish_at} onChange={value=>setDraft({...draft,publish_at:value})}/></label>
       <label>End time (optional)<AssignmentDateTime value={draft.expires_at} min={draft.publish_at} onChange={value=>setDraft({...draft,expires_at:value})}/></label>
       <label className="announcement-check"><input type="checkbox" checked={draft.is_published!==false} onChange={e=>setDraft({...draft,is_published:e.target.checked})}/>Publish to students or schedule for the time above (uncheck to save a draft)</label>

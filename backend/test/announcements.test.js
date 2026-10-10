@@ -38,7 +38,12 @@ for (const schoolId of [7, null]) test(`announcement access, publishing, attachm
     const masterInsert=calls.filter(c=>c.sql.startsWith('INSERT INTO school_announcements')).at(-1);
     assert.equal(masterInsert.params[6],10);assert.equal(masterInsert.params[10],'master');
     assert.equal(insertion.params[10],'section');
-    assert.match(visibility,/a.course_scope='master' AND enrolled.master_course_id=a.course_id/);
+    assert.match(visibility,/target->>'scope'='master' AND enrolled.master_course_id=/);
+    const multi=new FormData();multi.append('title','Several courses');multi.append('body','Shared message');multi.append('audiences',JSON.stringify([{course_id:12,scope:'master'},{course_id:12,scope:'section'}]));
+    assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:multi})).status,200);
+    assert.deepEqual(JSON.parse(calls.filter(c=>c.sql.startsWith('INSERT INTO school_announcements')).at(-1).params[11]),[{course_id:10,scope:'master'},{course_id:12,scope:'section'}]);
+    multi.set('audiences',JSON.stringify([{course_id:12,scope:'master'},{course_id:99,scope:'master'}]));
+    assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:multi})).status,403);
     const wrongClass=new FormData();wrongClass.append('title','Test');wrongClass.append('body','Test');wrongClass.append('course_id','99');
     assert.equal((await fetch(base,{method:'POST',headers:headers('teacher'),body:wrongClass})).status,403);
     const missingClass=new FormData();missingClass.append('title','Test');missingClass.append('body','Test');
