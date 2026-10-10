@@ -9,6 +9,11 @@ module.exports = function reportCardRoutes({pool,authenticateJWT,requireRole,ens
   if(result.rows.length!==ids.length) {const error=new Error('You do not have access to every selected class.');error.status=403;throw error;}return result.rows;
  }
  function courseIds(req){const ids=[...new Set(String(req.query.courseIds||req.params.classId).split(',').map(Number))];if(!ids.length||ids.length>100||ids.some(id=>!Number.isInteger(id)||id<=0))throw new Error('Choose up to 100 valid courses.');return ids;}
+ router.get('/:classId/report-students',async(req,res)=>{try{
+  const classId=Number(req.params.classId);await access(req,[classId]);
+  const result=await pool.query(`SELECT DISTINCT u.id AS student_user_id,COALESCE(NULLIF(TRIM(u.name),''),NULLIF(TRIM(CONCAT_WS(' ',u.first_name,u.last_name)),''),u.email) AS student_name,u.email AS student_email FROM class_enrollments ce JOIN users u ON u.id=ce.student_user_id WHERE ce.class_id=$1 ORDER BY student_name,student_email`,[classId]);
+  res.json({students:result.rows});
+ }catch(error){res.status(error.status||500).json({error:error.message});}});
  router.get('/:classId/report-cards',async(req,res)=>{try{
   const config=validatePeriod(req.query),classId=Number(req.params.classId),ids=courseIds(req);
   const courses=await access(req,[...new Set([classId,...ids])]);await ensure();

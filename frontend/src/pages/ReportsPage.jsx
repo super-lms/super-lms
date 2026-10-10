@@ -29,6 +29,7 @@ function ReportsPage() {
   const [categories, setCategories] = useState([]);
   const [levels, setLevels] = useState([]);
   const [enrolledStudents, setEnrolledStudents] = useState([]);
+  const [studentListStatus, setStudentListStatus] = useState("");
 
   const [selectedCourse, setSelectedCourse] = useState(requestedCourseId);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
@@ -145,8 +146,26 @@ function ReportsPage() {
   }, [user?.id, user?.email, user?.role, selectedCourse]);
 
   useEffect(() => {
+    let active = true;
     setEnrolledStudents([]);
-  }, []);
+    setSelectedStudentKey("");
+    if (!selectedCourse) { setStudentListStatus(""); return; }
+    setStudentListStatus("Loading students…");
+    authFetch(`/api/classes/${selectedCourse}/report-students`)
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load students. Please try selecting the course again.");
+        return data;
+      })
+      .then(data => {
+        if (!active) return;
+        const students = Array.isArray(data.students) ? data.students : [];
+        setEnrolledStudents(students.map(student => ({...student, course_id:selectedCourse, class_id:selectedCourse})));
+        setStudentListStatus(students.length ? "" : "No students are enrolled in this selected class. Check Class Enrollment.");
+      })
+      .catch(error => { if (active) setStudentListStatus(error.message); });
+    return () => { active = false; };
+  }, [selectedCourse]);
 
   const visibleStudents = useMemo(() => {
     const safeStudents = Array.isArray(enrolledStudents) ? enrolledStudents : [];
@@ -277,34 +296,7 @@ function ReportsPage() {
     setSelectedStudentKey("");
     setReportData(null);
     setMessage("");
-    setEnrolledStudents([]);
     loadCategories(courseId);
-
-    if (courseId) {
-      authFetch(`/api/class-roster/${courseId}`)
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error("Could not load students for this course");
-          }
-          return res.json();
-        })
-        .then((data) => {
-          const rosterStudents = Array.isArray(data?.students) ? data.students : [];
-          setEnrolledStudents(
-            rosterStudents.map((student) => ({
-              ...student,
-              course_id: courseId,
-              class_id: courseId,
-              student_name: student.name || student.student_name || "",
-              student_email: student.email || student.student_email || "",
-            }))
-          );
-        })
-        .catch(() => {
-          setEnrolledStudents([]);
-          setMessage("Could not load students for this course");
-        });
-    }
 
     authFetch(`/api/classes/${courseId}/report-comments`)
       .then(res => res.json())
@@ -1023,6 +1015,7 @@ function ReportsPage() {
           {reportScope !== "class" && (
             <div>
               <label style={labelStyle}>Student</label>
+              {studentListStatus && <p role="status">{studentListStatus}</p>}
               <select
                 value={selectedStudentKey}
                 onChange={(e) => {

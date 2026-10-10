@@ -52,3 +52,7 @@ test('report identity comes from the selected course rather than historical dire
  assert.deepEqual(courseIdentity({title:'Fitness and Conditioning 11/12B'}),{student_grade:'11/12',student_class:'11/12B'});
  assert.deepEqual(courseIdentity({title:'Course without a grade'}),{student_grade:'',student_class:''});
 });
+test('student selector loads the selected class roster and rejects unauthorized classes',async()=>{
+ let h=routeHarness(),res=response();await h.handlers['GET /:classId/report-students'](req,res);assert.equal(res.statusCode,200);assert.equal(res.body.students[0].student_user_id,5);const call=h.calls.find(c=>c.sql.startsWith('SELECT DISTINCT u.id'));assert.equal(call.params[0],94);assert.match(call.sql,/ce.class_id=\$1/);
+ h=routeHarness({allowed:false});res=response();await h.handlers['GET /:classId/report-students'](req,res);assert.equal(res.statusCode,403);assert.equal(h.calls.length,1);
+});
