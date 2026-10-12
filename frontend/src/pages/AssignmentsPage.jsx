@@ -1513,6 +1513,15 @@ export default function AssignmentsPage() {
       </div>
 
       <h1>Assignments</h1>
+      {isTeacherLikeRole && (
+        <SectionHeader
+          title="My Teacher Workspace"
+          subtitle="Past-due notices show only your teaching courses and students who still need approval."
+          action={normalizedRole === "admin" ? (
+            <ActionButton quiet onClick={() => navigate("/admin")}>Open Admin View</ActionButton>
+          ) : null}
+        />
+      )}
       {isTeacherLikeRole && <LateSubmissionAlerts />}
 
       {error ? <NoticeBox type="error">{error}</NoticeBox> : null}

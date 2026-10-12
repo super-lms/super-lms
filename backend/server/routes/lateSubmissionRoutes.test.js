@@ -13,6 +13,9 @@ for(const role of ['admin','teacher']){
    assert.match(sql,/ct\.course_id IN\(c\.id,COALESCE\(c\.master_course_id,c\.id\)\)/);
    assert.match(sql,/ce\.student_user_id=b\.student_id AND cohort\.master_course_id=c\.id/);
    assert.match(sql,/cohort\.teacher_id=\$1/);
+   assert.match(sql,/a\.due_date IS NOT NULL AND a\.due_date<=NOW\(\) AND a\.due_date<=b\.due_at/);
+   assert.match(sql,/AND NOT EXISTS\(SELECT 1 FROM assignment_late_permissions p/);
+   assert.match(sql,/p\.id=\(SELECT MAX\(p2\.id\)/);
    return {rows:[{assignment_id:7}]};
   }};
   const router=createLateSubmissionRouter(pool,{ensure:async()=>{}});
