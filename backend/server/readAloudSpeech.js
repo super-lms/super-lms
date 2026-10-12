@@ -19,7 +19,7 @@ function createSpeechProvider(sdkClient = sdk, env = process.env) {
   async function transcribe(audio) {
     if (!configured()) throw Error('Automatic assessment is not configured. Ask the administrator to set Azure Speech key and region.');
     validateWav(audio);
-    if (running >= 3) throw Error('Speech assessment is busy. The recording is saved; your teacher can reassess it shortly.');
+    if (running >= 1) throw Error('Speech assessment is busy. The recording is saved; your teacher can reassess it shortly.');
     running++;
     try {
       return await new Promise((resolve, reject) => {

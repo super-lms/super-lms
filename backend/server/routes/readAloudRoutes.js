@@ -143,7 +143,7 @@ function createReadAloudRouter(pool, deadlines, {
     drain();
   }
   function drain() {
-    while (workers < 3 && assessmentQueue.length) {
+    while (workers < 1 && assessmentQueue.length) {
       const nextId = assessmentQueue.shift();
       workers++;
       void (async () => {
