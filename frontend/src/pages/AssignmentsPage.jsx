@@ -196,7 +196,7 @@ const assignmentInboxGridStyle = {
 
 const assignmentInboxTableStyle = {
   width: "100%",
-  minWidth: "900px",
+  minWidth: "1050px",
   borderCollapse: "collapse",
   tableLayout: "fixed",
   background: "#ffffff",
@@ -212,20 +212,26 @@ const assignmentInboxHeaderCellStyle = {
   fontWeight: 800,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  lineHeight: 1.4,
 }
 
 const assignmentInboxCellStyle = {
   padding: "12px 14px",
   borderBottom: "1px solid #e5e7eb",
   verticalAlign: "middle",
+  whiteSpace: "normal",
+  overflowWrap: "anywhere",
+  lineHeight: 1.5,
 }
 
 const assignmentInboxActionStyle = {
   display: "flex",
   gap: "8px",
   alignItems: "center",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
+  flexWrap: "wrap",
 }
 
 
@@ -1755,7 +1761,7 @@ export default function AssignmentsPage() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
                       gap: "14px",
                     }}
                   >
@@ -1784,13 +1790,13 @@ export default function AssignmentsPage() {
                       <div style={assignmentInboxGridStyle}>
                         <table style={assignmentInboxTableStyle}>
                           <colgroup>
-                            <col style={{ width: "14%" }} />
-                            <col style={{ width: "22%" }} />
+                            <col style={{ width: "15%" }} />
+                            <col style={{ width: "20%" }} />
+                            <col style={{ width: "19%" }} />
                             <col style={{ width: "10%" }} />
                             <col style={{ width: "8%" }} />
-                            <col style={{ width: "7%" }} />
-                            <col style={{ width: "7%" }} />
-                            <col style={{ width: "32%" }} />
+                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "20%" }} />
                           </colgroup>
                           <thead>
                             <tr>
@@ -1837,7 +1843,7 @@ export default function AssignmentsPage() {
                                       {assignment.title}
                                     </div>
                                   </td>
-                                  <td style={{ ...rowCellStyle, whiteSpace: "nowrap" }}>
+                                  <td style={rowCellStyle}>
                                     {formatDate(assignment.due_date)}
                                   </td>
                                   <td style={{ ...rowCellStyle, fontWeight: 800 }}>{item.submissions}</td>

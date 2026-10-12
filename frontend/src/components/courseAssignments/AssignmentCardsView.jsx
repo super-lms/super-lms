@@ -98,11 +98,14 @@ export default function AssignmentCardsView({
 
 const assignmentGridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
   gap: "16px",
 }
 
 const assignmentCardStyle = {
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  lineHeight: 1.5,
   border: "1px solid #d7dce5",
   borderRadius: "14px",
   padding: "16px",

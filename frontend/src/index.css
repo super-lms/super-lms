@@ -303,7 +303,9 @@ td {
   padding: 14px 10px;
   border-bottom: 1px solid #e5e7eb;
   vertical-align: top;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 th {
@@ -421,4 +423,28 @@ td {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+/* Let text grow vertically instead of spilling out of page and card layouts. */
+.main-content,
+.content-area,
+.content-area :where(div, section, article, header, form) {
+  min-width: 0;
+}
+
+.main-content :where(h1, h2, h3, h4, p, a, label, span, button) {
+  overflow-wrap: anywhere;
+}
+
+.main-content :where(button, input, select, textarea) {
+  max-width: 100%;
+}
+
+.main-content button {
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.panel, .info-card, .stat-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
