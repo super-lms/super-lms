@@ -5,7 +5,7 @@ const {
 sdk.Recognizer.enableTelemetry(false);
 function createSpeechProvider(sdkClient = sdk, env = process.env) {
   function configured() {
-    return !!env.AZURE_SPEECH_KEY && /^[a-z0-9-]+$/.test(env.AZURE_SPEECH_REGION || '');
+    return /^[A-Za-z0-9+/_=-]{16,256}$/.test(env.AZURE_SPEECH_KEY || '') && /^[a-z0-9-]+$/.test(env.AZURE_SPEECH_REGION || '');
   }
   function pcmData(audio) {
     for (let offset = 12; offset + 8 <= audio.length;) {

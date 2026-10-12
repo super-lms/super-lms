@@ -105,7 +105,7 @@ function sdkFixture({
 test('continuous recognition combines every utterance in a two minute recording and excludes WAV headers', async () => {
   const f = sdkFixture(),
     provider = createSpeechProvider(f.sdk, {
-      AZURE_SPEECH_KEY: 'test-only',
+      AZURE_SPEECH_KEY: 'k'.repeat(32),
       AZURE_SPEECH_REGION: 'eastus'
     });
   const r = await provider.transcribe(wav(120));
@@ -122,7 +122,7 @@ test('absent recognition confidence requires review instead of an invented confi
     }]
   });
   assert.equal((await createSpeechProvider(f.sdk, {
-    AZURE_SPEECH_KEY: 'test-only',
+    AZURE_SPEECH_KEY: 'k'.repeat(32),
     AZURE_SPEECH_REGION: 'eastus'
   }).transcribe(wav(1))).confidence, null);
 });
@@ -134,7 +134,7 @@ test('silence, service cancellation and missing credentials do not produce trans
   }]) {
     const f = sdkFixture(opts);
     await assert.rejects(() => createSpeechProvider(f.sdk, {
-      AZURE_SPEECH_KEY: 'test-only',
+      AZURE_SPEECH_KEY: 'k'.repeat(32),
       AZURE_SPEECH_REGION: 'eastus'
     }).transcribe(wav(1)));
     assert.equal(f.closed, true);
@@ -142,4 +142,10 @@ test('silence, service cancellation and missing credentials do not produce trans
   const f = sdkFixture();
   assert.equal(createSpeechProvider(f.sdk, {}).configured(), false);
   await assert.rejects(() => createSpeechProvider(f.sdk, {}).transcribe(wav(1)), /not configured/);
+});
+
+test('clipboard prose and multiline values cannot enable the Speech service',()=>{
+ const f=sdkFixture();
+ for(const key of ['# Read Aloud assignments\nA guide to recording','too short','x'.repeat(300)])assert.equal(createSpeechProvider(f.sdk,{AZURE_SPEECH_KEY:key,AZURE_SPEECH_REGION:'canadacentral'}).configured(),false);
+ assert.equal(createSpeechProvider(f.sdk,{AZURE_SPEECH_KEY:'k'.repeat(32),AZURE_SPEECH_REGION:'canadacentral'}).configured(),true);
 });
