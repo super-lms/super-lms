@@ -7,3 +7,9 @@ test('past due requires the latest approval; revoke closes resubmission and reco
  permission={id:9,enabled:false};await assert.rejects(service.check(5,10),e=>e.code==='PAST_DUE');due=null;assert.deepEqual(await service.check(5,10),{late:false});
 });
 test('rejection middleware blocks the upload handler and fails closed on database error',async()=>{const pool={async query(sql){if(sql.startsWith('CREATE'))return {rows:[]};if(sql.startsWith('SELECT id,due_date'))return {rows:[{due_date:'2020-01-01'}]};return {rows:[]};}};const s=createSubmissionDeadline(pool);let next=false,status,body;const res={status(n){status=n;return this;},json(b){body=b;}};await s.middleware({user:{id:10,role:'student'},params:{assignmentId:5}},res,()=>{next=true;});assert.equal(next,false);assert.equal(status,403);assert.equal(body.code,'PAST_DUE');const broken=createSubmissionDeadline({query:async()=>{throw Error('offline');}});await broken.middleware({user:{id:10,role:'student'},params:{assignmentId:5}},res,()=>{next=true;});assert.equal(status,500);assert.equal(next,false);});
+test('notices are recorded only after deadline rejection and retain enrollment guard',async()=>{
+ let due=null;const notices=[];const pool={async query(sql,args){if(sql.startsWith('CREATE'))return {rows:[]};if(sql.startsWith('SELECT id,due_date'))return {rows:[{id:5,due_date:due}]};if(sql.startsWith('INSERT INTO assignment_late_blocked'))notices.push({sql,args});return {rows:[]};}};
+ const service=createSubmissionDeadline(pool);const req={user:{id:10,role:'student'},params:{assignmentId:5}};let next=0;const res={status(){return this;},json(){}};
+ await service.middleware(req,res,()=>next++);assert.equal(next,1);assert.equal(notices.length,0);
+ due='2020-01-01';await service.middleware(req,res,()=>next++);assert.equal(next,1);assert.equal(notices.length,1);assert.deepEqual(notices[0].args,[5,10]);assert.match(notices[0].sql,/class_enrollments/);assert.match(notices[0].sql,/ON CONFLICT/);
+});

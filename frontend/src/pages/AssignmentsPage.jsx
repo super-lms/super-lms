@@ -1,3 +1,4 @@
+import LateSubmissionAlerts from "../components/LateSubmissionAlerts.jsx";
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
 import { beijingDateTime, assignmentInstant, displayAssignmentTime } from "../services/assignmentTime.js";
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -1506,6 +1507,7 @@ export default function AssignmentsPage() {
       </div>
 
       <h1>Assignments</h1>
+      {isTeacherLikeRole && <LateSubmissionAlerts />}
 
       {error ? <NoticeBox type="error">{error}</NoticeBox> : null}
       {message ? <NoticeBox>{message}</NoticeBox> : null}

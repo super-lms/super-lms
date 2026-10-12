@@ -1,6 +1,16 @@
 const express=require('express');const {authenticateJWT,requireRole}=require('../../middleware/auth');
 function createLateSubmissionRouter(pool,deadlines){
  const router=express.Router();const approvalAccess=[authenticateJWT,requireRole('admin','teacher')];
+ router.get('/late-submission-alerts',...approvalAccess,async(req,res)=>{try{
+  await deadlines.ensure();
+  const result=await pool.query(`SELECT b.*,a.title,u.email AS student_email,CONCAT(u.first_name,' ',u.last_name) AS student_name,c.title AS course_title,a.due_date AS current_due_date,
+   EXISTS(SELECT 1 FROM assignment_late_permissions p WHERE p.assignment_id=b.assignment_id AND p.student_id=b.student_id AND p.enabled AND p.id=(SELECT MAX(p2.id) FROM assignment_late_permissions p2 WHERE p2.assignment_id=p.assignment_id AND p2.student_id=p.student_id)) AS approved
+   FROM assignment_late_blocked b JOIN assignments a ON a.id=b.assignment_id JOIN courses c ON c.id=a.class_id JOIN users u ON u.id=b.student_id
+   WHERE ($1='admin' OR a.teacher_id=$2 OR c.teacher_id=$2 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$2))
+   AND ($1<>'admin' OR c.school_id IS NOT DISTINCT FROM (SELECT NULLIF(to_jsonb(account)->>'school_id','')::INTEGER FROM users account WHERE id=$2))
+   ORDER BY b.last_attempt_at DESC LIMIT 100`,[req.user.role,req.user.id]);
+  res.set('Cache-Control','private, no-store');res.json({alerts:result.rows});
+ }catch(e){console.error('Late submission alerts',e);res.status(500).json({error:'Unable to load past-due submission notices.'});}});
  async function access(req){
   const id=Number(req.params.assignmentId);if(!Number.isInteger(id)||id<=0)throw Object.assign(Error('Choose an assignment.'),{status:400});
   const a=await pool.query(`SELECT a.id,a.class_id,a.due_date FROM assignments a JOIN courses c ON c.id=a.class_id WHERE a.id=$1 AND ($2='admin' OR a.teacher_id=$3 OR c.teacher_id=$3 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$3))`,[id,req.user.role,req.user.id]);
