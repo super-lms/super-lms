@@ -1,6 +1,7 @@
+import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
 import { beijingDateTime, assignmentInstant } from "../services/assignmentTime.js";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   EditAssignmentActionButton,
@@ -80,6 +81,7 @@ export default function EditAssignmentPage() {
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState("");
 
   const [scoringMethod, setScoringMethod] = useState("rubric");
+  const handleReadAloudMode = useCallback(enabled => { if (enabled) setScoringMethod("single_score_kdu"); }, []);
   const [singleScoreKnowPercent, setSingleScoreKnowPercent] = useState("25");
   const [singleScoreDoPercent, setSingleScoreDoPercent] = useState("50");
   const [singleScoreUnderstandPercent, setSingleScoreUnderstandPercent] = useState("25");
@@ -1262,6 +1264,7 @@ export default function EditAssignmentPage() {
           build the KDU rubric, set up raw-mark sections if needed, then grade students.
         </p>
 
+        <ReadAloudAssignment assignmentId={assignmentId} sectionId={sectionId} teacher onModeChange={handleReadAloudMode} />
         {message ? <EditAssignmentNoticeBox>{message}</EditAssignmentNoticeBox> : null}
         {error ? (
           <EditAssignmentNoticeBox type="error">{error}</EditAssignmentNoticeBox>

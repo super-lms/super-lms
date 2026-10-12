@@ -1,3 +1,4 @@
+import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
 import { downloadStudentWork, printStudentWork } from "../services/studentWorkExport.js";
 import { getEarnedPoints } from "../services/gradebookMarks.js";
@@ -463,6 +464,7 @@ export default function AssignmentSpeedGradingPage() {
           data.rows.find((row) => row.student_email === preferredEmail) || data.rows[0] || null;
 
         setSelectedRow(preferredRow);
+        return preferredRow;
       } else {
         setRows([]);
         setSelectedRow(null);
@@ -1411,6 +1413,7 @@ export default function AssignmentSpeedGradingPage() {
         </ActionButton>
       </div>
 
+      <ReadAloudAssignment assignmentId={assignmentId} sectionId={sectionId} teacher reviewOnly onPublished={async () => { const row = await loadGradebook(); if (row) loadKduScoresFromSelectedStudent(row); }} />
       <section className="panel">
         <div
           style={{

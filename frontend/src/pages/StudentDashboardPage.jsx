@@ -1,3 +1,4 @@
+import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import { displayAssignmentTime, beijingDateTime } from "../services/assignmentTime.js"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
@@ -282,6 +283,7 @@ function SubmissionEditor({
   resources = [],
   resourcesLoading = false,
 }) {
+  const [readAloudMode, setReadAloudMode] = useState(null)
   const [downloadingResourceId, setDownloadingResourceId] = useState("")
   const [resourceDownloadError, setResourceDownloadError] = useState("")
   const submissionStatusLabel = formatSubmissionStatus(submissionState?.submission_status || "not_submitted")
@@ -369,7 +371,8 @@ function SubmissionEditor({
         </div>
       ) : null}
 
-      {submissionLoading ? (
+      <ReadAloudAssignment key={assignment?.id} assignmentId={assignment?.id} onModeChange={setReadAloudMode} />
+      {readAloudMode === null ? <NoticeBox>Checking assignment type...</NoticeBox> : readAloudMode ? null : submissionLoading ? (
         <NoticeBox>Loading submission details...</NoticeBox>
       ) : (
         <>
@@ -1765,6 +1768,7 @@ export default function StudentDashboardPage() {
         {selectedSubmissionAssignment ? (
           <section className="panel" ref={submissionEditorRef} style={{ display: showPortalSection("submission") ? undefined : "none" }}>
             <SubmissionEditor
+              key={selectedSubmissionAssignment.id}
               assignment={selectedSubmissionAssignment}
               submissionState={selectedSubmissionState}
               submissionLoading={String(submissionLoadingId) === String(selectedSubmissionAssignmentId)}

@@ -24,8 +24,8 @@ test('approval router lets student assignment requests reach their own handlers'
  }finally{server.close();await once(server,'close');}
 });
 test('notice listing requires teacher/admin and scopes database reads to the teacher',async()=>{
- let readArgs;const pool={async query(sql,args){readArgs=args;assert.match(sql,/a.teacher_id=\$2/);assert.match(sql,/c.school_id IS NOT DISTINCT FROM/);return {rows:[{assignment_id:5,student_id:10}]};}};
+ let readArgs;const pool={async query(sql,args){readArgs=args;assert.match(sql,/c.teacher_id=\$1/);assert.doesNotMatch(sql,/\$\d='admin'/);assert.match(sql,/selected_cohort.id=\$2/);return {rows:[{assignment_id:5,student_id:10}]};}};
  const app=express();app.use('/a',createLateSubmissionRouter(pool,{ensure:async()=>{}}));const server=app.listen(0,'127.0.0.1');await once(server,'listening');const url=`http://127.0.0.1:${server.address().port}/a/late-submission-alerts`;
  const headers=role=>({Authorization:`Bearer ${jwt.sign({id:3,role},process.env.JWT_SECRET||'super-lms-development-secret-change-before-production')}`});
- try{assert.equal((await fetch(url,{headers:headers('student')})).status,403);assert.equal(readArgs,undefined);const r=await fetch(url,{headers:headers('teacher')});assert.equal(r.status,200);assert.equal((await r.json()).alerts.length,1);assert.deepEqual(readArgs,['teacher',3]);}finally{server.close();await once(server,'close');}
+ try{assert.equal((await fetch(url,{headers:headers('student')})).status,403);assert.equal(readArgs,undefined);const r=await fetch(url,{headers:headers('teacher')});assert.equal(r.status,200);assert.equal((await r.json()).alerts.length,1);assert.deepEqual(readArgs,[3,null,false]);}finally{server.close();await once(server,'close');}
 });
