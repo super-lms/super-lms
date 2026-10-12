@@ -2,12 +2,14 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {createLateSubmissionRouter}=require('./lateSubmissionRoutes');
 
-for(const role of ['admin','teacher']){
- test(`${role} notices use course teaching assignments without a role or author bypass`,async()=>{
+for(const role of ['admin','teacher']) for(const scope of ['master','section']){
+ test(`${role} ${scope} notices respect teaching assignments and selected class`,async()=>{
   let queried=false;
   const pool={query:async(sql,args)=>{
    queried=true;
-   assert.deepEqual(args,[42]);
+   assert.deepEqual(args,[42,169,scope==='master']);
+   assert.match(sql,/c\.id=\$2 OR c\.master_course_id=\$2/);
+   assert.match(sql,/selected_enrollment\.student_user_id=b\.student_id AND selected_cohort\.id=\$2 AND selected_cohort\.master_course_id=c\.id/);
    assert.doesNotMatch(sql,/\$\d\s*=\s*'admin'|a\.teacher_id\s*=/);
    assert.match(sql,/c\.teacher_id=\$1/);
    assert.match(sql,/ct\.course_id IN\(c\.id,COALESCE\(c\.master_course_id,c\.id\)\)/);
@@ -22,7 +24,7 @@ for(const role of ['admin','teacher']){
   const route=router.stack.find(layer=>layer.route?.path==='/late-submission-alerts').route;
   let body;
   const res={set(){return this},json(value){body=value},status(){throw Error('Unexpected failure')}};
-  await route.stack.at(-1).handle({user:{id:42,role}},res);
+  await route.stack.at(-1).handle({user:{id:42,role},query:{classId:'169',scope}},res);
   assert.ok(queried);assert.deepEqual(body,{alerts:[{assignment_id:7}]});
  });
 }

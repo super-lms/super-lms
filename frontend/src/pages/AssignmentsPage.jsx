@@ -1516,13 +1516,13 @@ export default function AssignmentsPage() {
       {isTeacherLikeRole && (
         <SectionHeader
           title="My Teacher Workspace"
-          subtitle="Past-due notices show only your teaching courses and students who still need approval."
+          subtitle="Past-due notices show only the selected course or class and students who still need approval."
           action={normalizedRole === "admin" ? (
             <ActionButton quiet onClick={() => navigate("/admin")}>Open Admin View</ActionButton>
           ) : null}
         />
       )}
-      {isTeacherLikeRole && <LateSubmissionAlerts />}
+      {isTeacherLikeRole && selectedClassId && <LateSubmissionAlerts key={`${selectedClassId}:${isMasterWorkspace}`} classId={isMasterWorkspace ? selectedContentClassId : selectedClassId} masterView={isMasterWorkspace} />}
 
       {error ? <NoticeBox type="error">{error}</NoticeBox> : null}
       {message ? <NoticeBox>{message}</NoticeBox> : null}
