@@ -171,7 +171,7 @@ export default function GradebookPage() {
     }
   }
 
-  async function loadKduGradebook(courseId) {
+  async function loadKduGradebook(courseId, preserveSaved = false) {
     if (!courseId) {
       setGradebook(null);
       return;
@@ -190,9 +190,10 @@ export default function GradebookPage() {
 
       setGradebook(data);
       setStatus("");
+      return data;
     } catch (error) {
       console.error(error);
-      setGradebook(null);
+      if (!preserveSaved) setGradebook(null);
       setStatus(error.message || "Failed to load KDU gradebook");
     }
   }
@@ -383,13 +384,19 @@ export default function GradebookPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Failed to save mark");
 
+      // Keep the confirmed server mark visible while the full gradebook refreshes.
+      setGradebook(current => current ? {...current, students: current.students.map(row =>
+        Number(row.student_user_id) !== Number(student.student_user_id) ? row : {...row,
+          assignment_scores: row.assignment_scores.map(score => Number(score.assignment_id) !== Number(assignment.id) ? score :
+            {...score, score: data.percent_score, rubric_selection: data.rubric_selection})}
+      )} : current);
       setSpreadsheetMarkDrafts((current) => {
         const next = { ...current };
         delete next[key];
         return next;
       });
       setCellSaveStatus((current) => ({ ...current, [key]: "Saved ✓" }));
-      if (!batch) await loadKduGradebook(selectedCourseId);
+      if (!batch) await loadKduGradebook(selectedCourseId, true);
       if (advance) {
         requestAnimationFrame(() => {
           // Do not steal focus if the teacher clicked elsewhere while saving.

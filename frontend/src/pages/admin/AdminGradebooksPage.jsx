@@ -1,8 +1,9 @@
-import {useSearchParams} from 'react-router-dom'
+import {useSearchParams, useNavigate} from 'react-router-dom'
 import { useEffect, useMemo, useState } from "react"
 import authFetch from "../../services/authFetch"
 
 export default function AdminGradebooksPage() {
+  const navigate = useNavigate()
   const [params] = useSearchParams()
   const requestedClassId = params.get("classId") || ""
   const [classes, setClasses] = useState([])
@@ -144,6 +145,10 @@ export default function AdminGradebooksPage() {
                 </option>
               ))}
             </select>
+            <button type="button" disabled={!selectedClassId} onClick={() => navigate(`/gradebook?classId=${encodeURIComponent(selectedClassId)}&view=spreadsheet`)}
+              style={{marginTop:12,padding:"12px 16px",borderRadius:10,border:"1px solid #111827",background:"#111827",color:"white",fontWeight:800,cursor:"pointer"}}>
+              Open Editable Spreadsheet
+            </button>
           </div>
 
           <div

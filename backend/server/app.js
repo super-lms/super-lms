@@ -1,3 +1,4 @@
+const {gradebookSubmissionIndex} = require('./gradebookSubmissions');
 const {loadCourseRisk} = require('./dashboardRisk');
 const express = require("express");
 const crypto = require("crypto");
@@ -13343,6 +13344,8 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
     const submissionsResult = await pool.query(
       `
       SELECT
+        s.id,
+        s.student_id,
         s.assignment_id,
         LOWER(s.student_email) AS student_email,
         s.score,
@@ -13356,20 +13359,11 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
       [contentClassId]
     );
 
-    const submissionsByStudentAssignment = new Map();
+    const submissionsByStudentAssignment = gradebookSubmissionIndex(submissionsResult.rows);
 
-    for (const submission of submissionsResult.rows) {
-      submissionsByStudentAssignment.set(
-        `${submission.student_email}:${submission.assignment_id}`,
-        submission
-      );
-    }
-
-    const students = studentsResult.rows.map((student) => {
+const students = studentsResult.rows.map((student) => {
       const assignmentScores = assignmentsResult.rows.map((assignment) => {
-        const submission = submissionsByStudentAssignment.get(
-          `${String(student.student_email).toLowerCase()}:${assignment.id}`
-        );
+        const submission = submissionsByStudentAssignment.get(student, assignment.id);
 
         return {
           assignment_id: assignment.id,
