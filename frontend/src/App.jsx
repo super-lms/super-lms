@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 import { getWorkspaceMode, usesAdminWorkspace } from "./services/workspaceMode";
 import Layout from "./components/Layout.jsx";
+import StudentAnnouncementAlert from "./components/StudentAnnouncementAlert.jsx";
 import SurveyStudio from "./pages/admin/SurveyStudio.jsx";
 import AdminLayout from "./components/admin/AdminLayout.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
@@ -104,7 +105,7 @@ function AdminProtectedLayout() {
 
 function App() {
   return (
-    <Routes>
+    <><StudentAnnouncementAlert /><Routes>
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/quizzes/:surveyId" element={<ProtectedRoute allowedRoles={["student", "teacher", "admin"]}><SurveyStudio publicSurvey quizMode /></ProtectedRoute>} />
       <Route path="/surveys/:surveyId" element={<SurveyStudio publicSurvey />} />
@@ -268,7 +269,7 @@ function App() {
       />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+    </Routes></>
   );
 }
 

@@ -21,7 +21,12 @@ function createAnnouncementsRouter(pool) {
       ADD COLUMN IF NOT EXISTS publish_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT true,
       ADD COLUMN IF NOT EXISTS course_scope TEXT NOT NULL DEFAULT 'section',
-      ADD COLUMN IF NOT EXISTS audiences JSONB;`).catch(error => { ready = null; throw error; });
+      ADD COLUMN IF NOT EXISTS audiences JSONB;
+      CREATE TABLE IF NOT EXISTS school_announcement_acknowledgements (
+      announcement_id INTEGER NOT NULL REFERENCES school_announcements(id) ON DELETE CASCADE,
+      student_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      announcement_version TIMESTAMPTZ NOT NULL, acknowledged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (announcement_id,student_user_id));`).catch(error => { ready = null; throw error; });
     return ready;
   }
   router.use(authenticateJWT, requireRole('admin','teacher','student'));
@@ -51,6 +56,43 @@ function createAnnouncementsRouter(pool) {
       )
     ))`;
   const visibilityArgs = req => [req.schoolId, req.user.role, req.user.id];
+  router.get('/pending',requireRole('student'),async(req,res,next)=>{
+    try {
+      const result=await pool.query(`SELECT a.id,a.title,a.body,a.updated_at,a.created_at,a.event_date,
+        CONCAT(u.first_name,' ',u.last_name) AS author_name,
+        COALESCE((SELECT json_agg(json_build_object('id',f.id,'filename',f.filename) ORDER BY f.id)
+          FROM school_announcement_files f WHERE f.announcement_id=a.id),'[]'::json) AS files
+        FROM school_announcements a JOIN users u ON u.id=a.author_id
+        WHERE ${visibility} AND a.is_published=true
+          AND (a.publish_at IS NULL OR a.publish_at <= NOW())
+          AND (a.expires_at IS NULL OR a.expires_at > NOW())
+          AND NOT EXISTS (SELECT 1 FROM school_announcement_acknowledgements ack
+            WHERE ack.announcement_id=a.id AND ack.student_user_id=$3
+              AND ack.announcement_version=date_trunc('milliseconds',a.updated_at))
+        ORDER BY a.pinned DESC,COALESCE(a.publish_at,a.created_at),a.id`,visibilityArgs(req));
+      res.set('Cache-Control','private, no-store');res.json(result.rows);
+    }catch(error){next(error);}
+  });
+  router.post('/:id/acknowledge',requireRole('student'),express.json(),async(req,res,next)=>{
+    const id=Number(req.params.id),version=req.body?.version;
+    if(!Number.isSafeInteger(id)||id<=0||typeof version!=='string'||!Number.isFinite(Date.parse(version)))
+      return res.status(400).json({error:'Choose a valid announcement version.'});
+    try {
+      // Visibility is checked again when acknowledging, not just when fetching.
+      const result=await pool.query(`INSERT INTO school_announcement_acknowledgements
+        (announcement_id,student_user_id,announcement_version,acknowledged_at)
+        SELECT a.id,$3,date_trunc('milliseconds',a.updated_at),NOW() FROM school_announcements a
+        WHERE a.id=$4 AND ${visibility} AND a.is_published=true
+          AND (a.publish_at IS NULL OR a.publish_at <= NOW())
+          AND (a.expires_at IS NULL OR a.expires_at > NOW())
+          AND date_trunc('milliseconds',a.updated_at)=$5::TIMESTAMPTZ
+        ON CONFLICT (announcement_id,student_user_id) DO UPDATE
+          SET announcement_version=EXCLUDED.announcement_version,acknowledged_at=EXCLUDED.acknowledged_at
+        RETURNING announcement_id`,[...visibilityArgs(req),id,version]);
+      if(!result.rows.length)return res.status(409).json({error:'This announcement has changed or is no longer available. Refreshing the announcements.'});
+      res.json({success:true,announcement_id:id});
+    }catch(error){next(error);}
+  });
   router.get('/', async (req,res,next) => {
     try {
       const result = await pool.query(`SELECT a.*, (SELECT string_agg(CASE WHEN target->>'scope'='master' THEN COALESCE(c.master_title,c.title) || ' — Master (all sections)' ELSE c.title END, ', ' ORDER BY c.title) FROM jsonb_array_elements(COALESCE(a.audiences,jsonb_build_array(jsonb_build_object('course_id',a.course_id,'scope',a.course_scope)))) target JOIN courses c ON c.id=(target->>'course_id')::INTEGER) AS class_name, CONCAT(u.first_name, ' ', u.last_name) AS author_name,
