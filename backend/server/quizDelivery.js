@@ -26,7 +26,7 @@ function createQuizDelivery(pool){
   await ensure();const client=await pool.connect();try{
    await client.query('BEGIN');const q=await owned(client,id,req);const base=q.delivery_course_id;
    if(!base)throw Error('Save master course settings first.');
-   const allowed=(await client.query('SELECT id FROM courses WHERE master_course_id=$1',[base])).rows.map(c=>Number(c.id));
+   const allowed=(await client.query('SELECT id FROM courses WHERE master_course_id=$1 OR id=$1',[base])).rows.map(c=>Number(c.id));
    if(rows.some(r=>!allowed.includes(r.targetId)))throw Error('Choose cohorts in this master course.');
    for(const r of rows){if(r.remove)await client.query("DELETE FROM teacher_quiz_policies WHERE quiz_id=$1 AND scope='cohort' AND target_id=$2",[id,r.targetId]);
     else await client.query("INSERT INTO teacher_quiz_policies(quiz_id,scope,target_id,config) VALUES($1,'cohort',$2,$3::jsonb) ON CONFLICT(quiz_id,scope,target_id) DO UPDATE SET config=EXCLUDED.config",[id,r.targetId,JSON.stringify(r.config)]);}

@@ -26,3 +26,9 @@ test('administrator can inspect another teacher quiz policies with mandatory sch
  const pool={async query(sql,args){if(sql.startsWith('ALTER'))return {rows:[]};if(sql.startsWith('SELECT * FROM teacher_quizzes')){assert.equal(args[1],null);assert.equal(args[2],7);assert.match(sql,/school_id IS NOT DISTINCT FROM \$3/);assert.match(sql,/author_id=\$2 OR \$2::integer IS NULL/);return {rows:args[0]===id?[{id,author_id:3}]:[]};}if(sql.startsWith('SELECT * FROM teacher_quiz_policies'))return {rows:[]};throw Error(sql);}};
  const d=createQuizDelivery(pool);const req={user:{id:8,role:'admin'},schoolId:7};assert.equal((await d.options(id,req)).courseId,undefined);await assert.rejects(d.options('other',req),/Quiz unavailable/);
 });
+
+test('root A class can have its own schedule like its child cohorts',async()=>{
+ const calls=[];const pool={async query(sql,args){calls.push({sql,args});if(sql.startsWith('ALTER')||['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[]};if(sql.startsWith('SELECT * FROM teacher_quizzes'))return {rows:[{delivery_course_id:1}]};if(sql.startsWith('SELECT id FROM courses WHERE master_course_id')){assert.match(sql,/OR id=\$1/);return {rows:[{id:1},{id:2}]};}if(sql.startsWith('INSERT'))return {rows:[]};throw Error(sql);},async connect(){return {query:(...args)=>pool.query(...args),release(){}};}};
+ await createQuizDelivery(pool).configure(id,{user:{id:3},schoolId:7},{scope:'cohorts',rows:[{targetId:1,config:{maxAttempts:1,timeLimitMinutes:35}}]});
+ assert.equal(calls.find(c=>c.sql.startsWith('INSERT')).args[1],1);assert.equal(calls.at(-1).sql,'COMMIT');
+});
