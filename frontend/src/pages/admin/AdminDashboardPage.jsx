@@ -17,6 +17,7 @@ export default function AdminDashboardPage() {
 
       <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
         <AdminCard title="Courses" value="School-wide" onClick={() => navigate("/admin/courses")} />
+        <AdminCard title="Quizzes & Tests" value="All teachers’ quizzes" onClick={() => navigate("/admin/quizzes")} />
         <AdminCard title="Teachers" value="Faculty view" onClick={() => navigate("/admin/teachers")} />
         <AdminCard title="Students" value="Master directory" onClick={() => navigate("/admin/students")} />
         <AdminCard title="Gradebooks" value="Cross-course" onClick={() => navigate("/admin/gradebooks")} />

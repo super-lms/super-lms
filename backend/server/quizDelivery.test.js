@@ -21,3 +21,8 @@ test('class schedule batch validates all cohorts and commits distinct windows to
  foreign=true;await assert.rejects(service.configure(id,req,{scope:'cohorts',rows:[row(2,'08')]}),/Quiz unavailable/);
  await assert.rejects(service.configure(id,req,{scope:'cohorts',rows:[row(2,'08'),row(2,'10')]}),/once/);
 });
+
+test('administrator can inspect another teacher quiz policies with mandatory school scope',async()=>{
+ const pool={async query(sql,args){if(sql.startsWith('ALTER'))return {rows:[]};if(sql.startsWith('SELECT * FROM teacher_quizzes')){assert.equal(args[1],null);assert.equal(args[2],7);assert.match(sql,/school_id IS NOT DISTINCT FROM \$3/);assert.match(sql,/author_id=\$2 OR \$2::integer IS NULL/);return {rows:args[0]===id?[{id,author_id:3}]:[]};}if(sql.startsWith('SELECT * FROM teacher_quiz_policies'))return {rows:[]};throw Error(sql);}};
+ const d=createQuizDelivery(pool);const req={user:{id:8,role:'admin'},schoolId:7};assert.equal((await d.options(id,req)).courseId,undefined);await assert.rejects(d.options('other',req),/Quiz unavailable/);
+});

@@ -162,6 +162,7 @@ function App() {
 
       <Route element={<AdminProtectedLayout />}>
         <Route path="/admin" element={<AdminDashboardPage />} />
+        <Route path="/admin/quizzes" element={<SurveyStudio quizMode adminView />} />
         <Route path="/admin/surveys" element={<SurveyStudio />} />
         <Route path="/admin/courses" element={<AdminCoursesPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
