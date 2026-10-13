@@ -1,3 +1,5 @@
+import {observerCourseText, observerAttentionItems, observerWorkStatus, observerCourseLabel} from '../services/observerCourseView.js'
+import {beijingDateTime} from '../services/assignmentTime.js'
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
@@ -9,13 +11,14 @@ function toArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-function Card({ children, onClick, active = false }) {
+function Card({ children, onClick, disabled = false, active = false }) {
   const Tag = onClick ? "button" : "div"
 
   return (
     <Tag
       type={onClick ? "button" : undefined}
       onClick={onClick}
+      disabled={onClick ? disabled : undefined}
       style={{
         border: active ? "2px solid #111827" : "1px solid #d7dce5",
         borderRadius: "16px",
@@ -33,9 +36,9 @@ function Card({ children, onClick, active = false }) {
   )
 }
 
-function MetricCard({ title, value }) {
+function MetricCard({ title, value, onClick, disabled = false }) {
   return (
-    <Card>
+    <Card onClick={onClick} disabled={disabled}>
       <div style={{ fontWeight: 800, marginBottom: "8px" }}>{title}</div>
       <div style={{ fontSize: "2rem", fontWeight: 900 }}>{value}</div>
     </Card>
@@ -188,8 +191,17 @@ export default function ObserverPage() {
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("")
   const [viewMode, setViewMode] = useState("dashboard")
-  const [language, setLanguage] = useState("en")
-  const t = translations[language] || translations.en
+  const [language, setLanguage] = useState(() => {
+    try {return localStorage.getItem("super-lms-observer-language") === "zh" ? "zh" : "en"} catch {return "en"}
+  })
+  useEffect(() => {try {localStorage.setItem("super-lms-observer-language", language)} catch {}}, [language])
+  const t = {...(translations[language] || translations.en), ...(observerCourseText[language] || observerCourseText.en)}
+  const dueText = value => value ? `${beijingDateTime(value).replace("T", " ")} ${language === "zh" ? "北京时间" : "Beijing time"}` : t.noDueDate
+  function openCourseSection(id) {
+    const section = document.getElementById(id)
+    section?.scrollIntoView({behavior:"smooth", block:"start"})
+    section?.querySelector("h2")?.focus({preventScroll:true})
+  }
   const [homeroomRoster, setHomeroomRoster] = useState([])
   const [homeroomSearch, setHomeroomSearch] = useState("")
   const [homeroomGrade, setHomeroomGrade] = useState("")
@@ -425,7 +437,7 @@ export default function ObserverPage() {
   const readOnlyGradedItems = readOnlyCourseItems.filter(({ submission }) =>
     submission?.score !== null && submission?.score !== undefined && submission?.score !== ""
   )
-  const readOnlyMissingItems = readOnlyCourseItems.filter(({ submissionStatus }) => submissionStatus !== "submitted")
+  const readOnlyMissingItems = observerAttentionItems(readOnlyCourseItems)
   const courseDashboardReady = !courseDashboardLoading && !courseDashboardError && courseDashboard !== null
   const readOnlyAverageScore = readOnlyGradedItems.length
     ? Math.round(readOnlyGradedItems.reduce((sum, item) => sum + Number(item.submission.score || 0), 0) / readOnlyGradedItems.length)
@@ -434,10 +446,7 @@ export default function ObserverPage() {
   const readOnlyCurrentStanding = readOnlyGradebook?.current_percent ?? readOnlyAverageScore
 
   function openReadOnlyGradebook() {
-    document.getElementById("observer-student-gradebook")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    })
+    openCourseSection("observer-student-gradebook")
   }
 
   const allVisibleSubmissions = observerData.submissions
@@ -885,9 +894,9 @@ export default function ObserverPage() {
             </p>
 
             <div style={metricGridStyle}>
-              <MetricCard title={t.linkedStudents} value={uniqueStudents.length} />
-              <MetricCard title={t.visibleAssignments} value={allVisibleSubmissions.length} />
-              <MetricCard title={t.needsAttention} value={allMissingSubmissions.length} />
+              <MetricCard title={t.linkedStudents} value={uniqueStudents.length} onClick={() => setViewMode("students")} />
+              <MetricCard title={t.visibleAssignments} value={allVisibleSubmissions.length} onClick={() => setViewMode("students")} />
+              <MetricCard title={t.needsAttention} value={allMissingSubmissions.length} onClick={() => setViewMode("attention")} />
               <MetricCard title={t.averageScore} value={allAverageScore === null ? "N/A" : `${allAverageScore}%`} />
             </div>
           </section>
@@ -908,7 +917,7 @@ export default function ObserverPage() {
                 <div style={{ marginTop: "8px", color: "#4b5563" }}>
                   {t.needsAttentionHelp}
                 </div>
-                <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.reviewStudents} {attentionStudents.length} Student{attentionStudents.length === 1 ? "" : "s"} →</div>
+                <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.reviewStudents} {attentionStudents.length} {language === "zh" ? "名学生" : `Student${attentionStudents.length === 1 ? "" : "s"}`} →</div>
               </Card>
 
               <Card onClick={viewFeedback}>
@@ -955,7 +964,7 @@ export default function ObserverPage() {
                       {submission.class_name || t.course} • {submission.assignment_title || t.assignment}
                     </div>
                     <div style={{ marginTop: "6px" }}>
-                      {submission.feedback ? `Feedback: ${submission.feedback}` : submission.content || t.studentActivityRecorded}
+                      {submission.feedback ? `${t.feedback}: ${submission.feedback}` : submission.content || t.studentActivityRecorded}
                     </div>
                   </Card>
                 ))}
@@ -974,19 +983,19 @@ export default function ObserverPage() {
           <h2 style={sectionTitleStyle}>{t.needsAttentionTitle}</h2>
 
           {attentionStudents.length === 0 ? (
-            <p>No students currently have missing or ungraded work.</p>
+            <p>{t.noAttention}</p>
           ) : (
             <div style={cardGridStyle}>
               {attentionStudents.map((student) => (
                 <Card key={student.student_email} onClick={() => openStudentByEmail(student.student_email)}>
                   <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{student.student_name}</div>
                   <div style={{ marginTop: "6px", color: "#4b5563" }}>
-                    {student.count} item{student.count === 1 ? "" : "s"} need attention
+                    {language === "zh" ? `${student.count} 项作业需要关注` : `${student.count} item${student.count === 1 ? "" : "s"} need attention`}
                   </div>
                   <div style={{ marginTop: "6px", color: "#4b5563" }}>
-                    {Array.from(student.courses).slice(0, 2).join(", ") || "Course details available"}
+                    {Array.from(student.courses).slice(0, 2).map(name => observerCourseLabel(name, language)).join(", ") || (language === "zh" ? "可查看课程详情" : "Course details available")}
                   </div>
-                  <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Student →</div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openStudent}</div>
                 </Card>
               ))}
             </div>
@@ -1018,7 +1027,7 @@ export default function ObserverPage() {
                   <div style={{ marginTop: "8px", lineHeight: 1.5 }}>
                     {submission.feedback}
                   </div>
-                  <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Student →</div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openStudent}</div>
                 </Card>
               ))}
             </div>
@@ -1122,8 +1131,8 @@ export default function ObserverPage() {
 
           {uniqueStudents.length === 0 ? (
             <div style={emptyStateStyle}>
-              <div style={emptyStateTitleStyle}>No linked students found.</div>
-              <p style={emptyStateTextStyle}>Ask the school office to link students to this observer email. Once linked, students will appear here automatically.</p>
+              <div style={emptyStateTitleStyle}>{t.noStudents}</div>
+              <p style={emptyStateTextStyle}>{t.noStudentsHelp}</p>
             </div>
           ) : (
             <div style={cardGridStyle}>
@@ -1131,7 +1140,7 @@ export default function ObserverPage() {
                 <Card key={student.student_email} onClick={() => openStudent(student)}>
                   <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{student.student_name}</div>
                   <div style={{ marginTop: "6px", color: "#4b5563" }}>{student.student_email}</div>
-                  <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Student →</div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openStudent}</div>
                 </Card>
               ))}
             </div>
@@ -1145,26 +1154,26 @@ export default function ObserverPage() {
             {t.backToStudents}
           </button>
 
-          <div style={contextLabelStyle}>Student</div>
+          <div style={contextLabelStyle}>{t.student}</div>
           <h2 style={sectionTitleStyle}>{selectedStudent.student_name}</h2>
           <p style={{ marginTop: 0, color: "#4b5563" }}>
-            Choose a course for this student to view progress, assignments, grades, feedback, and missing work.
+            {t.chooseCourse}
           </p>
 
           {coursesForSelectedStudent.length === 0 ? (
             <div style={emptyStateStyle}>
-              <div style={emptyStateTitleStyle}>No courses found for this student.</div>
-              <p style={emptyStateTextStyle}>This student does not currently have visible course records for this observer account.</p>
+              <div style={emptyStateTitleStyle}>{t.noCourses}</div>
+              <p style={emptyStateTextStyle}>{t.noCoursesHelp}</p>
             </div>
           ) : (
             <div style={cardGridStyle}>
               {coursesForSelectedStudent.map((course) => (
                 <Card key={course.class_id} onClick={() => openCourse(course)}>
-                  <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{course.class_name}</div>
+                  <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{observerCourseLabel(course.class_name, language)}</div>
                   <div style={{ marginTop: "8px", color: "#4b5563" }}>
-                    Course progress and learning evidence.
+                    {t.courseEvidence}
                   </div>
-                  <div style={{ marginTop: "12px", fontWeight: 800 }}>Open Course →</div>
+                  <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openCourse}</div>
                 </Card>
               ))}
             </div>
@@ -1184,35 +1193,36 @@ export default function ObserverPage() {
               </button>
             </div>
 
-            <div style={contextLabelStyle}>Course</div>
-            <h2 style={sectionTitleStyle}>{selectedCourse.class_name}</h2>
+            <div style={contextLabelStyle}>{t.course}</div>
+            <h2 style={sectionTitleStyle}>{observerCourseLabel(selectedCourse.class_name, language)}</h2>
             <div style={{ marginBottom: "12px" }}>
-              <div style={contextLabelStyle}>Student</div>
+              <div style={contextLabelStyle}>{t.student}</div>
               <div style={{ fontSize: "1.05rem", fontWeight: 900 }}>{selectedStudent.student_name}</div>
             </div>
             <p style={{ marginTop: 0, color: "#4b5563" }}>
-              Course progress, assignments, grades, feedback, and learning evidence for this student.
+              {t.courseIntro}
             </p>
 
             <div style={metricGridStyle}>
-              <MetricCard title="Visible Assignments" value={courseDashboardReady ? readOnlyCourseItems.length : "—"} />
-              <MetricCard title="Missing / Needs Attention" value={courseDashboardReady ? readOnlyMissingItems.length : "—"} />
-              <MetricCard title="Current Standing" value={readOnlyCurrentStanding === null ? "N/A" : formatPercent(readOnlyCurrentStanding)} />
-              <MetricCard title="Lessons" value={toArray(courseDashboard?.lessons).length} />
+              <MetricCard title={t.visibleAssignments} value={courseDashboardReady ? readOnlyCourseItems.length : "—"} disabled={!courseDashboardReady} onClick={() => openCourseSection("observer-student-work")} />
+              <MetricCard title={t.needsAttention} value={courseDashboardReady ? readOnlyMissingItems.length : "—"} disabled={!courseDashboardReady} onClick={() => openCourseSection("observer-student-attention")} />
+              <MetricCard title={t.currentStanding} value={readOnlyCurrentStanding === null ? t.notAvailable : formatPercent(readOnlyCurrentStanding)} disabled={!courseDashboardReady} onClick={openReadOnlyGradebook} />
+              <MetricCard title={t.lessons} value={toArray(courseDashboard?.lessons).length} disabled={!courseDashboardReady} onClick={() => openCourseSection("observer-student-lessons")} />
             </div>
 
+            <p style={{color:"#4b5563"}}>{t.attentionHelp}</p>
             <div style={{ ...buttonRowStyle, marginTop: "16px" }}>
               <button type="button" onClick={openReadOnlyGradebook} style={actionButtonStyle}>
-                Open Read-only Gradebook
+                {t.openGradebook}
               </button>
             </div>
 
-            {courseDashboardLoading ? <p style={{ fontWeight: 800 }}>Loading the full course view…</p> : null}
+            {courseDashboardLoading ? <p style={{ fontWeight: 800 }}>{t.loadingCourse}</p> : null}
             {courseDashboardError ? (
               <div style={{ ...emptyStateStyle, borderColor: "#fca5a5", background: "#fff7f7" }}>
-                <div style={{ ...emptyStateTitleStyle, color: "#991b1b" }}>Course records could not be loaded.</div>
+                <div style={{ ...emptyStateTitleStyle, color: "#991b1b" }}>{t.courseLoadError}</div>
                 <p style={emptyStateTextStyle}>{courseDashboardError}</p>
-                <p style={emptyStateTextStyle}>Restart the backend server, then reopen this course.</p>
+                <p style={emptyStateTextStyle}>{t.retryHelp}</p>
               </div>
             ) : null}
           </section>
@@ -1220,33 +1230,33 @@ export default function ObserverPage() {
           <section id="observer-student-gradebook" style={{ ...sectionStyle, scrollMarginTop: "20px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
               <div>
-                <h2 style={sectionTitleStyle}>Read-only Student Gradebook</h2>
+                <h2 tabIndex={-1} style={sectionTitleStyle}>{t.gradebookTitle}</h2>
                 <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
-                  This is the student’s official course-grade view. Homeroom teachers, parents, and observers can
-                  review it, but only the BC course teacher can enter or change marks.
+                  {t.gradebookHelp}
                 </p>
               </div>
               <button type="button" onClick={() => window.print()} style={backButtonStyle}>
-                Print Gradebook
+                {t.printGradebook}
               </button>
             </div>
 
             {!courseDashboardReady ? (
               <div style={emptyStateStyle}>
-                <div style={emptyStateTitleStyle}>Waiting for gradebook records…</div>
-                <p style={emptyStateTextStyle}>The weighted course results will appear when loading is complete.</p>
+                <div style={emptyStateTitleStyle}>{t.waitingGradebook}</div>
+                <p style={emptyStateTextStyle}>{t.waitingGradebookHelp}</p>
               </div>
             ) : (
               <>
                 <div style={metricGridStyle}>
-                  <MetricCard title="Current Standing" value={readOnlyGradebook?.current_percent == null ? "N/A" : formatPercent(readOnlyGradebook.current_percent)} />
-                  <MetricCard title="Proficiency" value={readOnlyGradebook?.proficiency || "Not available"} />
-                  <MetricCard title="Graded Weight" value={formatPercent(readOnlyGradebook?.graded_weight_percent || 0)} />
-                  <MetricCard title="Earned Course Points" value={formatPercent(readOnlyGradebook?.earned_course_points || 0)} />
+                  <MetricCard title={t.currentStanding} value={readOnlyGradebook?.current_percent == null ? "N/A" : formatPercent(readOnlyGradebook.current_percent)} />
+                  <MetricCard title={t.proficiency} value={t[readOnlyGradebook?.proficiency] || readOnlyGradebook?.proficiency || t.notAvailable} />
+                  <MetricCard title={t.gradedWeight} value={formatPercent(readOnlyGradebook?.graded_weight_percent || 0)} />
+                  <MetricCard title={t.earnedPoints} value={formatPercent(readOnlyGradebook?.earned_course_points || 0)} />
                 </div>
 
+                <p style={{color:"#4b5563",lineHeight:1.6}}>{language === "zh" ? "当前课程成绩仅根据已评分的作业计算。已评分权重表示这些作业占整门课程的比例；课程加权分表示已计入总成绩的分数。尚未评分不等于零分。" : "Current standing uses graded work only. Graded weight is the share of the course already assessed; earned course points are its contribution to the full course. Unmarked work is not a zero."}</p>
                 <div style={{ marginTop: "18px" }}>
-                  <h3 style={{ margin: "0 0 10px", fontSize: "1.15rem" }}>KDU Evidence Snapshot</h3>
+                  <h3 style={{ margin: "0 0 10px", fontSize: "1.15rem" }}>{t.kduSnapshot}</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
                     {[
                       ["KNOW", readOnlyGradebook?.kdu_summary?.KNOW],
@@ -1254,19 +1264,19 @@ export default function ObserverPage() {
                       ["UNDERSTAND", readOnlyGradebook?.kdu_summary?.UNDERSTAND],
                     ].map(([label, value]) => (
                       <Card key={label}>
-                        <div style={{ fontWeight: 900 }}>{label}</div>
+                        <div style={{ fontWeight: 900 }}>{t[label] || label}</div>
                         <div style={{ marginTop: "6px", fontSize: "1.5rem", fontWeight: 900 }}>{formatKdu(value)}</div>
-                        <div style={{ marginTop: "4px", color: "#4b5563" }}>Average evidence level out of 6</div>
+                        <div style={{ marginTop: "4px", color: "#4b5563" }}>{t.kduHelp}</div>
                       </Card>
                     ))}
                   </div>
                 </div>
 
                 <div style={{ marginTop: "20px" }}>
-                  <h3 style={{ margin: "0 0 10px", fontSize: "1.15rem" }}>Grading Pathways and Evidence Tiers</h3>
+                  <h3 style={{ margin: "0 0 10px", fontSize: "1.15rem" }}>{t.pathways}</h3>
                   {toArray(readOnlyGradebook?.group_breakdown).length === 0 ? (
                     <div style={emptyStateStyle}>
-                      <div style={emptyStateTitleStyle}>No grading pathways are available for this course.</div>
+                      <div style={emptyStateTitleStyle}>{t.noPathways}</div>
                     </div>
                   ) : (
                     <div style={{ display: "grid", gap: "10px" }}>
@@ -1275,10 +1285,10 @@ export default function ObserverPage() {
                           <div style={{ fontWeight: 900, fontSize: "1.05rem" }}>{group.category_name}</div>
                           <div style={{ marginTop: "4px", color: "#4b5563", fontWeight: 700 }}>{group.subcategory_name}</div>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: "8px", marginTop: "12px" }}>
-                            <InfoLine label="Course Weight" value={formatPercent(group.course_weight_percent)} />
-                            <InfoLine label="Graded Assignments" value={`${group.graded_assignment_count} of ${group.assignment_count}`} />
-                            <InfoLine label="Tier Average" value={group.average_score == null ? "Not graded" : formatPercent(group.average_score)} />
-                            <InfoLine label="Course Contribution" value={formatPercent(group.earned_course_points)} />
+                            <InfoLine label={t.courseWeight} value={formatPercent(group.course_weight_percent)} />
+                            <InfoLine label={t.gradedAssignments} value={`${group.graded_assignment_count} ${t.of} ${group.assignment_count}`} />
+                            <InfoLine label={t.tierAverage} value={group.average_score == null ? t.notGraded : formatPercent(group.average_score)} />
+                            <InfoLine label={t.courseContribution} value={formatPercent(group.earned_course_points)} />
                           </div>
                         </Card>
                       ))}
@@ -1306,32 +1316,32 @@ export default function ObserverPage() {
                 }}
               >
                 <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem" }}>
-                  Contact BC Course Teacher
+                  {t.contactTeacher}
                 </h3>
 
                 {selectedCourse.teacher_email ? (
                   <>
                     <div style={{ marginBottom: "12px", color: "#374151", lineHeight: 1.5 }}>
-                      <strong>{selectedCourse.teacher_name || "Course Teacher"}</strong>
+                      <strong>{selectedCourse.teacher_name || t.courseTeacher}</strong>
                       <br />
                       {selectedCourse.teacher_email}
                     </div>
 
                     <div style={buttonRowStyle}>
                       <button type="button" onClick={emailCourseTeacher} style={actionButtonStyle}>
-                        Email Course Teacher
+                        {t.emailTeacher}
                       </button>
                       <button type="button" onClick={copyTeacherEmail} style={actionButtonStyle}>
-                        Copy Teacher Email
+                        {t.copyTeacherEmail}
                       </button>
                       <button type="button" onClick={copyWeChatMessage} style={actionButtonStyle}>
-                        Copy WeChat Message
+                        {t.copyWechat}
                       </button>
                     </div>
                   </>
                 ) : (
                   <p style={{ margin: 0, color: "#4b5563" }}>
-                    No BC course teacher contact is assigned to this course.
+                    {t.noTeacherContact}
                   </p>
                 )}
               </div>
@@ -1339,13 +1349,13 @@ export default function ObserverPage() {
 
             <div style={buttonRowStyle}>
               <button type="button" onClick={copyStudentSnapshot} style={actionButtonStyle}>
-                Copy Student Snapshot
+                {t.copySnapshot}
               </button>
               <button type="button" onClick={emailStudentSnapshot} style={actionButtonStyle}>
-                Copy Email for Outlook
+                {t.copyOutlook}
               </button>
               <button type="button" onClick={printStudentSnapshot} style={actionButtonStyle}>
-                Print Student Snapshot
+                {t.printSnapshot}
               </button>
             </div>
 
@@ -1354,45 +1364,45 @@ export default function ObserverPage() {
             ) : null}
           </section>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>{t.needsAttention}</h2>
+          <section id="observer-student-attention" style={{...sectionStyle,scrollMarginTop:20}}>
+            <h2 tabIndex={-1} style={sectionTitleStyle}>{t.needsAttention}</h2>
 
             {!courseDashboardReady ? (
               <div style={emptyStateStyle}>
-                <div style={emptyStateTitleStyle}>Waiting for the student’s course records…</div>
-                <p style={emptyStateTextStyle}>Assignments will appear after the course data finishes loading.</p>
+                <div style={emptyStateTitleStyle}>{t.waitingCourse}</div>
+                <p style={emptyStateTextStyle}>{t.waitingAssignments}</p>
               </div>
             ) : readOnlyMissingItems.length === 0 ? (
               <div style={emptyStateStyle}>
-              <div style={emptyStateTitleStyle}>No missing or ungraded work found for this course.</div>
-              <p style={emptyStateTextStyle}>There are no missing, ungraded, or needs-attention items currently visible for this course.</p>
+              <div style={emptyStateTitleStyle}>{t.noAttention}</div>
+              <p style={emptyStateTextStyle}>{t.noAttentionHelp}</p>
             </div>
             ) : (
               <div style={{ display: "grid", gap: "10px" }}>
-                {readOnlyMissingItems.map(({ assignment, submission }) => (
+                {readOnlyMissingItems.map(({ assignment, submission, submissionStatus }) => (
                   <Card key={`missing-${assignment.id}`}>
                     <div style={{ fontWeight: 900 }}>{assignment.title || "Assignment"}</div>
-                    <InfoLine label="Due" value={assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : "No due date"} />
-                    <InfoLine label="Status" value="Not submitted" />
-                    <InfoLine label="Feedback" value={submission?.feedback || "No feedback yet"} />
+                    <InfoLine label={t.due} value={dueText(assignment.due_date)} />
+                    <InfoLine label={t.attentionReason} value={t[observerWorkStatus({assignment, submission, submissionStatus})]} />
+                    <InfoLine label={t.feedback} value={submission?.feedback || t.noFeedback} />
                   </Card>
                 ))}
               </div>
             )}
           </section>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>{t.studentWorkSection}</h2>
+          <section id="observer-student-work" style={{...sectionStyle,scrollMarginTop:20}}>
+            <h2 tabIndex={-1} style={sectionTitleStyle}>{t.studentWorkSection}</h2>
 
             {!courseDashboardReady ? (
               <div style={emptyStateStyle}>
-                <div style={emptyStateTitleStyle}>Waiting for the student’s course records…</div>
-                <p style={emptyStateTextStyle}>Assignments, submissions, grades, and feedback will appear after the course data finishes loading.</p>
+                <div style={emptyStateTitleStyle}>{t.waitingCourse}</div>
+                <p style={emptyStateTextStyle}>{t.waitingWork}</p>
               </div>
             ) : readOnlyCourseItems.length === 0 ? (
               <div style={emptyStateStyle}>
-              <div style={emptyStateTitleStyle}>No assignments or submissions found for this course.</div>
-              <p style={emptyStateTextStyle}>Assignments and learning evidence will appear here after the teacher publishes work or the student submits learning evidence.</p>
+              <div style={emptyStateTitleStyle}>{t.noWork}</div>
+              <p style={emptyStateTextStyle}>{t.noWorkHelp}</p>
             </div>
             ) : (
               <div style={{ display: "grid", gap: "14px" }}>
@@ -1402,25 +1412,25 @@ export default function ObserverPage() {
                       {assignment.title || "Assignment"}
                     </div>
 
-                    <InfoLine label="Due" value={assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : "No due date"} />
-                    <InfoLine label="Assessment Pathway" value={assignment.category_name || "Not assigned"} />
-                    <InfoLine label="Evidence Tier" value={assignment.subcategory_name || "Not assigned"} />
-                    <InfoLine label="Submission" value={submissionStatus === "submitted" ? "Submitted" : "Not submitted"} />
+                    <InfoLine label={t.due} value={dueText(assignment.due_date)} />
+                    <InfoLine label={t.assessmentPathway} value={assignment.category_name || t.notAssigned} />
+                    <InfoLine label={t.evidenceTier} value={assignment.subcategory_name || t.notAssigned} />
+                    <InfoLine label={t.submission} value={submissionStatus === "submitted" ? t.submitted : t[observerWorkStatus({assignment, submission, submissionStatus})]} />
 
                     <InfoLine
-                      label="Score"
+                      label={t.score}
                       value={
                         submission?.score !== null && submission?.score !== undefined && submission?.score !== ""
                           ? String(submission.score)
-                          : "Not graded"
+                          : t.notGraded
                       }
                     />
-                    <InfoLine label="Grade" value={submission?.grade || "Not graded"} />
-                    <InfoLine label="Feedback" value={submission?.feedback || "No feedback yet"} />
+                    <InfoLine label={t.grade} value={submission?.grade || t.notGraded} />
+                    <InfoLine label={t.feedback} value={submission?.feedback || t.noFeedback} />
 
                     {toArray(submission?.files).length > 0 ? (
                       <div style={{ marginTop: "10px" }}>
-                        <strong>Attachments:</strong>
+                        <strong>{t.attachments}:</strong>
                         <div style={{ display: "grid", gap: "6px", marginTop: "6px" }}>
                           {submission.files.map((file) => (
                             <a
@@ -1434,7 +1444,7 @@ export default function ObserverPage() {
                                 fontWeight: 700,
                               }}
                             >
-                              {file.file_name || "Attached file"}
+                              {file.file_name || t.attachedFile}
                             </a>
                           ))}
                         </div>
@@ -1446,17 +1456,17 @@ export default function ObserverPage() {
             )}
           </section>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Lessons and Learning Materials</h2>
+          <section id="observer-student-lessons" style={{...sectionStyle,scrollMarginTop:20}}>
+            <h2 tabIndex={-1} style={sectionTitleStyle}>{t.lessonMaterials}</h2>
             {!courseDashboardReady ? (
               <div style={emptyStateStyle}>
-                <div style={emptyStateTitleStyle}>Waiting for lessons and learning materials…</div>
-                <p style={emptyStateTextStyle}>Learning materials will appear after the course data finishes loading.</p>
+                <div style={emptyStateTitleStyle}>{t.waitingLessons}</div>
+                <p style={emptyStateTextStyle}>{t.waitingLessonsHelp}</p>
               </div>
             ) : toArray(courseDashboard?.lessons).length === 0 ? (
               <div style={emptyStateStyle}>
-                <div style={emptyStateTitleStyle}>No lessons are currently visible for this course.</div>
-                <p style={emptyStateTextStyle}>Teacher-published lessons and learning materials will appear here.</p>
+                <div style={emptyStateTitleStyle}>{t.noLessons}</div>
+                <p style={emptyStateTextStyle}>{t.noLessonsHelp}</p>
               </div>
             ) : (
               <div style={{ display: "grid", gap: "12px" }}>
@@ -1464,7 +1474,7 @@ export default function ObserverPage() {
                   <Card key={`lesson-${lesson.id}`}>
                     <div style={{ fontSize: "1.1rem", fontWeight: 900, marginBottom: "8px" }}>{lesson.title}</div>
                     <div style={{ color: "#4b5563", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                      {lesson.content || "No lesson description provided."}
+                      {lesson.content || t.noLessonDescription}
                     </div>
                   </Card>
                 ))}
@@ -1473,11 +1483,9 @@ export default function ObserverPage() {
           </section>
 
           <section style={sectionStyle}>
-            <h2 style={sectionTitleStyle}>Read-only Course Summary</h2>
+            <h2 style={sectionTitleStyle}>{t.courseSummary}</h2>
             <p style={{ margin: 0, color: "#4b5563", lineHeight: 1.55 }}>
-              This is the same academic course information available to the student—assignments, due dates,
-              submission status, results, teacher feedback, and lessons. Observer access is view-only; submitting
-              work or changing student records is not available here.
+              {t.courseSummaryHelp}
             </p>
           </section>
         </div>
