@@ -67,12 +67,11 @@ export default function AdminCourseWorkspacePage() {
       <div style={builderPanelStyle}>
         <div>
           <div style={{ fontWeight: 800, fontSize: "20px", color: "#111827" }}>
-            Build and Teach This Course
+            Edit This Course as Administrator
           </div>
           <div style={{ marginTop: "7px", color: "#4b5563", lineHeight: 1.5 }}>
-            Open the full teacher course builder for learning paths, lessons, assignments,
-            rosters, gradebook, and reports. You will be added as a co-teacher; the current
-            teacher assignment will not be replaced.
+            Open the full course builder for learning paths, lessons, assignments,
+            rosters, gradebook, and reports in your administrator workspace.
           </div>
         </div>
         <div style={builderActionsStyle}>

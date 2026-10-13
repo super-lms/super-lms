@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
+import { getWorkspaceMode, usesAdminWorkspace } from "./services/workspaceMode";
 import Layout from "./components/Layout.jsx";
 import SurveyStudio from "./pages/admin/SurveyStudio.jsx";
 import AdminLayout from "./components/admin/AdminLayout.jsx";
@@ -84,9 +85,11 @@ function LoginRoute() {
 }
 
 function TeacherProtectedLayout() {
+  const { user } = useAuth();
+  const adminWorkspace = usesAdminWorkspace(user?.role, getWorkspaceMode());
   return (
     <ProtectedRoute allowedRoles={["teacher", "admin"]}>
-      <Layout />
+      {adminWorkspace ? <AdminLayout /> : <Layout />}
     </ProtectedRoute>
   );
 }

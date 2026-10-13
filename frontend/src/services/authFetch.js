@@ -1,4 +1,5 @@
 import API_BASE from "../apiBase"
+import { getWorkspaceMode } from "./workspaceMode"
 
 const TOKEN_STORAGE_KEY = "super_lms_token"
 
@@ -34,7 +35,7 @@ export async function authFetch(pathOrUrl, options = {}) {
 
   const currentPath = window.location.pathname
   const isAdministratorWorkspace =
-    currentPath === "/admin" || currentPath.startsWith("/admin/")
+    currentPath === "/admin" || currentPath.startsWith("/admin/") || getWorkspaceMode() === "admin"
 
   if (!isAdministratorWorkspace && currentPath !== "/login") {
     headers["X-Super-LMS-Workspace"] = "teacher"

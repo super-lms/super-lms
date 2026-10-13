@@ -15,3 +15,7 @@ export function setWorkspaceMode(mode) {
 export function clearWorkspaceMode() {
   window.localStorage.removeItem(WORKSPACE_MODE_KEY)
 }
+
+export function usesAdminWorkspace(role, mode) {
+  return role === "admin" && mode === "admin"
+}
