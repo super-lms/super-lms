@@ -263,7 +263,7 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState([])
   const [classes, setClasses] = useState([])
   const [selectedClassId, setSelectedClassId] = useState("")
-  const [teacherSection, setTeacherSection] = useState("create")
+  const [teacherSection, setTeacherSection] = useState("current")
 
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -683,9 +683,7 @@ export default function AssignmentsPage() {
             : String(visibleClasses[0].id)
           const validRequestedSection = ["roster", "create", "import", "dingtalk", "current"].includes(String(requestedSection || ""))
             ? String(requestedSection)
-            : requestedClassExists
-              ? "current"
-              : "create"
+            : "current"
 
           setSelectedClassId(firstClassId)
           setTeacherSection(validRequestedSection)

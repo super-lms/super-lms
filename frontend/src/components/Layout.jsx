@@ -110,6 +110,18 @@ export default function Layout() {
 
   const primaryGradebookPath = getGradebookPath()
 
+  function getAssignmentsPath() {
+    // Course workspaces update browser history directly, so read the live URL
+    // when the menu is clicked rather than relying on a stale router location.
+    const params = new URLSearchParams(window.location.search)
+    const courseId = params.get("sectionId") || params.get("courseId") || params.get("classId") ||
+      window.localStorage.getItem("super-lms-last-course-id") || ""
+    const query = new URLSearchParams({ section: "current" })
+    if (courseId && courseId !== "all") query.set("classId", courseId)
+    if (params.get("view") === "master") query.set("view", "master")
+    return `/assignments?${query}`
+  }
+
   const attendancePath = useMemo(() => {
     const storedCourseId = window.localStorage.getItem("super-lms-last-course-id")
     const fallbackCourseId = teacherCourses[0]?.id
@@ -250,7 +262,11 @@ export default function Layout() {
             <NavItem to={`/lessons${courseContextQuery}`} style={getNavLinkStyle("/lessons")} icon={FileText}>
               Lessons
             </NavItem>
-            <NavItem to="/assignments" style={getNavLinkStyle("/assignments")} icon={ClipboardList}>
+            <NavItem to={getAssignmentsPath()} onClick={(event) => {
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+              event.preventDefault()
+              navigate(getAssignmentsPath())
+            }} style={getNavLinkStyle("/assignments")} icon={ClipboardList}>
               Assignments
             </NavItem>
             <NavItem to="/import-emergency-assignment" style={getNavLinkStyle("/import-emergency-assignment")} icon={Upload}>
