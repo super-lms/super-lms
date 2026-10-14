@@ -1,4 +1,5 @@
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
+import SavedTeacherRubric from "../components/rubrics/RubricContribution.jsx";
 import { displayAssignmentTime, beijingDateTime } from "../services/assignmentTime.js"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
@@ -240,6 +241,7 @@ function ResultCard({ assignment, submissionState, onOpen }) {
         </DetailCard>
       </div>
 
+      <SavedTeacherRubric rubric={submission?.rubric_selection?.teacherRubric} overallPercent={submission?.rubric_selection?.overallScore} />
       <DetailCard title="Teacher Feedback">
         <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
           {submission?.feedback || "No feedback yet."}
@@ -480,6 +482,7 @@ function SubmissionEditor({
             </div>
           ) : null}
 
+          <SavedTeacherRubric rubric={submissionState?.submission?.rubric_selection?.teacherRubric} overallPercent={submissionState?.submission?.rubric_selection?.overallScore} />
           <div style={submissionPreviewGridStyle}>
             <DetailCard title="Saved Submission Preview">
               <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>

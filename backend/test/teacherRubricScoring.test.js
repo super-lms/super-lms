@@ -32,3 +32,13 @@ test('teacher preview and server calculation stay consistent for four, five and 
   for(const choices of [{},{a:levels},{a:levels,b:1}])assert.deepEqual(preview(input,choices),calculateTeacherRubric(input,choices));
  }
 });
+test('descending numbered level labels use the printed score, and criterion contributions sum before rounding',async()=>{
+ const {calculateTeacherRubric:preview}=await import('../../frontend/src/services/teacherRubricScoring.js');
+ const input={level_count:6,criteria_json:[{id:'a',weight:5,level_labels:['6 – Extending','5 – Proficient','4 – Competent','3 – Minimum','2 – Developing','1 – Emerging']},{id:'b',weight:95}]};
+ const result=calculateTeacherRubric(input,{a:3,b:6});
+ assert.equal(result.criterionResults[0].level,4);
+ assert.ok(Math.abs(result.criterionResults[0].contribution-3.3333333333)<0.00001);
+ assert.equal(result.percent,98.33);
+ assert.deepEqual(preview(input,{a:3,b:6}),result);
+ assert.equal(calculateTeacherRubric(input,{a:1,b:6}).percent,100);
+});

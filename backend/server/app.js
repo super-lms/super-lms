@@ -8036,6 +8036,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
           selections,
           buckets: calculated.buckets,
           mappingComplete: calculated.mappingComplete,
+          scoringVersion: 'numbered_level_labels',
           unmappedWeight: calculated.unmappedWeight,
         },
       };

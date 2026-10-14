@@ -1,4 +1,5 @@
 import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
+import { RubricContribution } from '../components/rubrics/RubricContribution.jsx';
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentBatchDownloads from "../components/AssignmentBatchDownloads.jsx";
 import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
@@ -2189,10 +2190,11 @@ export default function AssignmentSpeedGradingPage() {
                           {selectedRow?.rubric_selection?.teacherRubric && selectedRow.rubric_selection.teacherRubric.revision !== teacherRubric?.updated_at ?
                             <p role="status">The rubric has changed since this student's saved grade. Their saved grade is retained until you score and save the current rubric.</p> : null}
                           {teacherCalculation.error ? <p role="alert">{teacherCalculation.error}</p> : null}
+                          {teacherCalculation.complete && selectedRow?.rubric_selection?.teacherRubric && selectedRow.rubric_selection.teacherRubric.scoringVersion !== 'numbered_level_labels' && Math.abs(Number(selectedRow.rubric_selection.overallScore) - teacherCalculation.percent) > 0.01 && <p role="status">Saved grade: {Number(selectedRow.rubric_selection.overallScore).toFixed(2)}%. The printed level numbers calculate to {teacherCalculation.percent.toFixed(2)}%. Review the selections and save to update this older grade. Saved marks have not been changed automatically.</p>}
                           {(teacherRubric?.criteria_json || []).map(criterion => (
                             <fieldset key={criterion.id} disabled={savingKduScores} style={{ marginBottom: "14px", border: "1px solid #d7dce5", borderRadius: "10px" }}>
                               <legend>{criterion.name} — {criterion.weight}% — {criterion.competency_bucket || "KDU not mapped"}</legend>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                              <div className="rubric-criterion-row"><div className="rubric-levels">
                                 {Array.from({ length: teacherRubric.level_count }, (_, i) => i + 1).map(level => (
                                   <button key={level} type="button" aria-pressed={Number(teacherSelections[criterion.id]) === level}
                                     onClick={() => { setTeacherSelections(current => ({ ...current, [criterion.id]: level })); setKduSaveMessage("Unsaved rubric selections."); }}
@@ -2200,10 +2202,10 @@ export default function AssignmentSpeedGradingPage() {
                                     <strong>{criterion.level_labels?.[level - 1] || `Level ${level}`}</strong><div>{criterion.descriptors?.[`level_${level}`] || ""}</div>
                                   </button>
                                 ))}
-                              </div>
+                              </div><RubricContribution result={teacherCalculation.criterionResults?.find(item => item.id === String(criterion.id))} levelCount={teacherRubric.level_count} /></div>
                             </fieldset>
                           ))}
-                          <p aria-live="polite"><strong>Overall:</strong> {teacherCalculation.complete ? `${teacherCalculation.percent.toFixed(2)}%` : teacherCalculation.partialPercent !== undefined ? `${teacherCalculation.partialPercent.toFixed(2)}% from ${teacherCalculation.selectedCount} of ${teacherCalculation.criterionCount} criteria selected. Select every criterion to save.` : "Select a level for every criterion"}</p>
+                          <p className="rubric-total" aria-live="polite"><strong>Overall:</strong> {teacherCalculation.complete ? `${teacherCalculation.percent.toFixed(2)}%` : teacherCalculation.partialPercent !== undefined ? `${teacherCalculation.partialPercent.toFixed(2)}% from ${teacherCalculation.selectedCount} of ${teacherCalculation.criterionCount} criteria selected. Select every criterion to save.` : "Select a level for every criterion"}</p>
                           {teacherCalculation.unmappedWeight > 0 && <p role="status">The overall grade can be saved without KDU mappings. Map every criterion to DO, KNOW or UNDERSTAND in Edit Assignment to enable the KDU breakdown. Currently {teacherCalculation.unmappedWeight}% of the rubric is unmapped.</p>}
                           {teacherCalculation.buckets ? ["DO", "KNOW", "UNDERSTAND"].map(bucket => {
                             const value = teacherCalculation.buckets[bucket];
