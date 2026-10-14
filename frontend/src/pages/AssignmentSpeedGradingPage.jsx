@@ -393,11 +393,11 @@ export default function AssignmentSpeedGradingPage() {
   const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
 
   useEffect(() => {
-    loadGradebook();
+    loadGradebook(requestedStudentEmail || null);
     loadKduRubric();
     loadFullKduRubric();
     loadSectionScores();
-  }, [assignmentId]);
+  }, [assignmentId, sectionId, requestedStudentEmail]);
 
   async function loadGradebook(nextSelectedEmail = null) {
     try {
