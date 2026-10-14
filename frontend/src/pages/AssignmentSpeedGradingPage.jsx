@@ -1,3 +1,4 @@
+import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentBatchDownloads from "../components/AssignmentBatchDownloads.jsx";
 import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
@@ -173,51 +174,6 @@ function getRubricCriterion(criteria, bucket, fallback) {
   return match?.criterion_text || fallback;
 }
 
-function calculateTeacherRubric(rubric, selections = {}) {
-  const criteria = rubric?.criteria_json;
-  const levels = Number(rubric?.level_count);
-  if (![4, 5, 6].includes(levels) || !Array.isArray(criteria) || !criteria.length) {
-    throw new Error("Save a teacher rubric with criteria before grading.");
-  }
-  const buckets = Object.fromEntries(["DO", "KNOW", "UNDERSTAND"].map(key => [key, { weight: 0, earned: 0 }]));
-  const ids = new Set();
-  let totalWeight = 0;
-  let earned = 0;
-  let complete = true;
-  for (const criterion of criteria) {
-    const id = String(criterion.id || "");
-    const weight = Number(criterion.weight);
-    const bucket = criterion.competency_bucket;
-    if (!id || ids.has(id) || !Number.isFinite(weight) || weight <= 0 || !buckets[bucket]) {
-      throw new Error("In Edit Assignment, give every criterion a unique ID, a positive weight, and a DO / KNOW / UNDERSTAND mapping, then save the teacher rubric.");
-    }
-    ids.add(id);
-    totalWeight += weight;
-    buckets[bucket].weight += weight;
-    const selected = selections[id];
-    if (selected === undefined || selected === null || selected === "") {
-      complete = false;
-      continue;
-    }
-    const level = Number(selected);
-    if (!Number.isInteger(level) || level < 1 || level > levels) throw new Error("Choose a valid performance level for each criterion.");
-    const contribution = level / levels * weight;
-    earned += contribution;
-    buckets[bucket].earned += contribution;
-  }
-  if (Math.abs(totalWeight - 100) > 0.01) throw new Error("Criterion weights must total 100% before grading.");
-  if (Object.keys(selections).some(id => !ids.has(id))) throw new Error("The rubric has changed. Clear the selections and score the current criteria.");
-  return {
-    complete,
-    percent: complete ? Number(earned.toFixed(2)) : null,
-    buckets: Object.fromEntries(Object.entries(buckets).map(([key, value]) => [key, {
-      weight: value.weight,
-      percent: complete && value.weight > 0 ? value.earned / value.weight * 100 : null,
-      level: complete && value.weight > 0 ? value.earned / value.weight * 6 : null,
-      contribution: complete ? value.earned : null,
-    }])),
-  };
-}
 
 function getSavedKduSummary(row) {
   const rubricSelection = row?.rubric_selection || {};
@@ -2235,7 +2191,7 @@ export default function AssignmentSpeedGradingPage() {
                           {teacherCalculation.error ? <p role="alert">{teacherCalculation.error}</p> : null}
                           {(teacherRubric?.criteria_json || []).map(criterion => (
                             <fieldset key={criterion.id} disabled={savingKduScores} style={{ marginBottom: "14px", border: "1px solid #d7dce5", borderRadius: "10px" }}>
-                              <legend>{criterion.name} — {criterion.weight}% — {criterion.competency_bucket || "Mapping required"}</legend>
+                              <legend>{criterion.name} — {criterion.weight}% — {criterion.competency_bucket || "KDU not mapped"}</legend>
                               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                                 {Array.from({ length: teacherRubric.level_count }, (_, i) => i + 1).map(level => (
                                   <button key={level} type="button" aria-pressed={Number(teacherSelections[criterion.id]) === level}
@@ -2247,7 +2203,8 @@ export default function AssignmentSpeedGradingPage() {
                               </div>
                             </fieldset>
                           ))}
-                          <p><strong>Overall:</strong> {teacherCalculation.complete ? `${teacherCalculation.percent.toFixed(2)}%` : "Select a level for every criterion"}</p>
+                          <p aria-live="polite"><strong>Overall:</strong> {teacherCalculation.complete ? `${teacherCalculation.percent.toFixed(2)}%` : teacherCalculation.partialPercent !== undefined ? `${teacherCalculation.partialPercent.toFixed(2)}% from ${teacherCalculation.selectedCount} of ${teacherCalculation.criterionCount} criteria selected. Select every criterion to save.` : "Select a level for every criterion"}</p>
+                          {teacherCalculation.unmappedWeight > 0 && <p role="status">The overall grade can be saved without KDU mappings. Map every criterion to DO, KNOW or UNDERSTAND in Edit Assignment to enable the KDU breakdown. Currently {teacherCalculation.unmappedWeight}% of the rubric is unmapped.</p>}
                           {teacherCalculation.buckets ? ["DO", "KNOW", "UNDERSTAND"].map(bucket => {
                             const value = teacherCalculation.buckets[bucket];
                             return <p key={bucket}><strong>{bucket} ({value.weight}% weight):</strong> {value.percent === null ? (value.weight ? "—" : "Not assessed") : `${value.percent.toFixed(2)}% · ${value.level.toFixed(2)} / 6 · ${value.contribution.toFixed(2)} percentage points overall`}</p>;

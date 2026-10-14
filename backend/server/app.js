@@ -1,3 +1,4 @@
+const { calculateTeacherRubric } = require('./teacherRubricScoring');
 const {gradebookSubmissionIndex} = require('./gradebookSubmissions');
 const {loadCourseRisk} = require('./dashboardRisk');
 const express = require("express");
@@ -7888,51 +7889,6 @@ app.post(
   }
 );
 
-function calculateTeacherRubric(rubric, selections = {}) {
-  const criteria = rubric?.criteria_json;
-  const levels = Number(rubric?.level_count);
-  if (![4, 5, 6].includes(levels) || !Array.isArray(criteria) || !criteria.length) {
-    throw new Error("Save a teacher rubric with criteria before grading.");
-  }
-  const buckets = Object.fromEntries(["DO", "KNOW", "UNDERSTAND"].map(key => [key, { weight: 0, earned: 0 }]));
-  const ids = new Set();
-  let totalWeight = 0;
-  let earned = 0;
-  let complete = true;
-  for (const criterion of criteria) {
-    const id = String(criterion.id || "");
-    const weight = Number(criterion.weight);
-    const bucket = criterion.competency_bucket;
-    if (!id || ids.has(id) || !Number.isFinite(weight) || weight <= 0 || !buckets[bucket]) {
-      throw new Error("In Edit Assignment, give every criterion a unique ID, a positive weight, and a DO / KNOW / UNDERSTAND mapping, then save the teacher rubric.");
-    }
-    ids.add(id);
-    totalWeight += weight;
-    buckets[bucket].weight += weight;
-    const selected = selections[id];
-    if (selected === undefined || selected === null || selected === "") {
-      complete = false;
-      continue;
-    }
-    const level = Number(selected);
-    if (!Number.isInteger(level) || level < 1 || level > levels) throw new Error("Choose a valid performance level for each criterion.");
-    const contribution = level / levels * weight;
-    earned += contribution;
-    buckets[bucket].earned += contribution;
-  }
-  if (Math.abs(totalWeight - 100) > 0.01) throw new Error("Criterion weights must total 100% before grading.");
-  if (Object.keys(selections).some(id => !ids.has(id))) throw new Error("The rubric has changed. Clear the selections and score the current criteria.");
-  return {
-    complete,
-    percent: complete ? Number(earned.toFixed(2)) : null,
-    buckets: Object.fromEntries(Object.entries(buckets).map(([key, value]) => [key, {
-      weight: value.weight,
-      percent: complete && value.weight > 0 ? value.earned / value.weight * 100 : null,
-      level: complete && value.weight > 0 ? value.earned / value.weight * 6 : null,
-      contribution: complete ? value.earned : null,
-    }])),
-  };
-}
 
 /* SAVE KDU SCORES */
 app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
@@ -8079,6 +8035,8 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
           criteria_json: teacherRubric.criteria_json,
           selections,
           buckets: calculated.buckets,
+          mappingComplete: calculated.mappingComplete,
+          unmappedWeight: calculated.unmappedWeight,
         },
       };
       saveFeedback = "Teacher designed rubric scores saved.";
