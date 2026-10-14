@@ -1,4 +1,5 @@
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
+import AssignmentBatchDownloads from "../components/AssignmentBatchDownloads.jsx";
 import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
 import { downloadStudentWork, printStudentWork } from "../services/studentWorkExport.js";
 import { getEarnedPoints } from "../services/gradebookMarks.js";
@@ -1502,6 +1503,7 @@ export default function AssignmentSpeedGradingPage() {
           </label>
         ) : null}
         {sectionLoadError ? <p role="alert">{sectionLoadError}</p> : null}
+        <AssignmentBatchDownloads key={`${assignmentId}:${sectionId}`} assignmentId={assignmentId} sectionId={sectionId} />
 
         {isOneScoreAssignment ? (
           <div

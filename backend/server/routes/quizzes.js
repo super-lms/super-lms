@@ -5,6 +5,22 @@ const delivery=require('../quizDelivery').createQuizDelivery(pool);
 const {validateQuiz,publicQuestions,markQuiz,validateMarks}=require('../quizGrading');
 const isId=s=>typeof s==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 const admin=[authenticateJWT,requireRole('admin','teacher'),async(req,res,next)=>{try{await ensure();const r=await pool.query("SELECT NULLIF(to_jsonb(u)->>'school_id','')::INTEGER AS school_id FROM users u WHERE u.id=$1",[req.user.id]);if(!r.rows.length)return res.status(403).json({error:'Account unavailable'});req.schoolId=r.rows[0].school_id;next()}catch(e){next(e)}}];
+router.delete('/:id',...admin,async(req,res,next)=>{
+ let client;
+ try{
+  if(!isId(req.params.id))return res.status(400).json({error:'Invalid quiz'});
+  await delivery.ensure();
+  client=await pool.connect();await client.query('BEGIN');
+  const found=await client.query('SELECT id FROM teacher_quizzes WHERE id=$1 AND (author_id=$2 OR $2::integer IS NULL) AND school_id IS NOT DISTINCT FROM $3 FOR UPDATE',[req.params.id,quizActor(req),req.schoolId]);
+  if(!found.rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Quiz unavailable or cannot be deleted.'});}
+  // Quiz records are removed atomically. Published submissions and assignments remain intact.
+  await client.query('DELETE FROM teacher_quiz_gradebook WHERE quiz_id=$1',[req.params.id]);
+  await client.query('DELETE FROM teacher_quiz_attempts WHERE quiz_id=$1',[req.params.id]);
+  await client.query('DELETE FROM teacher_quiz_responses WHERE survey_id=$1',[req.params.id]);
+  await client.query('DELETE FROM teacher_quizzes WHERE id=$1',[req.params.id]);
+  await client.query('COMMIT');res.json({ok:true,id:req.params.id});
+ }catch(error){if(client)await client.query('ROLLBACK');next(error);}finally{client?.release();}
+});
 router.get('/courses',...admin,async(req,res,next)=>{try{const rows=await pool.query(`SELECT c.id,c.title,c.master_course_id,c.master_title,c.section_code,COALESCE(c.master_course_id,c.id) AS content_course_id FROM courses c WHERE (c.school_id IS NOT DISTINCT FROM $2 OR c.school_id IS NULL OR $2 IS NULL) AND (($1::integer IS NULL AND c.school_id IS NOT DISTINCT FROM $2) OR c.teacher_id=$1 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$1)) ORDER BY c.title`,[quizActor(req),req.schoolId]);res.json(rows.rows)}catch(e){next(e)}});
 router.get('/courses/:id/subcategories',...admin,async(req,res,next)=>{try{const {courseAccess}=require('../quizGradebook');const course=(await pool.query(courseAccess,[Number(req.params.id),quizActor(req),req.schoolId])).rows[0];if(!course)return res.status(403).json({error:'Course unavailable'});const rows=await pool.query('SELECT cs.id,cs.name,cc.name AS category FROM category_subcategories cs JOIN course_categories cc ON cc.id=cs.course_category_id WHERE cc.course_id=$1 ORDER BY cc.sort_order,cs.sort_order',[course.content_id]);res.json(rows.rows)}catch(e){next(e)}});
 router.post('/gradebook',...admin,async(req,res,next)=>{let client;try{if(!['link','publish'].includes(req.body.action))return res.status(400).json({error:'Invalid gradebook action'});if(!isId(req.body.id))return res.status(400).json({error:'Invalid quiz'});client=await pool.connect();await client.query('BEGIN');const {linkGradebook,publishGradebook}=require('../quizGradebook');const result=await(req.body.action==='link'?linkGradebook:publishGradebook)(client,req,req.body);await client.query('COMMIT');res.json(result)}catch(e){if(client)await client.query('ROLLBACK');res.status(400).json({error:e.message})}finally{client?.release()}});
