@@ -15,6 +15,8 @@ import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
 import TeacherDesignedRubricWorkspace from "../components/rubrics/TeacherDesignedRubricWorkspace.jsx";
 import RepositoryFilePicker from "../components/RepositoryFilePicker.jsx";
+import { RichTextEditor } from "../components/RichText.jsx";
+import { sanitizeRichText } from "../services/richText.js";
 
 
 function formatPercent(value) {
@@ -708,7 +710,7 @@ export default function EditAssignmentPage() {
       setMessage("");
 
       const cleanTitle = String(title || "").trim();
-      const cleanDescription = String(description || "").trim();
+      const cleanDescription = sanitizeRichText(description);
       const cleanAvailableFrom = assignmentInstant(availableFrom);
       const cleanDueDate = assignmentInstant(dueDate);
 
@@ -1313,11 +1315,9 @@ export default function EditAssignmentPage() {
 
               <div>
                 <EditAssignmentFieldLabel>Description</EditAssignmentFieldLabel>
-                <textarea
+                <RichTextEditor
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows="5"
-                  style={textareaStyle}
+                  onChange={setDescription}
                 />
               </div>
 
