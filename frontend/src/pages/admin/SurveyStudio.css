@@ -4,3 +4,11 @@
 
 .lms-survey.shell>aside{display:flex;position:static;width:100%;padding:16px 0;flex-direction:row;flex-wrap:wrap;background:transparent;border:0;gap:8px}.lms-survey.shell>aside .logo,.lms-survey.shell>aside .navlabel,.lms-survey.shell>aside .asidebottom{display:none}.lms-survey.shell>aside .nav{width:auto;display:inline-flex;margin:0}.lms-survey.shell>main .topbar{height:55px}
 .lms-survey.shell{min-width:0;max-width:100%}.lms-survey .filters>*{min-width:0}.lms-survey .surveyrow{flex-wrap:wrap}.lms-survey .grow{min-width:160px}.lms-survey .actions{flex-wrap:wrap}.lms-survey .tablewrap{max-width:100%}
+
+.lms-survey .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lms-survey label, .lms-survey .rowfield > *, .lms-survey .rank b { min-width: 0; }
+.lms-survey.studentwrap h2, .lms-survey .choices label, .lms-survey .rowfield > span,
+.lms-survey .rank b { white-space: pre-wrap; overflow-wrap: anywhere; height: auto; max-height: none; }
+.lms-survey .choices label { display: flex; align-items: flex-start; gap: 8px; }
+.lms-survey .choices input[type=radio] { flex: 0 0 auto; margin-top: 3px; }
+@media (max-width: 700px) { .lms-survey .grid { grid-template-columns: minmax(0, 1fr); } }
