@@ -1,8 +1,9 @@
-import { Link, Outlet, useLocation } from "react-router-dom"
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useEffect } from "react"
 import { useAuth } from "../../AuthContext.jsx"
 import { setWorkspaceMode } from "../../services/workspaceMode"
 import { openRtiStudentSupport } from "../../services/openRti.js"
+import { gradebookPath } from "../../services/gradebookNavigation.js"
 import {
   LayoutDashboard,
   Users,
@@ -23,6 +24,7 @@ import {
 
 export default function AdminLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
 
   useEffect(() => {
@@ -161,7 +163,23 @@ export default function AdminLayout() {
 
           <div style={sectionDividerStyle} />
 
-          <NavItem to="/admin/gradebooks" style={getNavLinkStyle("/admin/gradebooks")} icon={ClipboardList}>
+          <NavItem to="/assignments?section=current" onClick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+            event.preventDefault()
+            const params = new URLSearchParams(window.location.search)
+            const courseId = params.get("courseId") || params.get("classId") || window.localStorage.getItem("super-lms-last-course-id") || ""
+            const query = new URLSearchParams({section:"current"})
+            if (courseId) query.set("classId", courseId)
+            if (params.get("view") === "master") query.set("view", "master")
+            navigate(`/assignments?${query}`)
+          }} style={getNavLinkStyle("/assignments")} icon={ClipboardList}>Assignments</NavItem>
+          <NavItem to="/admin/gradebooks" onClick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+            const params = new URLSearchParams(window.location.search)
+            if (!params.get("courseId") && !params.get("classId")) return
+            event.preventDefault()
+            navigate(gradebookPath(window.location.pathname, window.location.search))
+          }} style={getNavLinkStyle("/admin/gradebooks")} icon={ClipboardList}>
             Gradebooks
           </NavItem>
           <NavItem to="/admin/quizzes" style={getNavLinkStyle("/admin/quizzes")} icon={ClipboardList}>Quizzes &amp; Tests</NavItem>
@@ -271,9 +289,9 @@ export default function AdminLayout() {
   )
 }
 
-function NavItem({ to, style, icon: Icon, children }) {
+function NavItem({ to, style, icon: Icon, children, onClick }) {
   return (
-    <Link to={to} style={style}>
+    <Link to={to} onClick={onClick} style={style}>
       <Icon size={18} />
       <span>{children}</span>
     </Link>

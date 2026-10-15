@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import FloatingTeacherCoach from "../components/FloatingTeacherCoach.jsx";
 import authFetch from "../services/authFetch";
+import { groupCoursesByMaster } from "../services/courseSections.js";
 import { speedGradingPath } from "../services/gradebookNavigation.js";
 
 import { getPointsPossible, getEarnedPoints, pointsToPercentage } from "../services/gradebookMarks.js";
@@ -455,7 +456,7 @@ export default function GradebookPage() {
 
   useEffect(() => {
     loadKduGradebook(selectedCourseId);
-  }, [selectedCourseId, allSections]);
+  }, [selectedCourseId, allSections, requestedContentClassId]);
 
   useEffect(() => {
     return () => {
@@ -928,22 +929,21 @@ export default function GradebookPage() {
             </label>
             <select
               id="gradebook-class-select"
-              value={allSections ? "all" : selectedCourseId}
+              value={allSections ? `master:${requestedContentClassId}` : selectedCourseId}
               onChange={(event) => {
-                const classId = event.target.value;
+                const master = event.target.value.startsWith("master:");
+                const classId = master ? event.target.value.slice(7) : event.target.value;
                 window.localStorage.setItem("super-lms-last-course-id", classId);
                 setSelectedCourseId(classId);
-                navigate(classId ? `/gradebook?classId=${encodeURIComponent(classId)}` : "/gradebook", { replace: true });
+                navigate(classId ? `/gradebook?classId=${encodeURIComponent(classId)}&view=spreadsheet${master ? "&sectionId=all" : ""}` : "/gradebook", { replace: true });
               }}
               className="form-input"
             >
               <option value="">Choose a class</option>
-              {allSections ? <option value="all">All sections — {courses.find(course => String(course.id) === String(selectedCourseId))?.master_title || courses.find(course => String(course.id) === String(selectedCourseId))?.class_name || "Master Class"}</option> : null}
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.class_name || course.title}
-                </option>
-              ))}
+              {groupCoursesByMaster(courses).map(group => <optgroup key={group.key} label={group.masterTitle}>
+                {group.isMultiSection && <option value={`master:${group.contentCourse.id}`}>{group.masterTitle} — Master Course · All sections</option>}
+                {group.sections.map(course => <option key={course.id} value={course.id}>{course.normalized_title || course.class_name || course.title}</option>)}
+              </optgroup>)}
             </select>
           </div>
 
