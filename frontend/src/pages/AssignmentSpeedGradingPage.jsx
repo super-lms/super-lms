@@ -2,6 +2,7 @@ import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
 import { RubricContribution } from '../components/rubrics/RubricContribution.jsx';
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentBatchDownloads from "../components/AssignmentBatchDownloads.jsx";
+import { findGradingStudent } from "../services/gradingStudent.js";
 import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
 import { downloadStudentWork, printStudentWork } from "../services/studentWorkExport.js";
 import { getEarnedPoints } from "../services/gradebookMarks.js";
@@ -241,12 +242,14 @@ export default function AssignmentSpeedGradingPage() {
   const location = useLocation();
   const gradingQueryParams = new URLSearchParams(location.search);
   const sectionId = gradingQueryParams.get("sectionId") || "";
+  const requestedStudentId = gradingQueryParams.get("studentId") || "";
   const requestedStudentEmail = gradingQueryParams.get("studentEmail") || "";
   const { assignmentId } = useParams();
   const navigate = useNavigate();
 
   const [assignment, setAssignment] = useState(null);
   const [availableCourses, setAvailableCourses] = useState([]);
+  const [gradingLoadError, setGradingLoadError] = useState("");
   const [sectionLoadError, setSectionLoadError] = useState("");
   const gradingSections = speedGradingSections(availableCourses, assignment?.class_id);
 
@@ -393,13 +396,15 @@ export default function AssignmentSpeedGradingPage() {
   const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
 
   useEffect(() => {
-    loadGradebook(requestedStudentEmail || null);
+    setSearchText("");
+    loadGradebook(requestedStudentEmail || null, true);
     loadKduRubric();
     loadFullKduRubric();
     loadSectionScores();
-  }, [assignmentId, sectionId, requestedStudentEmail]);
+  }, [assignmentId, sectionId, requestedStudentEmail, requestedStudentId]);
 
-  async function loadGradebook(nextSelectedEmail = null) {
+  async function loadGradebook(nextSelectedEmail = null, fromLink = false) {
+    setGradingLoadError("");
     try {
       const res = await authFetch(
         `${API_BASE}/api/assignments/${assignmentId}/gradebook${sectionId ? `?sectionId=${encodeURIComponent(sectionId)}` : ""}`
@@ -419,15 +424,22 @@ export default function AssignmentSpeedGradingPage() {
           null;
 
         const preferredRow =
-          data.rows.find((row) => row.student_email === preferredEmail) || data.rows[0] || null;
+          fromLink && (requestedStudentId || requestedStudentEmail)
+            ? findGradingStudent(data.rows, requestedStudentId, requestedStudentEmail)
+            : findGradingStudent(data.rows, "", preferredEmail) || data.rows[0] || null;
+        if (fromLink && (requestedStudentId || requestedStudentEmail) && !preferredRow) {
+          setGradingLoadError("The student named in this notice is not in the selected class roster. Choose the correct class section before marking.");
+        }
 
         setSelectedRow(preferredRow);
         return preferredRow;
       } else {
         setRows([]);
         setSelectedRow(null);
+        setGradingLoadError(data.error || "Unable to open this assignment in SpeedGrader.");
       }
     } catch (error) {
+      setGradingLoadError("Unable to load SpeedGrader. Refresh and try again.");
       console.error("Failed to load gradebook:", error);
       setRows([]);
       setSelectedRow(null);
@@ -750,10 +762,10 @@ export default function AssignmentSpeedGradingPage() {
       (row) => row.student_email === selectedRow?.student_email
     );
 
-    if (!selectedStillExists) {
+    if (!selectedStillExists && !gradingLoadError) {
       setSelectedRow(filteredRows[0]);
     }
-  }, [filteredRows, selectedRow]);
+  }, [filteredRows, selectedRow, gradingLoadError]);
 
   function loadKduScoresFromSelectedStudent(row) {
     const rubricSelection = row?.rubric_selection || {};
@@ -1459,6 +1471,7 @@ export default function AssignmentSpeedGradingPage() {
             </select>
           </label>
         ) : null}
+        {gradingLoadError ? <p role="alert">{gradingLoadError}</p> : null}
         {sectionLoadError ? <p role="alert">{sectionLoadError}</p> : null}
         <AssignmentBatchDownloads key={`${assignmentId}:${sectionId}`} assignmentId={assignmentId} sectionId={sectionId} />
 
