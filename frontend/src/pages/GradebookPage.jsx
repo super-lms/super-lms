@@ -1,4 +1,5 @@
 import { displayAssignmentTime } from "../services/assignmentTime.js";
+import "./GradebookPage.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
@@ -1138,7 +1139,7 @@ export default function GradebookPage() {
             {assignments.length === 0 ? (
               <p>No assignments found for this course yet.</p>
             ) : (
-              <div style={spreadsheetGradebookWrapStyle}>
+              <div className="spreadsheet-gradebook-scroll" style={spreadsheetGradebookWrapStyle}>
                 <table style={spreadsheetGradebookTableStyle}>
                   <thead>
                     <tr>
@@ -1907,6 +1908,8 @@ const focusedStudentRowStyle = {
 
 const spreadsheetGradebookWrapStyle = {
   maxWidth: "100%",
+  maxHeight: "75vh",
+  overflowY: "auto",
   overflowX: "auto",
   border: "1px solid #d7dce5",
   borderRadius: "14px",
@@ -1995,8 +1998,9 @@ const spreadsheetGradebookTableStyle = {
 
 const spreadsheetStudentHeaderStyle = {
   position: "sticky",
+  top: 0,
   left: 0,
-  zIndex: 3,
+  zIndex: 5,
   width: "1px",
   paddingLeft: "1.5ch",
   paddingRight: "1.5ch",
@@ -2038,6 +2042,9 @@ const spreadsheetStudentMenuPanelStyle = {
 };
 
 const spreadsheetAssignmentHeaderStyle = {
+  position: "sticky",
+  top: 0,
+  zIndex: 4,
   width: "220px",
   minWidth: "220px",
   maxWidth: "220px",
@@ -2186,6 +2193,9 @@ const spreadsheetMarkStatusStyle = {
 };
 
 const spreadsheetSummaryHeaderStyle = {
+  position: "sticky",
+  top: 0,
+  zIndex: 4,
   minWidth: "150px",
   background: "#f8fafc",
 };

@@ -1,0 +1,13 @@
+@media print {
+  .spreadsheet-gradebook-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .spreadsheet-gradebook-scroll th,
+  .spreadsheet-gradebook-scroll td {
+    position: static !important;
+  }
+  .spreadsheet-gradebook-scroll thead {
+    display: table-header-group;
+  }
+}
