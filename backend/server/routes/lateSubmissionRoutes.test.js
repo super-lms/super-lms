@@ -9,7 +9,10 @@ for(const role of ['admin','teacher']) for(const scope of ['master','section']){
    queried=true;
    assert.deepEqual(args,[42,169,scope==='master']);
    assert.match(sql,/c\.id=\$2 OR c\.master_course_id=\$2/);
-   assert.match(sql,/selected_enrollment\.student_user_id=b\.student_id AND selected_cohort\.id=\$2 AND selected_cohort\.master_course_id=c\.id/);
+   assert.match(sql,/membership\.student_user_id=b\.student_id/);
+   assert.match(sql,/COALESCE\(enrolled\.master_course_id,enrolled\.id\)=COALESCE\(c\.master_course_id,c\.id\)/);
+   assert.match(sql,/roster\.course_title,roster\.section_id/);
+   assert.match(sql,/NOT \$3::BOOLEAN AND roster\.section_id=\$2/);
    assert.doesNotMatch(sql,/\$\d\s*=\s*'admin'|a\.teacher_id\s*=/);
    assert.match(sql,/c\.teacher_id=\$1/);
    assert.match(sql,/ct\.course_id IN\(c\.id,COALESCE\(c\.master_course_id,c\.id\)\)/);
