@@ -11,14 +11,24 @@ router.delete('/:id',...admin,async(req,res,next)=>{
   if(!isId(req.params.id))return res.status(400).json({error:'Invalid quiz'});
   await delivery.ensure();
   client=await pool.connect();await client.query('BEGIN');
-  const found=await client.query('SELECT id FROM teacher_quizzes WHERE id=$1 AND (author_id=$2 OR $2::integer IS NULL) AND school_id IS NOT DISTINCT FROM $3 FOR UPDATE',[req.params.id,quizActor(req),req.schoolId]);
+  const found=await client.query('SELECT id,assignment_id FROM teacher_quizzes WHERE id=$1 AND (author_id=$2 OR $2::integer IS NULL) AND school_id IS NOT DISTINCT FROM $3 FOR UPDATE',[req.params.id,quizActor(req),req.schoolId]);
   if(!found.rows.length){await client.query('ROLLBACK');return res.status(404).json({error:'Quiz unavailable or cannot be deleted.'});}
-  // Quiz records are removed atomically. Published submissions and assignments remain intact.
+  const assignmentId=found.rows[0].assignment_id;
+  const removeAssignment=req.query.removeAssignment==='true';
+  if(removeAssignment&&assignmentId){
+   const assignment=await client.query(`SELECT a.id FROM assignments a JOIN courses c ON c.id=a.class_id WHERE a.id=$1 AND c.school_id IS NOT DISTINCT FROM $3 AND ($2::integer IS NULL OR a.teacher_id=$2 OR c.teacher_id=$2 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$2)) FOR UPDATE OF a`,[assignmentId,quizActor(req),req.schoolId]);
+   if(!assignment.rows.length){await client.query('ROLLBACK');return res.status(403).json({error:'You cannot delete the linked assignment.'});}
+   const shared=await client.query('SELECT id FROM teacher_quizzes WHERE assignment_id=$1 AND id<>$2',[assignmentId,req.params.id]);
+   if(shared.rows.length){await client.query('ROLLBACK');return res.status(409).json({error:'Another quiz uses this assignment. Keep the gradebook assignment.'});}
+   if(req.query.confirmMarks!=='true'){await client.query('ROLLBACK');return res.status(409).json({error:'Confirm removal of the assignment and all saved marks.'});}
+  }
+  // Remove quiz records and optionally its assignment in one transaction.
   await client.query('DELETE FROM teacher_quiz_gradebook WHERE quiz_id=$1',[req.params.id]);
   await client.query('DELETE FROM teacher_quiz_attempts WHERE quiz_id=$1',[req.params.id]);
   await client.query('DELETE FROM teacher_quiz_responses WHERE survey_id=$1',[req.params.id]);
   await client.query('DELETE FROM teacher_quizzes WHERE id=$1',[req.params.id]);
-  await client.query('COMMIT');res.json({ok:true,id:req.params.id});
+  if(removeAssignment&&assignmentId)await client.query('DELETE FROM assignments WHERE id=$1',[assignmentId]);
+  await client.query('COMMIT');res.json({ok:true,id:req.params.id,...(removeAssignment&&assignmentId?{removedAssignmentId:assignmentId}:{})});
  }catch(error){if(client)await client.query('ROLLBACK');next(error);}finally{client?.release();}
 });
 router.get('/courses',...admin,async(req,res,next)=>{try{const rows=await pool.query(`SELECT c.id,c.title,c.master_course_id,c.master_title,c.section_code,COALESCE(c.master_course_id,c.id) AS content_course_id FROM courses c WHERE (c.school_id IS NOT DISTINCT FROM $2 OR c.school_id IS NULL OR $2 IS NULL) AND (($1::integer IS NULL AND c.school_id IS NOT DISTINCT FROM $2) OR c.teacher_id=$1 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$1)) ORDER BY c.title`,[quizActor(req),req.schoolId]);res.json(rows.rows)}catch(e){next(e)}});
