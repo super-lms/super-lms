@@ -340,6 +340,15 @@ function SubmissionEditor({
         </DetailCard>
       </div>
 
+      {submissionState?.held_work?.length > 0 ? (
+        <NoticeBox>
+          Your late work is saved and awaiting teacher approval. Once approved, your teacher can mark it without another submission.
+          {submissionState.held_work.filter(item => item.method === "attachment").map(item => (
+            <div key={item.id}>Held file: {item.original_name}</div>
+          ))}
+        </NoticeBox>
+      ) : null}
+
       {assignment?.description ? (
         <div style={{ marginBottom: "16px", color: "#4b5563", lineHeight: 1.5 }}>
           <strong>Assignment Details:</strong>
@@ -541,6 +550,7 @@ function getAssignmentStatus(dueDateValue) {
 }
 
 function formatSubmissionStatus(value) {
+  if (value === "awaiting_approval") return "Awaiting teacher approval"
   if (value === "submitted") return "Submitted"
   if (value === "not_submitted") return "Not submitted"
   return "Unknown"
@@ -968,7 +978,7 @@ export default function StudentDashboardPage() {
         ...current,
         [assignmentId]: data,
       }))
-      setSubmissionDraftText(data?.submission?.content || "")
+      setSubmissionDraftText(data?.held_work?.find(item => item.method === "text")?.content ?? data?.submission?.content ?? "")
       setSubmissionHasUnsavedChanges(false)
       setSubmissionErrorText("")
       await Promise.all([
@@ -1099,7 +1109,12 @@ export default function StudentDashboardPage() {
       }
 
       await loadSubmissionAttachments(assignmentId, studentEmail)
-      const successMessage = data.accepted_past_due ? `File accepted PAST DUE with teacher approval: ${file.name}` : `File attached successfully: ${file.name}`
+      const statusResponse = await authFetch(`/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`)
+      if (statusResponse.ok) {
+        const statusData = await statusResponse.json()
+        setSubmissionStateByAssignmentId(current => ({...current, [assignmentId]: statusData}))
+      }
+      const successMessage = data.pending_approval ? `File saved and held for teacher approval: ${file.name}. You do not need to upload it again.` : data.accepted_past_due ? `File accepted PAST DUE with teacher approval: ${file.name}` : `File attached successfully: ${file.name}`
       setAttachmentSuccessText(successMessage)
       setSubmissionHasUnsavedChanges(false)
       setAttachmentSuccessByAssignmentId((current) => ({
@@ -1137,7 +1152,7 @@ export default function StudentDashboardPage() {
       return
     }
 
-    const hasAttachments = Array.isArray(selectedSubmissionAttachments) && selectedSubmissionAttachments.length > 0
+    const hasAttachments = (Array.isArray(selectedSubmissionAttachments) && selectedSubmissionAttachments.length > 0) || submissionStateByAssignmentId[assignmentId]?.held_work?.some(item => item.method === "attachment")
 
     if (!content && !hasAttachments) {
       setSubmissionErrorText("Please enter submission text or attach a file before saving.")
@@ -1171,9 +1186,9 @@ export default function StudentDashboardPage() {
         ...current,
         [assignmentId]: data,
       }))
-      setSubmissionDraftText(data?.submission?.content || "")
+      setSubmissionDraftText(data?.held_work?.find(item => item.method === "text")?.content ?? data?.submission?.content ?? "")
       setSubmissionHasUnsavedChanges(false)
-      setSubmissionSaveMessage(data.accepted_past_due ? "Submission accepted PAST DUE with teacher approval." : "Submission successful.")
+      setSubmissionSaveMessage(data.pending_approval ? "Your work is saved and awaiting teacher approval. You do not need to submit it again." : data.accepted_past_due ? "Submission accepted PAST DUE with teacher approval." : "Submission successful.")
     } catch (err) {
       console.error("Error saving student submission:", err)
       setSubmissionErrorText("Failed to save submission.")

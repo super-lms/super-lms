@@ -56,7 +56,8 @@ function getRtiSsoSecret() {
 
 app.use(cors());
 app.use(express.json({ limit: "75mb" }));
-app.use('/api/assignments',require('./routes/lateSubmissionRoutes').createLateSubmissionRouter(pool,submissionDeadlines));
+const heldSubmissions = require('./heldSubmissions').createHeldSubmissions(pool, submissionDeadlines, ensureSubmissionAttachmentsTable);
+app.use('/api/assignments',require('./routes/lateSubmissionRoutes').createLateSubmissionRouter(pool,submissionDeadlines,heldSubmissions));
 app.use('/api/assignments',require('./routes/readAloudRoutes').createReadAloudRouter(pool,submissionDeadlines,{studentHasLiveCourseAccess,assignmentIsAvailableToStudents}));
 app.use('/api/admin/risk-alerts',require('./routes/adminRiskRoutes').createAdminRiskRouter(pool));
 app.use("/api", (req, res, next) => {
@@ -6315,6 +6316,7 @@ app.get(
       const submissionsByAssignmentId = Object.fromEntries(
         submissionsResult.rows.map((submission) => [String(submission.assignment_id), submission])
       );
+      const heldWork = await heldSubmissions.forCourse(contentCourseId, studentEmail);
       const submissionStatesByAssignmentId = {};
       assignmentsResult.rows.forEach((assignment) => {
         const submission = submissionsByAssignmentId[String(assignment.id)] || null;
@@ -6326,7 +6328,8 @@ app.get(
         submissionStatesByAssignmentId[String(assignment.id)] = {
           assignment,
           submission,
-          submission_status: hasSubmittedContent ? "submitted" : "not_submitted",
+          held_work: heldWork.filter(item => Number(item.assignment_id) === Number(assignment.id)),
+          submission_status: heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
         };
       });
 
@@ -6633,6 +6636,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       submissionsByAssignmentId[String(submission.assignment_id)] = submission;
     });
 
+    const heldWork = await heldSubmissions.forCourse(contentCourseId, studentEmail);
     const submissionStatesByAssignmentId = {};
     assignmentsResult.rows.forEach((assignment) => {
       const assignmentId = String(assignment.id);
@@ -6645,7 +6649,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       submissionStatesByAssignmentId[assignmentId] = {
         assignment,
         submission,
-        submission_status: hasSubmittedContent ? "submitted" : "not_submitted",
+        held_work: heldWork.filter(item => Number(item.assignment_id) === Number(assignment.id)),
+        submission_status: heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
       };
     });
 
@@ -6758,10 +6763,12 @@ app.get(
           (String(submission.content || "").trim() || submission.has_attachment)
       );
 
+      const held = await heldSubmissions.pending(assignmentId, studentUserId);
       return res.json({
+        held_work: held,
         assignment: assignmentResult.rows[0],
         submission,
-        submission_status: hasSubmittedContent ? "submitted" : "not_submitted",
+        submission_status: held.length ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
       });
     } catch (err) {
       console.error("GET /api/assignments/:assignmentId/student-submission failed:", err);
@@ -6771,7 +6778,7 @@ app.get(
 );
 
 /* SAVE STUDENT SUBMISSION */
-app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requireRole("admin", "student"), submissionDeadlines.middleware, async (req, res) => {
+app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requireRole("admin", "student"), submissionDeadlines.holdMiddleware, async (req, res) => {
   let submissionClient;
     let submissionCommitted=false;
   try {
@@ -6815,7 +6822,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
       [assignmentId, studentUserId, studentEmail]
     );
 
-    if (!content && existingAttachmentSubmissionResult.rows.length === 0) {
+    if (!content && existingAttachmentSubmissionResult.rows.length === 0 && !(await heldSubmissions.pending(assignmentId, studentUserId)).length) {
       return res.status(400).json({ error: "Submission content or attachment is required" });
     }
 
@@ -6848,8 +6855,12 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
     }
 
     if(req.user.role==='student') {
-      try { req.deadlineAcceptance=await submissionDeadlines.check(assignmentId,studentUserId); }
+      try { req.deadlineAcceptance=await submissionDeadlines.check(assignmentId,studentUserId,{hold:true}); }
       catch(error){return res.status(error.status||500).json({error:error.status?error.message:'Unable to check the deadline.',code:error.code});}
+    }
+    if (req.deadlineAcceptance?.pending) {
+      return res.json(await heldSubmissions.hold({assignmentId, studentId:studentUserId,
+        studentEmail, studentName, content, state:req.deadlineAcceptance}));
     }
     submissionClient=await pool.connect();await submissionClient.query('BEGIN');
     const existingResult = existingAttachmentSubmissionResult;
@@ -7049,7 +7060,7 @@ app.post(
   "/api/assignments/:assignmentId/student-attachments",
   authenticateJWT,
   requireRole("admin", "student"),
-  submissionDeadlines.middleware,
+  submissionDeadlines.holdMiddleware,
   handleStudentAttachmentUpload,
   async (req, res) => {
     let submissionClient;
@@ -7109,10 +7120,17 @@ app.post(
         return res.status(403).json({ error: "This course section is not live yet" });
       }
 
-      // Recheck after receiving the file so uploads crossing the deadline are rejected.
+      // Recheck after receiving the file so uploads crossing the deadline are held for approval.
       if(req.user.role==='student') {
-        try { req.deadlineAcceptance=await submissionDeadlines.check(assignmentId,studentUserId); }
+        try { req.deadlineAcceptance=await submissionDeadlines.check(assignmentId,studentUserId,{hold:true}); }
         catch(error) { fs.unlink(req.file.path,()=>{});return res.status(error.status||500).json({error:error.status?error.message:'Unable to check the deadline.',code:error.code}); }
+      }
+      if (req.deadlineAcceptance?.pending) {
+        const result = await heldSubmissions.hold({assignmentId, studentId:studentUserId,
+          studentEmail, studentName:userResult.rows[0]?.name || studentEmail,
+          state:req.deadlineAcceptance, file:{...req.file, data:fs.readFileSync(req.file.path)}});
+        fs.unlink(req.file.path,()=>{});
+        return res.json(result);
       }
       submissionClient=await pool.connect();await submissionClient.query('BEGIN');
       const submissionResult = await submissionClient.query(
@@ -7891,7 +7909,7 @@ app.post(
 
 
 /* SAVE KDU SCORES */
-app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), heldSubmissions.gradeMiddleware, async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const studentEmail = String(req.body.student_email || "").trim().toLowerCase();
@@ -14016,7 +14034,7 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
   }
 });
 
-app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), heldSubmissions.gradeMiddleware, async (req, res) => {
   try {
     await ensureAssignmentSectionTables();
 

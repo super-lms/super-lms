@@ -1937,7 +1937,7 @@ export default function AssignmentSpeedGradingPage() {
                     ) : null}
                   </div>
 
-                    <LateSubmissionApproval key={`${assignmentId}:${selectedRow.student_email}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} />
+                    <LateSubmissionApproval key={`${assignmentId}:${selectedRow.student_email}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow.student_email); await loadStudentAttachments(selectedRow.student_email); }} />
 
                   <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
                     <strong>Submission:</strong>{" "}
