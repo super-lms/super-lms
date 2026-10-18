@@ -1,3 +1,4 @@
+import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Eye, LogOut, BookOpen, ClipboardList, FileText } from "lucide-react"
@@ -216,8 +217,9 @@ export default function TeacherStudentViewPage() {
 
             <section style={{ ...cardStyle, marginTop: "18px" }}>
               <h2>Class Resources</h2>
+              <p>Newest resources first. Scroll within the list to find older files.</p>
               {classResources.length === 0 ? <p>No general class resources have been posted yet.</p> : (
-                <div style={{ display: "grid", gap: "10px" }}>
+                <ClassResourceWindow>
                   {classResources.map((resource) => (
                     <div key={resource.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "12px 14px", border: "1px solid #d9e0ea", borderRadius: "10px", flexWrap: "wrap" }}>
                       <strong>{resource.original_name || "Class resource"}</strong>
@@ -226,7 +228,7 @@ export default function TeacherStudentViewPage() {
                       </a>
                     </div>
                   ))}
-                </div>
+                </ClassResourceWindow>
               )}
             </section>
 

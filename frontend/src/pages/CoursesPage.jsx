@@ -1,3 +1,4 @@
+import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import * as XLSX from "xlsx"
@@ -3204,7 +3205,7 @@ export default function CoursesPage() {
                       <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                         <div>
                           <h2 style={{ margin: 0 }}>Class Resources</h2>
-                          <div style={{ marginTop: "5px", color: "#4b5563" }}>General files shared with every student section of this course.</div>
+                          <div style={{ marginTop: "5px", color: "#4b5563" }}>General files shared with every student section of this course. Newest resources first; scroll for older files.</div>
                         </div>
                         <button type="button" onClick={() => loadClassResources(contentCourseId)} style={buttonStyle}>
                           {classResourceLoadingCourseId === contentCourseId ? "Loading..." : "Refresh Resources"}
@@ -3220,7 +3221,7 @@ export default function CoursesPage() {
                           {classResourceUploadingCourseId === contentCourseId ? "Uploading..." : "Upload Resources"}
                         </button>
                       </div>
-                      <div style={{ marginTop: "14px", display: "grid", gap: "8px" }}>
+                      <ClassResourceWindow style={{ marginTop: "14px" }}>
                         {(classResourcesByCourseId[contentCourseId] || []).length === 0 ? (
                           <div style={{ color: "#64748b" }}>No general class resources uploaded yet. Select Refresh Resources to check.</div>
                         ) : (classResourcesByCourseId[contentCourseId] || []).map((resource) => {
@@ -3249,7 +3250,7 @@ export default function CoursesPage() {
                             </div>
                           )
                         })}
-                      </div>
+                      </ClassResourceWindow>
                     </div>
 
                     <div>

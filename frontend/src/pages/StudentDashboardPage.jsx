@@ -1,3 +1,4 @@
+import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import SavedTeacherRubric from "../components/rubrics/RubricContribution.jsx";
 import { displayAssignmentTime, beijingDateTime } from "../services/assignmentTime.js"
@@ -1761,7 +1762,7 @@ export default function StudentDashboardPage() {
         <section className="panel" ref={classResourcesRef} style={{ scrollMarginTop: "18px", display: showPortalSection("resources") ? undefined : "none" }}>
           <SectionHeader
             title="Class Resources"
-            subtitle="General files your teacher has shared for this class."
+            subtitle="Newest resources first. Scroll within the list to find older files."
           />
           {classResourcesLoading ? (
             <NoticeBox>Loading class resources...</NoticeBox>
@@ -1770,14 +1771,14 @@ export default function StudentDashboardPage() {
           ) : classResources.length === 0 ? (
             <NoticeBox>No general class resources have been posted yet.</NoticeBox>
           ) : (
-            <div style={{ display: "grid", gap: "10px" }}>
+            <ClassResourceWindow>
               {classResources.map((resource) => (
                 <div key={resource.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", padding: "12px 14px", border: "1px solid #cfd8e3", borderRadius: "10px" }}>
                   <span style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{resource.original_name}</span>
                   <a href={`${API_BASE}${resource.file_path}`} download={resource.original_name || true} style={{ padding: "9px 12px", borderRadius: "8px", background: "#111827", color: "white", fontWeight: 800, textDecoration: "none" }}>Download to Device</a>
                 </div>
               ))}
-            </div>
+            </ClassResourceWindow>
           )}
         </section>
 
