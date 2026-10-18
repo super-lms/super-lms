@@ -1,3 +1,4 @@
+import "./AssignmentSpeedGradingPage.css";
 import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
 import { RubricContribution } from '../components/rubrics/RubricContribution.jsx';
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
@@ -922,10 +923,20 @@ export default function AssignmentSpeedGradingPage() {
   }
 
   const studentWorkRef = useRef(null);
+  const studentListRef = useRef(null);
 
   useEffect(() => {
     if (!selectedRow?.student_email) return;
-    studentWorkRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+    // Switch students without moving the page or the independently scrolled roster.
+    if (studentWorkRef.current) studentWorkRef.current.scrollTop = 0;
+    const list = studentListRef.current;
+    const selected = list?.querySelector('[aria-current="true"]');
+    if (list && selected) {
+      const bounds = list.getBoundingClientRect();
+      const item = selected.getBoundingClientRect();
+      if (item.top < bounds.top) list.scrollTop -= bounds.top - item.top;
+      else if (item.bottom > bounds.bottom) list.scrollTop += item.bottom - bounds.bottom;
+    }
   }, [assignmentId, selectedRow?.student_email]);
 
   useEffect(() => {
@@ -1689,15 +1700,8 @@ export default function AssignmentSpeedGradingPage() {
             </ActionButton>
           </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "375px minmax(0, 1fr)",
-              gap: "28px",
-              alignItems: "start",
-            }}
-          >
-            <div>
+          <div className="speed-grader-workspace">
+            <aside className="speed-grader-roster" aria-label="Student selection">
               <div
                 style={{
                   border: "1px solid #d7dce5",
@@ -1712,6 +1716,7 @@ export default function AssignmentSpeedGradingPage() {
                 {gradedSummary.totalCount}
               </div>
 
+              <div ref={studentListRef} className="speed-grader-student-list" role="region" aria-label="Scrollable student names" tabIndex={0}>
               {filteredRows.map((row) => {
                 const isSelected =
                   selectedRow?.student_email === row.student_email;
@@ -1720,6 +1725,7 @@ export default function AssignmentSpeedGradingPage() {
                 return (
                   <button
                     key={row.student_email}
+                    aria-current={isSelected ? "true" : undefined}
                     type="button"
                     onClick={() => setSelectedRow(row)}
                     style={{
@@ -1769,9 +1775,10 @@ export default function AssignmentSpeedGradingPage() {
                   </button>
                 );
               })}
-            </div>
+              </div>
+            </aside>
 
-            <div ref={studentWorkRef} style={{ scrollMarginTop: "16px" }}>
+            <div ref={studentWorkRef} className="speed-grader-details" role="region" aria-label="Assignment and grading" tabIndex={0}>
               {!selectedRow ? (
                 <div
                   style={{

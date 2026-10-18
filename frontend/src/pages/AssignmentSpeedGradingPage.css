@@ -1,0 +1,49 @@
+.speed-grader-workspace {
+  display: grid;
+  grid-template-columns: clamp(250px, 27vw, 375px) minmax(0, 1fr);
+  gap: 24px;
+  height: calc(100dvh - 32px);
+  min-height: 360px;
+}
+
+.speed-grader-roster {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.speed-grader-student-list,
+.speed-grader-details {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding: 2px 8px 12px 2px;
+}
+
+.speed-grader-student-list {
+  flex: 1;
+}
+
+.speed-grader-details {
+  scroll-margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .speed-grader-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 0;
+  }
+
+  .speed-grader-student-list {
+    flex: none;
+    max-height: 320px;
+  }
+
+  .speed-grader-details {
+    overflow: visible;
+  }
+}
