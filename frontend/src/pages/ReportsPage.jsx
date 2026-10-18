@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import authFetch from "../services/authFetch";
 
+import AutoSizeTextarea from "../components/AutoSizeTextarea.jsx";
 import ReportCardBuilder from "../components/ReportCardBuilder.jsx";
 import AttendanceReport from "../components/AttendanceReport.jsx";
 import IEReport from "../components/IEReport.jsx";
@@ -1160,14 +1161,19 @@ function ReportsPage() {
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={tableStyle}>
+          <table style={{ ...tableStyle, tableLayout: "fixed", minWidth: "800px" }}>
+            <colgroup>
+              <col style={{ width: "150px" }} />
+              <col />
+              <col />
+              <col style={{ width: "188px" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th style={thStyle}>Student</th>
-                <th style={thStyle}>Com1</th>
-                <th style={thStyle}>Com2</th>
-                <th style={thStyle}>Draft</th>
-                <th style={thStyle}>Save</th>
+                <th style={{ ...thStyle, padding: "12px 6px" }}>Com1</th>
+                <th style={{ ...thStyle, padding: "12px 6px" }}>Com2</th>
+                <th style={commentCellStyle}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1175,8 +1181,8 @@ function ReportsPage() {
                 <tr key={student.student_user_id}>
                   <td style={tdStyle}>{student.student_name}</td>
 
-                  <td style={tdStyle}>
-                    <textarea
+                  <td style={commentCellStyle}>
+                    <AutoSizeTextarea
                       value={student.com1 || ""}
                       onChange={(e) => {
                         const nextCom1 = e.target.value;
@@ -1184,12 +1190,14 @@ function ReportsPage() {
                         setHasUnsavedCommentChanges(true);
                         autoSaveComment(student.student_user_id, nextCom1, student.com2);
                       }}
-                      style={{ width: "100%", minHeight: "120px" }}
+                      rows={4}
+                      aria-label={`Com1 for ${student.student_name}`}
+                      style={commentTextareaStyle}
                     />
                   </td>
 
-                  <td style={tdStyle}>
-                    <textarea
+                  <td style={commentCellStyle}>
+                    <AutoSizeTextarea
                       value={student.com2 || ""}
                       onChange={(e) => {
                         const nextCom2 = e.target.value;
@@ -1197,32 +1205,30 @@ function ReportsPage() {
                         setHasUnsavedCommentChanges(true);
                         autoSaveComment(student.student_user_id, student.com1, nextCom2);
                       }}
-                      style={{ width: "100%", minHeight: "120px" }}
+                      rows={4}
+                      aria-label={`Com2 for ${student.student_name}`}
+                      style={commentTextareaStyle}
                     />
                   </td>
 
-                  <td style={tdStyle}>
-                    <button
-                      onClick={() => generateDraftComment(student)}
-                      style={buttonStyle}
-                    >
-                      Generate Draft
-                    </button>
-                  </td>
-
-                  <td style={{ ...tdStyle, position: "relative" }}>
+                  <td style={{ ...commentCellStyle, position: "relative" }}>
                     {savedCommentStudentId === student.student_user_id ? (
                       <div style={floatingSavedStyle}>Saved ✓</div>
                     ) : null}
-
-                    <button
-                      onClick={() =>
-                        saveComment(student.student_user_id, student.com1, student.com2)
-                      }
-                      style={buttonStyle}
-                    >
-                      Save
-                    </button>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "flex-start" }}>
+                      <button
+                        onClick={() => generateDraftComment(student)}
+                        style={commentButtonStyle}
+                      >
+                        Generate Draft
+                      </button>
+                      <button
+                        onClick={() => saveComment(student.student_user_id, student.com1, student.com2)}
+                        style={commentButtonStyle}
+                      >
+                        Save
+                      </button>
+                    </div>
 
                     {commentSaveTimes[student.student_user_id] ? (
                       <div style={commentTimestampStyle}>
@@ -1621,4 +1627,24 @@ const unsavedWarningStyle = {
   fontSize: "15px",
   fontWeight: 800,
   lineHeight: 1.4,
+};
+
+const commentCellStyle = { ...tdStyle, padding: "12px 6px" };
+
+const commentTextareaStyle = {
+  width: "100%",
+  padding: "10px",
+  border: "1px solid #b5b5b5",
+  borderRadius: "8px",
+  fontFamily: "inherit",
+  fontSize: "15px",
+  lineHeight: 1.5,
+};
+
+const commentButtonStyle = {
+  ...buttonStyle,
+  padding: "8px 10px",
+  fontSize: "13px",
+  lineHeight: 1.35,
+  whiteSpace: "nowrap",
 };
