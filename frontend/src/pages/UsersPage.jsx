@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import StudentIdImport from "../components/StudentIdImport.jsx";
 import EditUserDrawer from "./user-management/EditUserDrawer.jsx";
 import authFetch from "../services/authFetch";
 
@@ -693,6 +694,8 @@ function UsersPage() {
           {teacherError ? <p className="form-message">{teacherError}</p> : null}
         </form>
       </section>
+
+      <StudentIdImport onImported={loadUsers} />
 
       <section className="panel">
         <div className="section-header">

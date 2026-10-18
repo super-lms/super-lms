@@ -18,6 +18,31 @@ const DELETABLE_ROLES = new Set([
   "parent",
 ]);
 
+// Bulk correction changes only Users.student_id; account IDs and academic records stay linked.
+router.post('/student-id-import', authenticateJWT, requireRole('admin'), async (req,res) => {
+  let client;
+  try {
+    const {previewStudentIds,readySnapshot}=require('../studentIdImport');
+    client=await pool.connect();await client.query('BEGIN');
+    if(req.body.apply===true)await client.query('LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE');
+    const result=await client.query(`SELECT id,role,email,student_id,
+      COALESCE(NULLIF(TRIM(name),''),NULLIF(TRIM(CONCAT_WS(' ',first_name,last_name)),''),email) AS name FROM users`);
+    const preview=previewStudentIds(req.body.rows,result.rows);
+    const ready=readySnapshot(preview);
+    if(req.body.apply===true){
+      if(!Array.isArray(req.body.expected)||JSON.stringify(req.body.expected)!==JSON.stringify(ready)){
+        await client.query('ROLLBACK');return res.status(409).json({error:'Matches changed since preview. Preview again before applying.',preview});
+      }
+      for(const row of ready)await client.query(`UPDATE users SET student_id=$1 WHERE id=$2 AND role='student'`,[row.student_id,row.user_id]);
+    }
+    await client.query('COMMIT');res.json({preview,expected:ready,updated:req.body.apply===true?ready.length:0});
+  }catch(error){
+    if(client)await client.query('ROLLBACK').catch(()=>{});
+    console.error('Student ID import failed:',error.message);
+    res.status(error.code==='23505'?409:400).json({error:error.code==='23505'?'A Student ID is already assigned. Preview again.':error.message});
+  }finally{client?.release();}
+});
+
 router.put("/:userId", authenticateJWT, requireRole("admin"), async (req, res) => {
   try {
     const userId = Number(req.params.userId);

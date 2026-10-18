@@ -665,7 +665,7 @@ export default function ClassRosterPage() {
               <thead>
                 <tr>
                   <th>Student</th>
-                  <th>WebTESS Student ID</th>
+                  <th>Student ID</th>
                   <th>Email</th>
                   <th>Parent Email</th>
                   <th>Actions</th>
@@ -713,7 +713,7 @@ export default function ClassRosterPage() {
                               value={editingStudent.student_id}
                               onChange={(event) => updateEditingStudent("student_id", event.target.value)}
                               disabled={editingStudentSaving}
-                              placeholder="WebTESS Student ID"
+                              placeholder="Student ID"
                               aria-label={`Student ID for ${student.name || student.email}`}
                             />
                           ) : (
