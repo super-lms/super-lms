@@ -159,7 +159,7 @@ export default function CoursesPage() {
   const [applyingTemplateKey, setApplyingTemplateKey] = useState(null)
   const [previewTemplateId, setPreviewTemplateId] = useState(null)
 
-  const [teacherCoachOpen, setTeacherCoachOpen] = useState(true)
+  const [teacherCoachOpen, setTeacherCoachOpen] = useState(false)
   const [teacherCoachGuide, setTeacherCoachGuide] = useState("first_course")
   const [teacherCoachStep, setTeacherCoachStep] = useState(0)
   const openedRequestedSectionRef = useRef("")
@@ -1580,7 +1580,6 @@ export default function CoursesPage() {
         window.localStorage.setItem("super-lms-last-course-id", String(createdCourseId))
         setTeacherCoachGuide("first_course")
         setTeacherCoachStep(1)
-        setTeacherCoachOpen(true)
       }
 
       await loadCourses()

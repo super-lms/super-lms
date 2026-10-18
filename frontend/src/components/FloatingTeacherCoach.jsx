@@ -2,6 +2,7 @@ import { useState } from "react"
 
 export default function FloatingTeacherCoach({
   title = "Teacher Coach",
+  defaultOpen = false,
   subtitle = "SUPER LMS Guide",
   recommendationTitle = "Check your next step",
   recommendationReason = "SUPER LMS can help guide the teacher workflow.",
@@ -10,7 +11,7 @@ export default function FloatingTeacherCoach({
   onAction = null,
   children = null,
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(defaultOpen)
 
   return (
     <div style={teacherCoachShellStyle}>

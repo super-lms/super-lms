@@ -2020,6 +2020,7 @@ export default function StudentDashboardPage() {
       </div>
       <FloatingTeacherCoach
         title="Student Coach"
+        defaultOpen
         subtitle="Student Progress Coach"
         recommendationTitle={studentCoachRecommendation.title}
         recommendationReason={studentCoachRecommendation.reason}

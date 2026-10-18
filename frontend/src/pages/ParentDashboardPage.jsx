@@ -666,6 +666,7 @@ export default function ParentDashboardPage() {
       </div>
       <FloatingTeacherCoach
         title="Parent Coach"
+        defaultOpen
         subtitle="Parent Support Coach"
         recommendationTitle={parentCoachRecommendation.title}
         recommendationReason={parentCoachRecommendation.reason}
