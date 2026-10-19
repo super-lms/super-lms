@@ -2130,7 +2130,7 @@ const spreadsheetStudentCellStyle = {
   width: "1px",
   paddingLeft: "1.5ch",
   paddingRight: "1.5ch",
-  background: "#ffffff",
+  background: "var(--list-row-background, #ffffff)",
   borderRight: "2px solid #cbd5e1",
 };
 

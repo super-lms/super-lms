@@ -11,10 +11,10 @@ function studentName(student) {
 async function classRosterDocx(course, students) {
   const layout = rosterLayout(students.length);
   const widths = layout.panels === 1 ? [600,1400,5000,3200] : [500,1000,2600,875,250,500,1000,2600,875];
-  const cell = (text, width, header = false) => new TableCell({
+  const cell = (text, width, header = false, shaded = false) => new TableCell({
     width: {size: width, type: WidthType.DXA}, verticalAlign: VerticalAlign.CENTER,
     margins: {top: 20,bottom:20,left:65,right:65},
-    shading: header ? {fill:'EEEEEE'} : undefined,
+    shading: {fill:header ? 'EEEEEE' : shaded ? 'F1F3F5' : 'FFFFFF'},
     children: [new Paragraph({spacing:{before:0,after:0,line:Math.round(layout.fontSize*20)},
       children:[new TextRun({text:String(text || ''),font:'Arial',size:Math.floor(layout.fontSize*2),bold:header})]})],
   });
@@ -27,7 +27,7 @@ async function classRosterDocx(course, students) {
       const index=panel*layout.rows+row, student=students[index];
       values.push(...(student?[String(index+1),student.student_id || '',studentName(student),'']:['','','','']));
     }
-    rows.push(new TableRow({cantSplit:true,height:{value:layout.rowHeight*20,rule:HeightRule.ATLEAST},children:values.map((text,index)=>cell(text,widths[index]))}));
+    rows.push(new TableRow({cantSplit:true,height:{value:layout.rowHeight*20,rule:HeightRule.ATLEAST},children:values.map((text,index)=>cell(text,widths[index],false,row % 2 === 1))}));
   }
   return Packer.toBuffer(new Document({creator:'Super LMS',title:`${course.title} Class Roster`,
     styles:{default:{document:{run:{font:'Arial',size:20,color:'000000'},paragraph:{spacing:{after:0}}}}},

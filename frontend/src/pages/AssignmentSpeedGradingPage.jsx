@@ -1717,7 +1717,7 @@ export default function AssignmentSpeedGradingPage() {
                 {gradedSummary.totalCount}
               </div>
 
-              <div ref={studentListRef} className="speed-grader-student-list" role="region" aria-label="Scrollable student names" tabIndex={0}>
+              <div ref={studentListRef} className="speed-grader-student-list striped-list" role="region" aria-label="Scrollable student names" tabIndex={0}>
               {filteredRows.map((row) => {
                 const isSelected =
                   selectedRow?.student_email === row.student_email;

@@ -1,6 +1,7 @@
 export default function ClassResourceWindow({ children, style }) {
   return (
     <div
+      className="striped-list"
       role="region"
       aria-label="Class resources, newest first"
       tabIndex={0}

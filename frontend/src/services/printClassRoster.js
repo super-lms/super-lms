@@ -16,6 +16,9 @@ export function printClassRoster(course, roster) {
     table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
     th, td { border: 1px solid #aaa; padding: 7px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
     th { background: #eee; }
+    tbody tr:nth-child(even) { background: #f1f3f5; }
+    tbody tr:nth-child(odd) { background: #fff; }
+    tbody tr { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     thead { display: table-header-group; }
     tr { break-inside: avoid; }
     button { margin-bottom: 16px; padding: 8px 14px; }

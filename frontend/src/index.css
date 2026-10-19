@@ -448,3 +448,19 @@ td {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* Keep long rosters and other data lists easy to follow across columns. */
+tbody > tr:nth-child(odd) { --list-row-background: #ffffff; }
+tbody > tr:nth-child(even) { --list-row-background: #f1f3f5; }
+tbody > tr { background-color: var(--list-row-background); }
+tbody > tr > td { background-color: inherit; }
+.striped-list > :nth-child(odd) { --list-row-background: #ffffff; }
+.striped-list > :nth-child(even) { --list-row-background: #f1f3f5; }
+.striped-list > * { background-color: var(--list-row-background) !important; }
+.striped-list > [aria-current="true"] { background-color: #dbeafe !important; }
+@media print {
+  tbody > tr, tbody > tr > td, .striped-list > * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
