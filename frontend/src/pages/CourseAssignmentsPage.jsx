@@ -2,18 +2,21 @@ import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import API_BASE from "../apiBase"
 import authFetch from "../services/authFetch"
+import { assignmentsForAudience } from "../services/assignmentAudience.js"
 import AssignmentCardsView from "../components/courseAssignments/AssignmentCardsView"
 import TeachersPublishedAssignmentsView from "../components/courseAssignments/TeachersPublishedAssignmentsView"
 import TeacherCoachPanel from "../components/courseAssignments/TeacherCoachPanel"
 
 export default function CourseAssignmentsPage() {
-  const { courseId } = useParams()
+  const params = useParams()
+  const courseId = params.courseId || params.courseName
   const navigate = useNavigate()
   const location = useLocation()
   const sectionId = new URLSearchParams(location.search).get("sectionId") || courseId
 
   const [course, setCourse] = useState(null)
   const [assignments, setAssignments] = useState([])
+  const [sectionCounts, setSectionCounts] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [message, setMessage] = useState("")
@@ -65,9 +68,24 @@ export default function CourseAssignmentsPage() {
     setAssignments(Array.isArray(assignmentsData) ? assignmentsData : [])
   }
 
+  useEffect(() => {
+    let active = true;
+    setSectionCounts(null);
+    const selectedId = sectionId === "all" ? courseId : sectionId;
+    authFetch(`/api/classes/${selectedId}/assignment-counts?scope=${sectionId === "all" ? "all" : "section"}`)
+      .then(async response => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load cohort assignment counts.");
+        if (active) setSectionCounts({ key: `${courseId}:${sectionId}`, rows: data.assignments || [] });
+      })
+      .catch(error => { if (active) setError(error.message); });
+    return () => { active = false; };
+  }, [courseId, sectionId, assignments]);
+
   const courseAssignments = useMemo(() => {
-    return assignments.filter((assignment) => String(assignment.class_id) === String(courseId))
-  }, [assignments, courseId])
+    const counts = sectionCounts?.key === `${courseId}:${sectionId}` ? sectionCounts.rows : [];
+    return assignmentsForAudience(assignments, course, sectionId, counts);
+  }, [assignments, course, courseId, sectionId, sectionCounts])
 
   const assignmentTruth = useMemo(() => {
     const totalAssignments = courseAssignments.length
