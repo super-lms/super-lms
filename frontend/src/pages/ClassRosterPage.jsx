@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
+import { printCompactClassRoster } from "../services/compactClassRoster.js";
 
 
 const emptyStudentForm = {
@@ -32,6 +33,8 @@ export default function ClassRosterPage() {
   const [editingStudentError, setEditingStudentError] = useState("");
   const [selectedHomeform, setSelectedHomeform] = useState("");
   const [homeformImporting, setHomeformImporting] = useState(false);
+  const [exportingWord, setExportingWord] = useState(false);
+  const [exportError, setExportError] = useState("");
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase();
   const isTeacher = normalizedRole === "teacher";
@@ -436,6 +439,17 @@ export default function ClassRosterPage() {
     loadRoster(selectedCourseId);
   }, [selectedCourseId]);
 
+  async function downloadRosterWord() {
+    setExportError("");setExportingWord(true);
+    try {
+      const response=await authFetch(`/api/class-roster/${selectedCourseId}/export.docx`);
+      if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error || "Could not download class roster.");}
+      const url=URL.createObjectURL(await response.blob()),link=document.createElement("a");
+      link.href=url;link.download=`${selectedCourse?.title || "Class"} Roster.docx`;link.click();
+      window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(error){setExportError(error.message);}finally{setExportingWord(false);}
+  }
+
   const selectedCourse = useMemo(() => {
     return (
       courses.find((course) => String(course.id) === String(selectedCourseId)) ||
@@ -493,6 +507,18 @@ export default function ClassRosterPage() {
               ))}
             </select>
           </div>
+
+          <div style={{display:"flex",gap:"10px",flexWrap:"wrap",margin:"16px 0"}}>
+            <button type="button" disabled={!selectedCourse || studentsLoading || !students.length}
+              onClick={()=>{setExportError("");try{printCompactClassRoster(selectedCourse,students);}catch(error){setExportError(error.message);}}}>
+              Print / Save PDF
+            </button>
+            <button type="button" disabled={!selectedCourse || studentsLoading || !students.length || exportingWord} onClick={downloadRosterWord}>
+              {exportingWord ? "Preparing Word…" : "Download Word"}
+            </button>
+            <span>One A4 sheet · Student names, IDs and notes</span>
+          </div>
+          {exportError ? <p role="alert">{exportError}</p> : null}
 
           <div className="summary-grid">
             <div className="summary-card">

@@ -12397,7 +12397,7 @@ app.post("/api/class-roster/:courseId/import-homeform", authenticateJWT, require
   }
 });
 /* GET CLASS ROSTER */
-app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+app.get(["/api/class-roster/:courseId", "/api/class-roster/:courseId/export.docx"], authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -12423,7 +12423,12 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
 
     const course = courseResult.rows[0];
     const isMasterCourse = !course.master_course_id;
-    const exactSectionRoster = String(req.query.scope || "").toLowerCase() === "section";
+    const isWordExport = req.path.endsWith("/export.docx");
+    const exactSectionRoster = isWordExport || String(req.query.scope || "").toLowerCase() === "section";
+    if (isWordExport) {
+      const access = await authorizeCourseModuleAccess(req, courseId);
+      if (!access.allowed) return res.status(access.status).json({error:"Course unavailable."});
+    }
     const sectionsResult = isMasterCourse
       ? await pool.query(
           `
@@ -12468,6 +12473,13 @@ app.get("/api/class-roster/:courseId", authenticateJWT, requireRole("admin", "te
       `,
       [rosterCourseIds]
     );
+
+    if (isWordExport) {
+      const buffer = await require('./classRosterExport').classRosterDocx(course,studentsResult.rows);
+      res.set('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.set('Content-Disposition',`attachment; filename="class-roster-${courseId}.docx"`);
+      return res.send(buffer);
+    }
 
     return res.json({
       course,
