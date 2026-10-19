@@ -23,7 +23,7 @@ export default function CourseAssignmentsPage() {
   const [movingAssignmentId, setMovingAssignmentId] = useState("")
   const [duplicatingAssignmentId, setDuplicatingAssignmentId] = useState("")
   const [deletingAssignmentId, setDeletingAssignmentId] = useState("")
-  const [coachOpen, setCoachOpen] = useState(true)
+  const [coachOpen, setCoachOpen] = useState(false)
   const [assignmentView, setAssignmentView] = useState("cards")
 
   useEffect(() => {
