@@ -99,10 +99,11 @@ router.put("/courses/:courseId/dingtalk", authenticateJWT, requireRole("admin", 
 router.post("/assignments/:assignmentId/send-to-dingtalk", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureTable();
-    const assignmentResult = await pool.query(`SELECT a.id,a.title,a.description,a.due_date,a.class_id,c.teacher_id,COALESCE(c.class_name,c.title,c.course_name,'Class ' || c.id::text) AS class_name FROM assignments a JOIN courses c ON c.id=a.class_id WHERE a.id=$1 LIMIT 1`, [Number(req.params.assignmentId)]);
+    const assignmentResult = await pool.query(`SELECT a.id,a.title,a.description,a.due_date,a.class_id,a.cohort_id,c.teacher_id,COALESCE(c.class_name,c.title,c.course_name,'Class ' || c.id::text) AS class_name FROM assignments a JOIN courses c ON c.id=a.class_id WHERE a.id=$1 LIMIT 1`, [Number(req.params.assignmentId)]);
     if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found." });
     const assignment = assignmentResult.rows[0];
-    const sectionId = Number(req.body.sectionId || assignment.class_id);
+    const sectionId = Number(req.body.sectionId || assignment.cohort_id || assignment.class_id);
+    if(assignment.cohort_id && sectionId !== Number(assignment.cohort_id))return res.status(400).json({error:'This assignment belongs to a different cohort.'});
     const sectionResult = await pool.query(
       `SELECT c.id, c.title AS class_name
        FROM courses c

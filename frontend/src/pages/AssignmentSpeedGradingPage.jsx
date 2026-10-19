@@ -242,17 +242,18 @@ function getSavedKduSummary(row) {
 export default function AssignmentSpeedGradingPage() {
   const location = useLocation();
   const gradingQueryParams = new URLSearchParams(location.search);
-  const sectionId = gradingQueryParams.get("sectionId") || "";
+  const requestedSectionId = gradingQueryParams.get("sectionId") || "";
   const requestedStudentId = gradingQueryParams.get("studentId") || "";
   const requestedStudentEmail = gradingQueryParams.get("studentEmail") || "";
   const { assignmentId } = useParams();
   const navigate = useNavigate();
 
   const [assignment, setAssignment] = useState(null);
+  const sectionId = Number(assignment?.id) === Number(assignmentId) && assignment?.cohort_id ? String(assignment.cohort_id) : requestedSectionId;
   const [availableCourses, setAvailableCourses] = useState([]);
   const [gradingLoadError, setGradingLoadError] = useState("");
   const [sectionLoadError, setSectionLoadError] = useState("");
-  const gradingSections = speedGradingSections(availableCourses, assignment?.class_id);
+  const gradingSections = speedGradingSections(availableCourses, assignment?.class_id).filter(course => !assignment?.cohort_id || Number(course.id) === Number(assignment.cohort_id));
 
   useEffect(() => {
     let cancelled = false;
@@ -1470,12 +1471,12 @@ export default function AssignmentSpeedGradingPage() {
             Class section
             <select
               aria-label="Class section"
-              value={sectionId || String(assignment?.class_id || "")}
+              value={sectionId || String(assignment?.cohort_id || assignment?.class_id || "")}
               onChange={(event) => changeGradingSection(event.target.value)}
               disabled={savingFeedback || savingKduScores || savingFeedbackAudio || isRecordingFeedback || checklistImporting}
               className="form-input"
             >
-              <option value="all">All sections</option>
+              {!assignment?.cohort_id ? <option value="all">All sections</option> : null}
               {gradingSections.map((course) => (
                 <option key={course.id} value={String(course.id)}>{course.title || course.class_name}</option>
               ))}

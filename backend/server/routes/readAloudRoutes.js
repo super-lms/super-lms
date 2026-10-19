@@ -43,7 +43,7 @@ function createReadAloudRouter(pool, deadlines, {
     const a = (await client.query('SELECT a.*,c.school_id FROM assignments a JOIN courses c ON c.id=a.class_id WHERE a.id=$1', [id])).rows[0];
     if (!a) throw fail('Assignment unavailable.', 404);
     if (req.user.role === 'student') {
-      if (!assignmentIsAvailableToStudents(a) || !(await studentHasLiveCourseAccess(req.user.id, a.class_id))) throw fail('Assignment unavailable.', 403);
+      if (!assignmentIsAvailableToStudents(a) || !(await studentHasLiveCourseAccess(req.user.id, a.class_id, a.cohort_id))) throw fail('Assignment unavailable.', 403);
     } else {
       const allowed = await client.query(`SELECT c.id FROM courses c WHERE c.id=$1 AND (c.school_id IS NULL OR c.school_id IS NOT DISTINCT FROM (SELECT NULLIF(to_jsonb(u)->>'school_id','')::INTEGER FROM users u WHERE u.id=$2)) AND ($3='admin' OR c.teacher_id=$2 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$2) OR EXISTS(SELECT 1 FROM courses section WHERE section.master_course_id=c.id AND (section.teacher_id=$2 OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id=section.id AND ct.teacher_id=$2))))`, [a.class_id, req.user.id, req.user.role]);
       if (!allowed.rows.length) throw fail('Assignment unavailable.', 403);

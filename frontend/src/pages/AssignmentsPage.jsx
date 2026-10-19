@@ -317,6 +317,7 @@ export default function AssignmentsPage() {
   const [editSaving, setEditSaving] = useState(false)
 
   const [classStudents, setClassStudents] = useState([])
+  const [savingCohortId, setSavingCohortId] = useState(null)
   const [sectionCounts,setSectionCounts]=useState(null)
   const [rosterLoading, setRosterLoading] = useState(false)
   const [rosterSaving, setRosterSaving] = useState(false)
@@ -413,7 +414,7 @@ export default function AssignmentsPage() {
     const graded = getAssignmentGradedCount(assignment)
     const ungraded = getAssignmentUngradedCount(assignment)
 
-    if (classStudentTotal === 0) return "Roster Needed"
+    if ((assignment.roster_count ?? classStudentTotal) === 0) return "Roster Needed"
     if (submissions === 0) return "No Submissions"
     if (ungraded > 0) return "Ready to Grade"
     if (graded > 0 && graded >= submissions) return "Completed"
@@ -889,6 +890,7 @@ export default function AssignmentsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         class_id: Number(selectedClassId),
+        cohort_id: isMasterWorkspace ? null : Number(selectedClassId),
         teacher_id: user.id,
         title: title.trim(),
         description: sanitizeRichText(description),
@@ -939,6 +941,7 @@ export default function AssignmentsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         class_id: Number(selectedClassId),
+        cohort_id: isMasterWorkspace ? null : Number(selectedClassId),
         teacher_id: user?.id || null,
         csvText: csvImportText,
       }),
@@ -1428,11 +1431,26 @@ export default function AssignmentsPage() {
     return ()=>{active=false;};
   },[selectedClassId,isMasterWorkspace,assignments]);
 
+  async function changeAssignmentCohort(assignment, value) {
+    setSavingCohortId(assignment.id);
+    setError("");
+    try {
+      const response = await authFetch(`/api/assignments/${assignment.id}/cohort`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cohort_id: value === "all" ? null : Number(value) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save assignment audience.");
+      await loadAssignments();
+      setMessage("Assignment audience saved. Existing submissions and marks are preserved.");
+    } catch (error) { setError(error.message); } finally { setSavingCohortId(null); }
+  }
+
   const teacherAssignments = useMemo(() => {
     const safeAssignments = Array.isArray(assignments) ? assignments : []
     if (!selectedContentClassId) return []
-    return safeAssignments.filter((assignment) => String(assignment.class_id) === String(selectedContentClassId)).map(assignment => {const counts=sectionCounts?.assignments?.find(row=>String(row.id)===String(assignment.id));return {...assignment,submission_count:counts?.submission_count ?? 0,graded_count:counts?.graded_count ?? 0,ungraded_count:counts?.ungraded_count ?? 0,not_submitted_count:counts?.not_submitted_count ?? 0};})
-  }, [assignments, selectedContentClassId, sectionCounts])
+    return safeAssignments.filter((assignment) => String(assignment.class_id) === String(selectedContentClassId) && (isMasterWorkspace || !assignment.cohort_id || String(assignment.cohort_id) === String(selectedClassId))).map(assignment => {const counts=sectionCounts?.assignments?.find(row=>String(row.id)===String(assignment.id));return {...assignment,roster_count:counts?.roster_count,submission_count:counts?.submission_count ?? 0,graded_count:counts?.graded_count ?? 0,ungraded_count:counts?.ungraded_count ?? 0,not_submitted_count:counts?.not_submitted_count ?? 0};})
+  }, [assignments, selectedContentClassId, selectedClassId, isMasterWorkspace, sectionCounts])
 
   const classHasCategories = categories.length > 0
   const classHasAssignments = teacherAssignments.length > 0
@@ -2180,6 +2198,15 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   <span><strong>Ungraded:</strong> {getAssignmentUngradedCount(assignment)}</span>
                                 </div>
                                 <StatusPill label={assignment.is_published === true ? "Published" : "Draft — Hidden from Students"} />
+                                <label style={{ display: "grid", gap: "6px" }}>
+                                  <strong>Assigned to</strong>
+                                  <select disabled={savingCohortId !== null} aria-label={`Assigned to: ${assignment.title}`} value={assignment.cohort_id || "all"}
+                                    onChange={(event) => changeAssignmentCohort(assignment, event.target.value)}>
+                                    <option value="all">All cohorts — shared assignment</option>
+                                    {classes.filter(course => String(course.content_course_id || course.master_course_id || course.id) === String(assignment.class_id))
+                                      .map(course => <option key={course.id} value={course.id}>{course.title || course.class_name}</option>)}
+                                  </select>
+                                </label>
                                 <div>
                                   <strong>Due:</strong> {formatDate(assignment.due_date)}
                                 </div>

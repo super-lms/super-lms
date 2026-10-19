@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const cors = require("cors");
 const pool = require("./db");
 const { ensureAssignmentTimeZones } = require("./assignmentTime");
+const { ensureAssignmentCohorts, resolveAssignmentCohort, cohortGradingMiddleware } = require("./assignmentCohorts");
 const { loadGradingRoster } = require("./gradingRoster");
 const multer = require("multer");
 const path = require("path");
@@ -427,7 +428,7 @@ const ensureCourseSectionStructure = () => ensureCourseSectionStructureWithPool(
 const resolveContentCourseId = (courseId, queryable = pool) =>
   resolveContentCourseIdWithPool(pool, courseId, queryable);
 
-async function studentHasLiveCourseAccess(studentUserId, contentCourseId) {
+async function studentHasLiveCourseAccess(studentUserId, contentCourseId, cohortId = null) {
   const result = await pool.query(
     `SELECT 1
      FROM class_enrollments ce
@@ -435,8 +436,9 @@ async function studentHasLiveCourseAccess(studentUserId, contentCourseId) {
      WHERE ce.student_user_id = $1
        AND COALESCE(section_course.master_course_id, section_course.id) = $2
        AND section_course.is_live = TRUE
+       AND ($3::INTEGER IS NULL OR ce.class_id = $3)
      LIMIT 1`,
-    [Number(studentUserId), Number(contentCourseId)]
+    [Number(studentUserId), Number(contentCourseId), cohortId]
   );
   return result.rows.length > 0;
 }
@@ -1421,9 +1423,9 @@ async function buildRubricGradebookStudents(classId, contentClassId = classId) {
       ON ar.id = rc.rubric_id
     JOIN assignments a
       ON a.id = ar.assignment_id
-    WHERE a.class_id = $1
+    WHERE a.class_id = $1 AND (a.cohort_id IS NULL OR a.cohort_id = $2)
     `,
-    [contentClassId]
+    [contentClassId, classId]
   );
 
   const rubricScoresByStudent = new Map();
@@ -4866,6 +4868,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
            WHERE ce.student_user_id = $1
              AND section_course.is_live = TRUE
              AND COALESCE(section_course.master_course_id, section_course.id) = a.class_id
+             AND (a.cohort_id IS NULL OR ce.class_id = a.cohort_id)
          )`
       : viewerRole === "observer"
         ? `AND a.is_published = TRUE
@@ -4877,6 +4880,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
              WHERE osl.observer_user_id = $1
                AND section_course.is_live = TRUE
                AND COALESCE(section_course.master_course_id, section_course.id) = a.class_id
+             AND (a.cohort_id IS NULL OR ce.class_id = a.cohort_id)
            )`
         : "";
     const learnerParams = ["student", "observer"].includes(viewerRole) ? [Number(req.user.id)] : [];
@@ -5478,6 +5482,21 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
 });
 
 
+// Change the audience without copying or deleting existing work.
+app.patch('/api/assignments/:assignmentId/cohort', authenticateJWT, requireRole('admin','teacher'), async (req,res) => {
+  try {
+    const id=Number(req.params.assignmentId);
+    const assignment=(await pool.query('SELECT id,class_id FROM assignments WHERE id=$1',[id])).rows[0];
+    if(!assignment)return res.status(404).json({error:'Assignment not found.'});
+    const access=await authorizeCourseModuleAccess(req,assignment.class_id);
+    if(!access.allowed)return res.status(access.status).json({error:'Assignment unavailable.'});
+    if(!Object.prototype.hasOwnProperty.call(req.body,'cohort_id'))return res.status(400).json({error:'Choose an assignment audience.'});
+    const cohortId=await resolveAssignmentCohort(pool,assignment.class_id,assignment.class_id,req.body);
+    const result=await pool.query('UPDATE assignments SET cohort_id=$1,updated_at=NOW() WHERE id=$2 RETURNING *',[cohortId,id]);
+    return res.json(result.rows[0]);
+  }catch(error){console.error('Assignment cohort:',error);return res.status(error.status||500).json({error:error.status?error.message:'Could not save assignment audience.'});}
+});
+
 app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole('admin','teacher'), async (req,res) => {
   try {
     const classId=Number(req.params.classId);
@@ -5486,6 +5505,8 @@ app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole(
     const roster=await loadGradingRoster(pool,access.courseId,req.query.scope==='all'?'all':classId);
     const ids=roster.students.map(s=>Number(s.student_user_id));
     const result=await pool.query(`SELECT a.id,
+      (SELECT COUNT(DISTINCT ce.student_user_id)::integer FROM class_enrollments ce
+       WHERE ce.student_user_id=ANY($2::integer[]) AND (a.cohort_id IS NULL OR ce.class_id=a.cohort_id)) AS roster_count,
       COUNT(s.id)::integer AS submission_count,
       COUNT(s.id) FILTER (WHERE s.score IS NOT NULL OR NULLIF(TRIM(COALESCE(s.grade,'')),'') IS NOT NULL OR s.rubric_selection IS NOT NULL)::integer AS graded_count
       FROM assignments a
@@ -5493,14 +5514,15 @@ app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole(
         SELECT DISTINCT ON (u.id) sub.* FROM users u JOIN submissions sub
         ON sub.student_id=u.id OR LOWER(sub.student_email)=LOWER(u.email)
         WHERE u.id=ANY($2::integer[]) AND sub.assignment_id=a.id
+        AND (a.cohort_id IS NULL OR EXISTS(SELECT 1 FROM class_enrollments audience WHERE audience.student_user_id=u.id AND audience.class_id=a.cohort_id))
         AND (NULLIF(TRIM(COALESCE(sub.content,'')),'') IS NOT NULL OR sub.score IS NOT NULL
           OR NULLIF(TRIM(COALESCE(sub.grade,'')),'') IS NOT NULL
           OR EXISTS(SELECT 1 FROM submission_attachments sa WHERE sa.submission_id=sub.id))
         ORDER BY u.id,sub.id DESC
       ) s ON TRUE
-      WHERE a.class_id=$1 AND COALESCE(a.source_type,'assignment')<>'assessment'
-      GROUP BY a.id`,[access.courseId,ids]);
-    res.json({class_id:classId,roster_count:ids.length,assignments:result.rows.map(r=>({...r,ungraded_count:r.submission_count-r.graded_count,not_submitted_count:Math.max(ids.length-r.submission_count,0)}))});
+      WHERE a.class_id=$1 AND ($3::INTEGER IS NULL OR a.cohort_id IS NULL OR a.cohort_id=$3) AND COALESCE(a.source_type,'assignment')<>'assessment'
+      GROUP BY a.id`,[access.courseId,ids,req.query.scope==='all'?null:classId]);
+    res.json({class_id:classId,roster_count:ids.length,assignments:result.rows.map(r=>({...r,ungraded_count:r.submission_count-r.graded_count,not_submitted_count:Math.max(r.roster_count-r.submission_count,0)}))});
   }catch(error){console.error('Class assignment counts:',error);res.status(error.status||500).json({error:'Could not load class submission counts.'});}
 });
 
@@ -5540,6 +5562,7 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
 
     const contentCourseId = await resolveContentCourseId(class_id);
     if (!contentCourseId) return res.status(404).json({ error: "Course not found" });
+    const cohortId = await resolveAssignmentCohort(pool, contentCourseId, class_id, req.body);
 
     const sortResult = await pool.query(
       `
@@ -5553,16 +5576,16 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
     const sortOrder = Number(sortResult.rows[0]?.next_sort_order || 1);
 
     const result = await pool.query(
-      `INSERT INTO assignments (class_id, teacher_id, title, description, points_possible, available_from, due_date, subcategory_id, is_published, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `INSERT INTO assignments (class_id, teacher_id, title, description, points_possible, available_from, due_date, subcategory_id, is_published, sort_order, cohort_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [contentCourseId, teacher_id, title, description, pointsPossible, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder]
+      [contentCourseId, teacher_id, title, description, pointsPossible, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder, cohortId]
     );
 
     return res.json(result.rows[0]);
   } catch (err) {
     console.error("POST assignment failed:", err);
-    return res.status(500).json({ error: "Failed to create assignment" });
+    return res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to create assignment" });
   }
 });
 
@@ -5587,6 +5610,7 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         id,
         title,
         class_id,
+        cohort_id,
         teacher_id,
         title,
         description,
@@ -5615,6 +5639,7 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
       `
       INSERT INTO assignments (
         class_id,
+        cohort_id,
         teacher_id,
         title,
         description,
@@ -5624,11 +5649,12 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
         subcategory_id,
         is_published
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
       `,
       [
         source.class_id,
+        source.cohort_id || null,
         source.teacher_id || null,
         newTitle,
         source.description || "",
@@ -6250,11 +6276,12 @@ app.get(
           ) cs ON true
           LEFT JOIN course_categories cc ON cc.id = cs.course_category_id
           WHERE a.class_id = $1
+            AND (a.cohort_id IS NULL OR a.cohort_id = $3)
             AND COALESCE(a.source_type, 'assignment') <> 'assessment'
             AND ($2::boolean OR (a.is_published = TRUE AND (a.available_from IS NULL OR a.available_from <= NOW())))
           ORDER BY COALESCE(a.sort_order, a.id), a.id
           `,
-          [contentCourseId, String(req.user?.role || "").toLowerCase() === "admin"]
+          [contentCourseId, String(req.user?.role || "").toLowerCase() === "admin", courseId]
         ),
         pool.query(
           `
@@ -6268,10 +6295,10 @@ app.get(
           FROM submissions s
           INNER JOIN assignments a ON a.id = s.assignment_id
           LEFT JOIN submission_attachments sa ON sa.submission_id = s.id
-          WHERE a.class_id = $1 AND LOWER(s.student_email) = $2
+          WHERE a.class_id = $1 AND LOWER(s.student_email) = $2 AND (a.cohort_id IS NULL OR a.cohort_id=$3)
           GROUP BY s.id
           `,
-          [contentCourseId, studentEmail]
+          [contentCourseId, studentEmail, courseId]
         ),
         pool.query(
           `SELECT l.id, l.course_id, l.title, l.content, l.order_index, l.created_at, l.updated_at,
@@ -6493,6 +6520,11 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       return res.status(404).json({ error: "Course not found" });
     }
 
+    if (viewerRole === "student") {
+      const enrolled = await pool.query('SELECT 1 FROM class_enrollments WHERE student_user_id=$1 AND class_id=$2 LIMIT 1',[Number(req.user.id),courseId]);
+      if (!enrolled.rows.length) return res.status(403).json({error:"You are not enrolled in this course section"});
+    }
+
     if (viewerRole === "student" && courseResult.rows[0].is_live !== true) {
       return res.status(403).json({ error: "This course section is not live yet" });
     }
@@ -6559,11 +6591,12 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       LEFT JOIN course_categories cc
         ON cc.id = cs.course_category_id
       WHERE a.class_id = $1
+        AND (a.cohort_id IS NULL OR a.cohort_id = $3)
         AND COALESCE(a.source_type, 'assignment') <> 'assessment'
         AND ($2::boolean OR (a.is_published = TRUE AND (a.available_from IS NULL OR a.available_from <= NOW())))
       ORDER BY COALESCE(a.sort_order, a.id), a.id
       `,
-      [contentCourseId, viewerRole !== "student"]
+      [contentCourseId, viewerRole !== "student", courseId]
     );
 
     const submissionsResult = await pool.query(
@@ -6594,8 +6627,9 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         ON a.id = s.assignment_id
       WHERE a.class_id = $1
         AND LOWER(s.student_email) = $2
+        AND (a.cohort_id IS NULL OR a.cohort_id=$3)
       `,
-      [contentCourseId, studentEmail]
+      [contentCourseId, studentEmail, courseId]
     );
 
     const lessonsResult = await pool.query(
@@ -6691,7 +6725,7 @@ app.get(
 
       const assignmentResult = await pool.query(
         `
-        SELECT id, class_id, title, description, available_from, due_date, subcategory_id, is_published
+        SELECT id, cohort_id, class_id, title, description, available_from, due_date, subcategory_id, is_published
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -6718,7 +6752,7 @@ app.get(
 
       if (
         String(req.user?.role || "").toLowerCase() === "student" &&
-        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id), assignmentResult.rows[0].cohort_id))
       ) {
         return res.status(403).json({ error: "This course section is not live yet" });
       }
@@ -6828,7 +6862,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
     const assignmentResult = await pool.query(
       `
-      SELECT id, teacher_id, class_id, title, description, available_from, due_date, subcategory_id, is_published
+      SELECT id, teacher_id, cohort_id, class_id, title, description, available_from, due_date, subcategory_id, is_published
       FROM assignments
       WHERE id = $1
       LIMIT 1
@@ -6849,7 +6883,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
 
     if (
       String(req.user?.role || "").toLowerCase() === "student" &&
-      !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+      !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id), assignmentResult.rows[0].cohort_id))
     ) {
       return res.status(403).json({ error: "This course section is not live yet" });
     }
@@ -7011,12 +7045,12 @@ app.get("/api/assignments/:assignmentId/student-attachments", authenticateJWT, r
 
     if (String(req.user?.role || "").toLowerCase() === "student") {
       const assignmentResult = await pool.query(
-        `SELECT class_id, available_from, is_published FROM assignments WHERE id = $1 LIMIT 1`,
+        `SELECT class_id, cohort_id, available_from, is_published FROM assignments WHERE id = $1 LIMIT 1`,
         [assignmentId]
       );
       if (
         !assignmentIsAvailableToStudents(assignmentResult.rows[0]) ||
-        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id)))
+        !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id), assignmentResult.rows[0].cohort_id))
       ) {
         return res.status(403).json({ error: "This course section is not live yet" });
       }
@@ -7090,7 +7124,7 @@ app.post(
 
       const assignmentResult = await pool.query(
         `
-        SELECT id, teacher_id, class_id, title, available_from, is_published
+        SELECT id, teacher_id, cohort_id, class_id, title, available_from, is_published
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -7114,7 +7148,7 @@ app.post(
       if (
         String(req.user?.role || "").toLowerCase() === "student" &&
         (!assignmentIsAvailableToStudents(assignmentResult.rows[0]) ||
-          !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id))))
+          !(await studentHasLiveCourseAccess(studentUserId, Number(assignmentResult.rows[0].class_id), assignmentResult.rows[0].cohort_id)))
       ) {
         fs.unlink(req.file.path, () => {});
         return res.status(403).json({ error: "This course section is not live yet" });
@@ -7488,6 +7522,7 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
       SELECT
         id,
         class_id,
+        cohort_id,
         title,
         description,
         due_date,
@@ -7508,7 +7543,7 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
     }
 
     const assignmentCourseId = Number(assignmentResult.rows[0].class_id);
-    const roster = await loadGradingRoster(pool, assignmentCourseId, req.query.sectionId);
+    const roster = await loadGradingRoster(pool, assignmentCourseId, req.query.sectionId, assignmentResult.rows[0].cohort_id);
     const sectionTitles = new Map(roster.students.map(student => [student.student_user_id, student.section_title]));
 
     const result = await pool.query(
@@ -7592,7 +7627,7 @@ app.post(
     try {
       const assignmentResult = await pool.query(
         `
-        SELECT id, title, class_id, teacher_id, points_possible
+        SELECT id, title, class_id, cohort_id, teacher_id, points_possible
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -7605,7 +7640,8 @@ app.post(
         return res.status(404).json({ error: "Assignment not found" });
       }
 
-      const sectionId = requestedSectionId || Number(assignment.class_id);
+      const sectionId = requestedSectionId || Number(assignment.cohort_id || assignment.class_id);
+      if(assignment.cohort_id && sectionId !== Number(assignment.cohort_id))return res.status(400).json({error:'This assignment belongs to a different cohort.'});
       const sectionResult = await pool.query(
         `
         SELECT id, title
@@ -7909,7 +7945,7 @@ app.post(
 
 
 /* SAVE KDU SCORES */
-app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), heldSubmissions.gradeMiddleware, async (req, res) => {
+app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRole("admin", "teacher"), cohortGradingMiddleware(pool), heldSubmissions.gradeMiddleware, async (req, res) => {
   try {
     const assignmentId = Number(req.params.assignmentId);
     const studentEmail = String(req.body.student_email || "").trim().toLowerCase();
@@ -10040,9 +10076,14 @@ app.get("/api/learning-paths/:learningPathId/items", authenticateJWT, requireRol
 FROM learning_path_items lpi
 LEFT JOIN assignments a ON a.id = lpi.assignment_id
 WHERE lpi.learning_path_id = $1
+  AND (a.cohort_id IS NULL OR $2 IN ('admin','teacher') OR EXISTS (
+    SELECT 1 FROM class_enrollments audience WHERE audience.class_id=a.cohort_id
+    AND (($2='student' AND audience.student_user_id=$3) OR ($2='observer' AND EXISTS (
+      SELECT 1 FROM observer_student_links osl WHERE osl.observer_user_id=$3 AND osl.student_user_id=audience.student_user_id)))
+  ))
 ORDER BY lpi.sort_order ASC, lpi.id ASC
       `,
-      [learningPathId]
+      [learningPathId, req.user.role, Number(req.user.id)]
     );
 
     return res.json({
@@ -13005,10 +13046,10 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
         ON cs.id = a.subcategory_id
       LEFT JOIN course_categories cc
         ON cc.id = cs.course_category_id
-      WHERE a.class_id = $1
+      WHERE a.class_id = $1 AND (a.cohort_id IS NULL OR a.cohort_id = $2)
       ORDER BY a.due_date ASC NULLS LAST, a.id ASC
       `,
-      [contentCourseId]
+      [contentCourseId, courseId]
     );
 
     const submissionsResult = await pool.query(
@@ -13285,6 +13326,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
       `
       SELECT
         a.id,
+        a.cohort_id,
         a.title,
         a.description,
         a.points_possible,
@@ -13301,13 +13343,14 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
         ON cs.id = a.subcategory_id
       LEFT JOIN course_categories cc
         ON cc.id = cs.course_category_id
-      WHERE a.class_id = $1
+      WHERE a.class_id = $1 AND ($2::INTEGER IS NULL OR a.cohort_id IS NULL OR a.cohort_id=$2)
       ORDER BY a.due_date ASC NULLS LAST, a.id ASC
       `,
-      [contentClassId]
+      [contentClassId, req.query.sectionId === "all" ? null : classId]
     );
 
     const roster = await loadGradingRoster(pool, contentClassId, req.query.sectionId === "all" ? "all" : classId);
+    const cohortMemberships = new Map(roster.students.map(student => [student.student_user_id, student.cohort_ids || []]));
     const sectionTitles = new Map(roster.students.map(student => [student.student_user_id, student.section_title]));
     const studentsResult = await pool.query(
       `SELECT u.id AS student_user_id,
@@ -13340,7 +13383,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
     const submissionsByStudentAssignment = gradebookSubmissionIndex(submissionsResult.rows);
 
 const students = studentsResult.rows.map((student) => {
-      const assignmentScores = assignmentsResult.rows.map((assignment) => {
+      const assignmentScores = assignmentsResult.rows.filter(assignment => !assignment.cohort_id || cohortMemberships.get(student.student_user_id)?.includes(assignment.cohort_id)).map((assignment) => {
         const submission = submissionsByStudentAssignment.get(student, assignment.id);
 
         return {
@@ -13678,10 +13721,10 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
         ON cs.id = a.subcategory_id
       LEFT JOIN course_categories cc
         ON cc.id = cs.course_category_id
-      WHERE a.class_id = $1
+      WHERE a.class_id = $1 AND (a.cohort_id IS NULL OR a.cohort_id = $2)
       ORDER BY a.id ASC
       `,
-      [contentClassId]
+      [contentClassId, classId]
     );
 
     const studentsResult = await pool.query(
@@ -13743,9 +13786,9 @@ app.get("/api/classes/:classId/webtess-marks-csv", authenticateJWT, requireRole(
       FROM submissions s
       JOIN assignments a
         ON a.id = s.assignment_id
-      WHERE a.class_id = $1
+      WHERE a.class_id = $1 AND (a.cohort_id IS NULL OR a.cohort_id = $2)
       `,
-      [contentClassId]
+      [contentClassId, classId]
     );
 
     const submissionsByStudentAssignment = new Map();
@@ -13991,9 +14034,9 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
       return res.status(400).json({ error: "Valid assignmentId is required" });
     }
 
-    const assignmentResult = await pool.query("SELECT class_id FROM assignments WHERE id = $1", [assignmentId]);
+    const assignmentResult = await pool.query("SELECT class_id, cohort_id FROM assignments WHERE id = $1", [assignmentId]);
     if (!assignmentResult.rows.length) return res.status(404).json({ error: "Assignment not found" });
-    const roster = await loadGradingRoster(pool, assignmentResult.rows[0].class_id, req.query.sectionId);
+    const roster = await loadGradingRoster(pool, assignmentResult.rows[0].class_id, req.query.sectionId, assignmentResult.rows[0].cohort_id);
 
     const result = await pool.query(
       `
@@ -14034,7 +14077,7 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
   }
 });
 
-app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), heldSubmissions.gradeMiddleware, async (req, res) => {
+app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), cohortGradingMiddleware(pool), heldSubmissions.gradeMiddleware, async (req, res) => {
   try {
     await ensureAssignmentSectionTables();
 
@@ -14265,6 +14308,7 @@ app.get(
 );
 
 Promise.all([
+  ensureAssignmentCohorts(pool),
   ensurePasswordRecoveryTables(),
   ensureStudentInfoColumns(),
   ensureManualStudentDirectorySupport(),

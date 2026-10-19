@@ -1318,7 +1318,10 @@ export default function CoursesPage() {
   }
 
   function getAssignmentsForCourse(courseId) {
-    return allAssignments.filter((assignment) => Number(assignment.class_id) === Number(courseId))
+    const course = courses.find(item => Number(item.id) === Number(courseId));
+    const contentId = course?.content_course_id || course?.master_course_id || courseId;
+    return allAssignments.filter(assignment => Number(assignment.class_id) === Number(contentId) &&
+      (isMasterWorkspace || !assignment.cohort_id || Number(assignment.cohort_id) === Number(courseId)))
   }
 
   function getAssignmentTitle(assignmentId) {
@@ -2952,7 +2955,7 @@ export default function CoursesPage() {
 
               const courseName = courseGroup?.masterTitle || getCourseName(course)
               const learningPaths = learningPathsByCourseId[contentCourseId] || []
-              const courseAssignments = getAssignmentsForCourse(contentCourseId)
+              const courseAssignments = getAssignmentsForCourse(course.id)
 
               const displayedStudentCount = Number(course.student_count ?? rosterStudents.length ?? 0)
               const hasStudents = displayedStudentCount > 0

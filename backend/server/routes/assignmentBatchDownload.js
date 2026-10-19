@@ -34,12 +34,14 @@ function createAssignmentBatchDownloadRouter(pool, { uploadDir, ensureAttachment
       const assignmentId = Number(req.params.assignmentId), kind = req.query.kind || 'all';
       if (!Number.isSafeInteger(assignmentId) || assignmentId <= 0 || !['written', 'attachments', 'all'].includes(kind))
         throw fail('Choose a valid assignment and download type.', 400);
-      const assignment = (await pool.query(`SELECT a.id,a.title,a.class_id FROM assignments a
+      const assignment = (await pool.query(`SELECT a.id,a.title,a.class_id,a.cohort_id FROM assignments a
         JOIN courses c ON c.id=a.class_id WHERE a.id=$1
         AND (c.school_id IS NULL OR c.school_id IS NOT DISTINCT FROM
           (SELECT NULLIF(to_jsonb(u)->>'school_id','')::INTEGER FROM users u WHERE u.id=$2))`, [assignmentId, req.user.id])).rows[0];
       if (!assignment) throw fail('Assignment not available.', 404);
-      const sectionId = req.query.sectionId || String(assignment.class_id);
+      const requestedSectionId = req.query.sectionId;
+      if (assignment.cohort_id && requestedSectionId && requestedSectionId !== 'all' && Number(requestedSectionId) !== Number(assignment.cohort_id)) throw fail('This assignment belongs to a different cohort.',400);
+      const sectionId = assignment.cohort_id ? String(assignment.cohort_id) : (requestedSectionId || String(assignment.class_id));
       if (sectionId !== 'all' && (!/^\d+$/.test(sectionId) || Number(sectionId) <= 0)) throw fail('Choose a valid class section.', 400);
       // Check every selected section before loading any student work, including all-sections downloads.
       const sections = (await pool.query(`SELECT c.id,c.title,
