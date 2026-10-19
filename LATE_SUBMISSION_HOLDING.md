@@ -30,3 +30,16 @@ Validation:
   use the application's database configuration. Run from `backend` with
   `POSTGRES_TEST_BIN=/path/to/postgres/bin node --test test/heldSubmissions.postgres.test.js`.
   Without this explicit path, that test is skipped.
+
+## Declining late work
+
+Teachers can decline from a past-due notice or the student's late-approval panel:
+
+- **Decline and keep saved work** archives the pending text and files outside the gradebook. They remain available for teacher review. A later approval releases the retained work for marking.
+- **Decline and delete saved work** requires confirmation and permanently deletes only unapproved held work. Earlier submissions, attachments and marks remain untouched. A later approval allows the student to submit again.
+
+Both choices remove all pending notices for that assignment/student, create an in-app student message saying “Your submission has been declined. You must see your teacher.”, and prevent further submissions or grading until the teacher approves. Extending a deadline alone does not override an active decline. The message appears on the student portal and the assignment status reads “Declined — see your teacher”. No email is sent.
+
+Decision audit, permission change, held-work disposition and message commit in the same transaction under the existing per-assignment/student advisory lock. Repeated declines are idempotent. Approval resolves the active decline and its message in the same transaction that promotes any retained work. Pending uploads recheck the decline after acquiring the lock.
+
+Validation includes isolated PostgreSQL cases for keep/delete, preserved earlier marks, notification privacy, idempotence, rejection after deadline extension, in-flight upload rejection, approval after a conversation and transactional failure rollback.

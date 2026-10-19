@@ -17,14 +17,14 @@ test('late work storage and approval against a disposable PostgreSQL database',{
   await pool.query(`CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT,email TEXT,first_name TEXT,last_name TEXT);
    CREATE TABLE courses(id INTEGER PRIMARY KEY,teacher_id INTEGER,master_course_id INTEGER,title TEXT);
    CREATE TABLE class_enrollments(class_id INTEGER,student_user_id INTEGER);CREATE TABLE course_teachers(course_id INTEGER,teacher_id INTEGER);
-   CREATE TABLE assignments(id INTEGER PRIMARY KEY,teacher_id INTEGER,class_id INTEGER,title TEXT,due_date TIMESTAMPTZ);
+   CREATE TABLE assignments(id INTEGER PRIMARY KEY,teacher_id INTEGER,class_id INTEGER,title TEXT,due_date TIMESTAMPTZ,cohort_id INTEGER);
    CREATE TABLE submissions(id SERIAL PRIMARY KEY,assignment_id INTEGER,student_id INTEGER,teacher_id INTEGER,course_id INTEGER,
     assignment_title TEXT,student_name TEXT,student_email TEXT,original_file_name TEXT,stored_file_name TEXT,file_path TEXT,content TEXT,feedback TEXT,score NUMERIC);
    CREATE TABLE submission_attachments(id SERIAL PRIMARY KEY,submission_id INTEGER,assignment_id INTEGER,student_email TEXT,original_name TEXT,
     stored_name TEXT,file_path TEXT,mime_type TEXT,size_bytes INTEGER,file_data BYTEA,created_at TIMESTAMPTZ);
    INSERT INTO users VALUES(3,'teacher','teacher@test','Teacher','One'),(10,'student','student@test','Student','One');
    INSERT INTO courses VALUES(1,3,NULL,'Test course');INSERT INTO class_enrollments VALUES(1,10);
-   INSERT INTO assignments VALUES(5,3,1,'Late assignment','2020-01-01');`);
+   INSERT INTO assignments(id,teacher_id,class_id,title,due_date) VALUES(5,3,1,'Late assignment','2020-01-01');`);
   const deadlines=createSubmissionDeadline(pool),held=createHeldSubmissions(pool,deadlines,async()=>{});
   const router=createLateSubmissionRouter(pool,deadlines,held);
   async function route(method,routePath,extra={}){
@@ -80,6 +80,58 @@ test('late work storage and approval against a disposable PostgreSQL database',{
   await t.test('upload finishing after approval is released rather than stranded',async()=>{
    const r=await held.hold({...input,file:{originalname:'later.txt',filename:'later.txt',mimetype:'text/plain',size:3,data:Buffer.from('new')}});
    assert.equal(r.pending_approval,false);assert.equal((await held.pending(5,10)).length,0);assert.equal((await pool.query('SELECT * FROM submission_attachments')).rowCount,2);
+  });
+
+  await pool.query(`INSERT INTO assignments(id,teacher_id,class_id,title,due_date) VALUES
+   (6,3,1,'Keep declined work','2020-01-01'),(7,3,1,'Delete declined work','2020-01-01'),(8,3,1,'Rollback decline','2020-01-01');`);
+  const decline=(id,disposition='keep',confirmed=false)=>route('post','/:assignmentId/late-submission/decline',{params:{assignmentId:id},body:{student_email:'student@test',disposition,confirm_delete:confirmed}});
+  const approveId=id=>route('post','/:assignmentId/late-submission',{params:{assignmentId:id},body:{student_email:'student@test',enabled:true}});
+  const messageList=(id=10)=>route('get','/submission-decisions',{user:{id,role:'student'},query:{student_id:10}});
+  await t.test('decline and keep hides notices, preserves files and marks, sends one private message and blocks resubmission',async()=>{
+   await pool.query(`INSERT INTO submissions(assignment_id,student_id,student_email,content,score) VALUES(6,10,'student@test','Earlier marked answer',77)`);
+   await held.hold({...input,assignmentId:6,content:'Late text'});
+   await held.hold({...input,assignmentId:6,file:{originalname:'late.txt',filename:'late.txt',mimetype:'text/plain',size:4,data:Buffer.from('late')}});
+   assert.ok((await alerts()).body.alerts.some(a=>a.assignment_id===6));
+   assert.equal((await decline(6)).status,200);assert.equal((await decline(6)).status,200);
+   assert.equal((await held.pending(6,10)).length,0);
+   const archived=(await pool.query('SELECT * FROM assignment_held_work WHERE assignment_id=6')).rows;
+   assert.equal(archived.length,2);assert.ok(archived.every(h=>h.declined_at));assert.equal(archived[1].file_data.toString(),'late');
+   assert.deepEqual((await pool.query('SELECT content,score FROM submissions WHERE assignment_id=6')).rows,[{content:'Earlier marked answer',score:'77'}]);
+   assert.equal((await alerts()).body.alerts.some(a=>a.assignment_id===6),false);
+   assert.equal((await messageList()).body.messages.filter(m=>m.assignment_id===6).length,1);
+   assert.match((await messageList()).body.messages.find(m=>m.assignment_id===6).message,/declined.*see your teacher/);
+   assert.equal((await messageList(11)).body.messages.length,0);
+   await pool.query("UPDATE assignments SET due_date=NOW()+INTERVAL '1 day' WHERE id=6");
+   await assert.rejects(deadlines.check(6,10,{hold:true}),e=>e.code==='SUBMISSION_DECLINED');
+   await assert.rejects(held.hold({...input,assignmentId:6,content:'Upload started before decline'}),e=>e.code==='SUBMISSION_DECLINED');
+   let status,next=false;await held.gradeMiddleware({params:{assignmentId:6},body:{student_email:'student@test'}},{status(n){status=n;return this},json(){}},()=>next=true);assert.equal(status,409);assert.equal(next,false);
+   await pool.query("UPDATE assignments SET due_date='2020-01-01' WHERE id=6");
+   assert.equal((await approveId(6)).body.promoted,2);
+   assert.equal((await messageList()).body.messages.some(m=>m.assignment_id===6),false);
+   assert.equal((await pool.query('SELECT content FROM submissions WHERE assignment_id=6')).rows[0].content,'Late text');
+   assert.equal((await decline(6)).status,409);
+  });
+  await t.test('delete requires confirmation and deletes only pending late work, retaining marked work and an audit message',async()=>{
+   await pool.query(`INSERT INTO submissions(assignment_id,student_id,student_email,content,score) VALUES(7,10,'student@test','Marked answer',81)`);
+   await held.hold({...input,assignmentId:7,content:'Delete this pending text'});
+   await held.hold({...input,assignmentId:7,file:{originalname:'delete.txt',filename:'delete.txt',mimetype:'text/plain',size:6,data:Buffer.from('delete')}});
+   assert.equal((await decline(7,'delete')).status,400);assert.equal((await held.pending(7,10)).length,2);
+   assert.equal((await decline(7,'delete',true)).status,200);
+   assert.equal((await pool.query('SELECT * FROM assignment_held_work WHERE assignment_id=7')).rowCount,0);
+   assert.deepEqual((await pool.query('SELECT content,score FROM submissions WHERE assignment_id=7')).rows,[{content:'Marked answer',score:'81'}]);
+   assert.equal((await deadlines.activeDecline(7,10)).work_deleted,true);
+   assert.equal((await alerts()).body.alerts.some(a=>a.assignment_id===7),false);
+   assert.equal((await approveId(7)).body.promoted,0);assert.equal((await deadlines.check(7,10,{hold:true})).pending,undefined);
+  });
+  await t.test('failed decline rolls back deletion, permission and student notification together',async()=>{
+   await held.hold({...input,assignmentId:8,content:'Preserve me on failure'});
+   await pool.query(`CREATE FUNCTION fail_decline() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'notification unavailable'; END $$;
+    CREATE TRIGGER fail_decline BEFORE INSERT ON assignment_submission_declines FOR EACH ROW EXECUTE FUNCTION fail_decline();`);
+   assert.equal((await decline(8,'delete',true)).status,500);
+   assert.equal((await held.pending(8,10)).length,1);assert.equal(await deadlines.activeDecline(8,10),null);
+   assert.equal((await pool.query('SELECT * FROM assignment_late_permissions WHERE assignment_id=8')).rowCount,0);
+   assert.ok((await alerts()).body.alerts.some(a=>a.assignment_id===8));
+   await pool.query('DROP TRIGGER fail_decline ON assignment_submission_declines');
   });
  }finally{await pool?.end();if(started)pg('pg_ctl',['-D',path.join(dir,'data'),'-m','immediate','-w','stop']);fs.rmSync(dir,{recursive:true,force:true});}
 });

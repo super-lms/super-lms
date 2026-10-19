@@ -1,3 +1,4 @@
+const {DECLINED_MESSAGE}=require('./submissionDeadline');
 // Late work stays outside submissions/gradebook until a teacher approves it.
 function createHeldSubmissions(pool, deadlines, ensureAttachments) {
   let ready;
@@ -10,6 +11,7 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
       content TEXT, original_name TEXT, stored_name TEXT, mime_type TEXT, size_bytes INTEGER, file_data BYTEA,
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), approved_at TIMESTAMPTZ,
       submission_id INTEGER REFERENCES submissions(id) ON DELETE SET NULL);
+      ALTER TABLE assignment_held_work ADD COLUMN IF NOT EXISTS declined_at TIMESTAMPTZ;
       CREATE INDEX IF NOT EXISTS assignment_held_work_pending ON assignment_held_work(assignment_id,student_id) WHERE approved_at IS NULL;`)
       .catch(error => { ready = null; throw error; });
     await ready;
@@ -20,13 +22,13 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
   async function pending(assignmentId, studentId, client = pool) {
     await ensure();
     const result = await client.query(`SELECT id,method,content,original_name,mime_type,size_bytes,received_at,due_at
-      FROM assignment_held_work WHERE assignment_id=$1 AND student_id=$2 AND approved_at IS NULL ORDER BY id`, [assignmentId, studentId]);
+      FROM assignment_held_work WHERE assignment_id=$1 AND student_id=$2 AND approved_at IS NULL AND declined_at IS NULL ORDER BY id`, [assignmentId, studentId]);
     return result.rows;
   }
   // Caller holds the per-student lock. Approval and promotion commit together.
   async function promote(client, assignmentId, studentId, permissionId) {
     const held = await client.query(`SELECT * FROM assignment_held_work
-      WHERE assignment_id=$1 AND student_id=$2 AND approved_at IS NULL ORDER BY id FOR UPDATE`, [assignmentId, studentId]);
+      WHERE assignment_id=$1 AND student_id=$2 AND approved_at IS NULL AND declined_at IS NULL ORDER BY id FOR UPDATE`, [assignmentId, studentId]);
     if (!held.rows.length) return 0;
     await ensureAttachments();
     const first = held.rows[0];
@@ -63,9 +65,10 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
     try {
       await client.query('BEGIN');
       await lock(client, assignmentId, studentId);
+      if(await deadlines.activeDecline(assignmentId,studentId,client))throw Object.assign(Error(DECLINED_MESSAGE),{status:403,code:'SUBMISSION_DECLINED'});
       // Keep the newest held text; files accumulate, just as normal attachments do.
       if (!file) await client.query(`DELETE FROM assignment_held_work WHERE assignment_id=$1 AND student_id=$2
-        AND approved_at IS NULL AND method='text'`, [assignmentId, studentId]);
+        AND approved_at IS NULL AND declined_at IS NULL AND method='text'`, [assignmentId, studentId]);
       await client.query(`INSERT INTO assignment_held_work
         (assignment_id,student_id,student_email,student_name,due_at,method,content,original_name,stored_name,mime_type,size_bytes,file_data)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, [assignmentId, studentId, studentEmail, studentName, state.due,
@@ -89,13 +92,16 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
     await ensure();
     const result = await pool.query(`SELECT h.assignment_id,h.id,h.method,h.content,h.original_name,h.received_at
       FROM assignment_held_work h JOIN assignments a ON a.id=h.assignment_id
-      WHERE a.class_id=$1 AND h.student_email=$2 AND h.approved_at IS NULL ORDER BY h.id`, [courseId, studentEmail]);
+      WHERE a.class_id=$1 AND h.student_email=$2 AND h.approved_at IS NULL AND h.declined_at IS NULL ORDER BY h.id`, [courseId, studentEmail]);
     return result.rows;
   }
   async function gradeMiddleware(req,res,next) {
     try {
       await ensure();
-      const result=await pool.query(`SELECT 1 FROM assignment_held_work WHERE assignment_id=$1 AND approved_at IS NULL
+      const declined = await pool.query(`SELECT 1 FROM assignment_submission_declines WHERE assignment_id=$1 AND resolved_at IS NULL
+        AND (student_id=$2 OR student_id=(SELECT id FROM users WHERE LOWER(email)=$3 LIMIT 1)) LIMIT 1`,[Number(req.params.assignmentId),Number(req.body.student_user_id)||null,String(req.body.student_email||'').trim().toLowerCase()]);
+      if(declined.rows.length)return res.status(409).json({code:'SUBMISSION_DECLINED',error:'This submission was declined. Speak with the student and approve it before marking.'});
+      const result=await pool.query(`SELECT 1 FROM assignment_held_work WHERE assignment_id=$1 AND approved_at IS NULL AND declined_at IS NULL
         AND (student_id=$2 OR student_email=$3) LIMIT 1`, [Number(req.params.assignmentId),
         Number(req.body.student_user_id)||null, String(req.body.student_email||'').trim().toLowerCase()]);
       if(result.rows.length)return res.status(409).json({code:'AWAITING_APPROVAL',error:'Approve the held late submission before marking this student.'});

@@ -29,3 +29,20 @@ test('notice listing requires teacher/admin and scopes database reads to the tea
  const headers=role=>({Authorization:`Bearer ${jwt.sign({id:3,role},process.env.JWT_SECRET||'super-lms-development-secret-change-before-production')}`});
  try{assert.equal((await fetch(url,{headers:headers('student')})).status,403);assert.equal(readArgs,undefined);const r=await fetch(url,{headers:headers('teacher')});assert.equal(r.status,200);assert.equal((await r.json()).alerts.length,1);assert.deepEqual(readArgs,[3,null,false]);}finally{server.close();await once(server,'close');}
 });
+
+test('decline is restricted to teachers with assignment access and messages to the signed-in student',async()=>{
+ const reads=[];const pool={query:async(sql,args)=>{reads.push({sql,args});return {rows:[]};}};
+ const app=express();app.use(express.json());app.use('/a',createLateSubmissionRouter(pool,{ensure:async()=>{}}));
+ const server=app.listen(0,'127.0.0.1');await once(server,'listening');const base=`http://127.0.0.1:${server.address().port}/a`;
+ const headers=(role,id)=>({Authorization:`Bearer ${jwt.sign({id,role},process.env.JWT_SECRET||'super-lms-development-secret-change-before-production')}`,'Content-Type':'application/json'});
+ try{
+  const body=JSON.stringify({student_email:'student@test',disposition:'delete',confirm_delete:true});
+  assert.equal((await fetch(`${base}/5/late-submission/decline`,{method:'POST',headers:headers('student',10),body})).status,403);
+  assert.equal(reads.length,0);
+  assert.equal((await fetch(`${base}/5/late-submission/decline`,{method:'POST',headers:headers('teacher',4),body})).status,403);
+  assert.equal(reads.length,1);assert.equal(reads[0].args[2],4);
+  assert.equal((await fetch(`${base}/submission-decisions?student_id=99`,{headers:headers('student',10)})).status,200);
+  assert.deepEqual(reads.at(-1).args,[10]);
+  assert.equal((await fetch(`${base}/submission-decisions`,{headers:headers('teacher',4)})).status,403);
+ }finally{server.close();await once(server,'close');}
+});

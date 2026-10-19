@@ -6344,6 +6344,7 @@ app.get(
         submissionsResult.rows.map((submission) => [String(submission.assignment_id), submission])
       );
       const heldWork = await heldSubmissions.forCourse(contentCourseId, studentEmail);
+    const declinedWork = await submissionDeadlines.declinesForCourse(contentCourseId, studentEmail);
       const submissionStatesByAssignmentId = {};
       assignmentsResult.rows.forEach((assignment) => {
         const submission = submissionsByAssignmentId[String(assignment.id)] || null;
@@ -6356,7 +6357,8 @@ app.get(
           assignment,
           submission,
           held_work: heldWork.filter(item => Number(item.assignment_id) === Number(assignment.id)),
-          submission_status: heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
+          decline: declinedWork.find(item => Number(item.assignment_id) === Number(assignment.id)) || null,
+        submission_status: declinedWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "declined" : heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
         };
       });
 
@@ -6671,6 +6673,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
     });
 
     const heldWork = await heldSubmissions.forCourse(contentCourseId, studentEmail);
+    const declinedWork = await submissionDeadlines.declinesForCourse(contentCourseId, studentEmail);
     const submissionStatesByAssignmentId = {};
     assignmentsResult.rows.forEach((assignment) => {
       const assignmentId = String(assignment.id);
@@ -6684,7 +6687,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         assignment,
         submission,
         held_work: heldWork.filter(item => Number(item.assignment_id) === Number(assignment.id)),
-        submission_status: heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
+        decline: declinedWork.find(item => Number(item.assignment_id) === Number(assignment.id)) || null,
+        submission_status: declinedWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "declined" : heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
       };
     });
 
@@ -6798,11 +6802,13 @@ app.get(
       );
 
       const held = await heldSubmissions.pending(assignmentId, studentUserId);
+      const decline = await submissionDeadlines.activeDecline(assignmentId, studentUserId);
       return res.json({
+        decline,
         held_work: held,
         assignment: assignmentResult.rows[0],
         submission,
-        submission_status: held.length ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
+        submission_status: decline ? "declined" : held.length ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
       });
     } catch (err) {
       console.error("GET /api/assignments/:assignmentId/student-submission failed:", err);
@@ -7015,7 +7021,7 @@ app.post("/api/assignments/:assignmentId/student-submit", authenticateJWT, requi
   } catch (err) {
     if(submissionClient)await submissionClient.query('ROLLBACK').catch(()=>{});
     console.error("POST /api/assignments/:assignmentId/student-submit failed:", err);
-    return res.status(500).json({ error: "Failed to save student submission" });
+    return res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to save student submission", code: err.code });
   } finally {if(submissionClient&&!submissionCommitted)await submissionClient.query('ROLLBACK').catch(()=>{});submissionClient?.release();}
 });
 
@@ -7289,7 +7295,7 @@ app.post(
       if(submissionClient)await submissionClient.query('ROLLBACK').catch(()=>{});
       if(req.file?.path)fs.unlink(req.file.path,()=>{});
       console.error("POST /api/assignments/:assignmentId/student-attachments failed:", err);
-      return res.status(500).json({ error: "Failed to upload student attachment" });
+      return res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to upload student attachment", code: err.code });
     } finally {if(submissionClient&&!submissionCommitted)await submissionClient.query('ROLLBACK').catch(()=>{});submissionClient?.release();}
   }
 );

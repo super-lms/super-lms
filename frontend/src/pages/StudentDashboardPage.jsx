@@ -1,3 +1,4 @@
+import SubmissionDecisionMessages from "../components/SubmissionDecisionMessages.jsx"
 import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import SavedTeacherRubric from "../components/rubrics/RubricContribution.jsx";
@@ -341,6 +342,7 @@ function SubmissionEditor({
         </DetailCard>
       </div>
 
+      {submissionState?.decline ? <NoticeBox>{submissionState.decline.message}</NoticeBox> : null}
       {submissionState?.held_work?.length > 0 ? (
         <NoticeBox>
           Your late work is saved and awaiting teacher approval. Once approved, your teacher can mark it without another submission.
@@ -551,6 +553,7 @@ function getAssignmentStatus(dueDateValue) {
 }
 
 function formatSubmissionStatus(value) {
+  if (value === "declined") return "Declined — see your teacher"
   if (value === "awaiting_approval") return "Awaiting teacher approval"
   if (value === "submitted") return "Submitted"
   if (value === "not_submitted") return "Not submitted"
@@ -1424,6 +1427,7 @@ export default function StudentDashboardPage() {
 
   return (
     <>
+      <SubmissionDecisionMessages />
       <div className="topbar">
         <h1>Student Portal</h1>
         <p className="topbar-subtitle">
