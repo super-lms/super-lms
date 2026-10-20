@@ -1,3 +1,4 @@
+import StudentAssignmentRubric from '../components/rubrics/StudentAssignmentRubric.jsx';
 import SubmissionDecisionMessages from "../components/SubmissionDecisionMessages.jsx"
 import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
@@ -354,7 +355,7 @@ function SubmissionEditor({
 
       {assignment?.description ? (
         <div style={{ marginBottom: "16px", color: "#4b5563", lineHeight: 1.5 }}>
-          <strong>Assignment Details:</strong>
+          <strong>Instructions:</strong>
           <FormattedText value={assignment.description} style={{ marginTop: "6px" }} />
         </div>
       ) : null}
@@ -363,7 +364,7 @@ function SubmissionEditor({
         <NoticeBox>Loading assignment resources...</NoticeBox>
       ) : resources.length ? (
         <div style={{ marginBottom: "18px", border: "1px solid #d7dce5", borderRadius: "12px", padding: "14px", background: "#f8fafc" }}>
-          <div style={{ fontWeight: 800, marginBottom: "10px" }}>Learning Resources</div>
+          <div style={{ fontWeight: 800, marginBottom: "10px" }}>Resources for download</div>
           <div style={{ display: "grid", gap: "8px" }}>
             {resources.map((resource) => resource.resource_type === "file" ? (
               <button
@@ -384,6 +385,8 @@ function SubmissionEditor({
           {resourceDownloadError ? <div style={{ marginTop: "10px" }}><NoticeBox type="error">{resourceDownloadError}</NoticeBox></div> : null}
         </div>
       ) : null}
+
+      <StudentAssignmentRubric key={`rubric-${assignment?.id}`} assignmentId={assignment?.id} />
 
       <ReadAloudAssignment key={assignment?.id} assignmentId={assignment?.id} onModeChange={setReadAloudMode} />
       {readAloudMode === null ? <NoticeBox>Checking assignment type...</NoticeBox> : readAloudMode ? null : submissionLoading ? (

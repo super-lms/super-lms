@@ -8262,6 +8262,9 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
   }
 });
 
+app.get("/api/assignments/:assignmentId/student-rubric", authenticateJWT, requireRole("student"),
+  require("./routes/studentRubricRoutes").createStudentRubricHandler({ pool, studentHasLiveCourseAccess, assignmentIsAvailableToStudents }));
+
 /* GET KDU RUBRIC FOR ASSIGNMENT */
 app.get("/api/assignments/:assignmentId/teacher-designed-rubric", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   const assignmentId = Number(req.params.assignmentId);
