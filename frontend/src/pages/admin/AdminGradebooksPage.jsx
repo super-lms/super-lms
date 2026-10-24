@@ -1,3 +1,4 @@
+import SchoolGradeExport from "../../components/SchoolGradeExport.jsx"
 import {useSearchParams, useNavigate} from 'react-router-dom'
 import { useEffect, useMemo, useState } from "react"
 import authFetch from "../../services/authFetch"
@@ -104,6 +105,8 @@ export default function AdminGradebooksPage() {
           Admin view of course gradebooks using the existing class gradebook endpoint.
         </p>
       </div>
+
+      <SchoolGradeExport />
 
       {status === "error" && (
         <div style={{ background: "white", border: "1px solid #b91c1c", borderRadius: "14px", padding: "18px" }}>

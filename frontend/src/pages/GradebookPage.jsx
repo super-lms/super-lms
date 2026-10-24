@@ -1,3 +1,4 @@
+import { useAuth } from "../AuthContext.jsx";
 import { lookupStudentMatches } from "../services/teacherQuickLookup.js";
 import { displayAssignmentTime } from "../services/assignmentTime.js";
 import "./GradebookPage.css";
@@ -124,6 +125,7 @@ function QuickScoreRow({
 }
 
 export default function GradebookPage() {
+  const gradebookViewer = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
@@ -944,6 +946,7 @@ export default function GradebookPage() {
         <div className="section-header">
           <div>
             <h2>KDU Course Gradebook</h2>
+            {gradebookViewer?.user?.role === "admin" && <button type="button" onClick={() => navigate("/admin/gradebooks")} style={{padding:"10px 14px",font:"inherit",fontWeight:700,cursor:"pointer",marginBottom:10}}>Whole School Grade Report / Select Courses</button>}
             <p className="section-subtitle">
               Click whole-score buttons for fast grading, or enter decimals for precision.
             </p>
