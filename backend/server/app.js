@@ -11890,6 +11890,7 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
           u.email,
           u.role,
           ce.class_id,
+          enrolled_course.title AS class_name,
           enrolled_course.master_course_id
         FROM class_enrollments ce
         JOIN users u

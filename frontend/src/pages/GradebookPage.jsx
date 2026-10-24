@@ -1,3 +1,4 @@
+import { lookupStudentMatches } from "../services/teacherQuickLookup.js";
 import { displayAssignmentTime } from "../services/assignmentTime.js";
 import "./GradebookPage.css";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -130,6 +131,8 @@ export default function GradebookPage() {
   const requestedContentClassId = queryParams.get("contentClassId") || requestedClassId;
   const allSections = queryParams.get("sectionId") === "all";
   const requestedStudentEmail = queryParams.get("studentEmail") || "";
+  const requestedStudentId = queryParams.get("studentId") || "";
+  const fromQuickLookup = queryParams.get("source") === "quick-lookup";
   const requestedStudentName = queryParams.get("studentName") || "";
   const requestedFocus = queryParams.get("focus") || "";
 
@@ -155,6 +158,7 @@ export default function GradebookPage() {
   const spreadsheetInputsRef = useRef({});
   const spreadsheetSavesRef = useRef(new Set());
   const columnSaveRef = useRef(false);
+  const focusedLookupRef = useRef("");
   const [savingColumn, setSavingColumn] = useState(null);
 
   async function loadCourses() {
@@ -775,6 +779,25 @@ export default function GradebookPage() {
     }
   }, [gradebook, requestedStudentEmail, requestedStudentName, requestedFocus]);
 
+  useEffect(() => {
+    if (!fromQuickLookup || !gradebook) return;
+    const student = (gradebook.students || []).find(row => lookupStudentMatches(row, requestedStudentId, requestedStudentEmail));
+    if (!student) return;
+    setSelectedStudentEmail(student.student_email);
+    const focusKey = `${selectedCourseId}:${requestedStudentId || requestedStudentEmail}:${activeGradebookSection}`;
+    if (focusedLookupRef.current === focusKey) return;
+    const row = document.getElementById("quick-lookup-student-row");
+    if (row) {
+      focusedLookupRef.current = focusKey;
+      row.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+    }
+  }, [fromQuickLookup, gradebook, requestedStudentId, requestedStudentEmail, activeGradebookSection, selectedCourseId]);
+
+  function returnToTeacherDashboard() {
+    if (Object.keys(spreadsheetMarkDrafts).length && !window.confirm("You have unsaved marks. Press Cancel to stay and save them, or OK to leave without saving.")) return;
+    navigate("/dashboard");
+  }
+
   const groupedAssignments = useMemo(() => {
     const groups = [];
 
@@ -913,6 +936,10 @@ export default function GradebookPage() {
   return (
     <>
     <div className="content-area">
+      {fromQuickLookup && <div style={{position:"sticky",top:0,zIndex:40,background:"#fff",border:"1px solid #cbd5e1",padding:12,display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+        <button type="button" onClick={returnToTeacherDashboard} disabled={Boolean(savingKey) || savingColumn !== null} style={{padding:"10px 16px",font:"inherit",fontWeight:700,cursor:"pointer"}}>← Back to Dashboard</button>
+        <span>Quick Look Up{requestedStudentName ? ` · ${requestedStudentName}` : ""} · Press Enter to save each edited mark.</span>
+      </div>}
       <section className="panel">
         <div className="section-header">
           <div>
@@ -936,7 +963,7 @@ export default function GradebookPage() {
                 const classId = master ? event.target.value.slice(7) : event.target.value;
                 window.localStorage.setItem("super-lms-last-course-id", classId);
                 setSelectedCourseId(classId);
-                navigate(classId ? `/gradebook?classId=${encodeURIComponent(classId)}&view=spreadsheet${master ? "&sectionId=all" : ""}` : "/gradebook", { replace: true });
+                navigate(classId ? `/gradebook?classId=${encodeURIComponent(classId)}&view=spreadsheet${master ? "&sectionId=all" : ""}${fromQuickLookup ? "&source=quick-lookup&returnTo=dashboard" : ""}` : "/gradebook", { replace: true });
               }}
               className="form-input"
             >
@@ -970,9 +997,10 @@ export default function GradebookPage() {
 
           {status ? <p className="form-message">{status}</p> : null}
 
+          {fromQuickLookup && gradebook && (requestedStudentId || requestedStudentEmail) && !(gradebook.students || []).some(row => lookupStudentMatches(row, requestedStudentId, requestedStudentEmail)) && <p role="alert">This student is no longer in this class roster. Return to the dashboard to search again.</p>}
           {(requestedStudentEmail || requestedStudentName) ? (
             <div style={focusNoticeStyle}>
-              Heatmap focus loaded:{" "}
+              {fromQuickLookup ? "Quick Look Up: " : "Heatmap focus loaded: "}
               <strong>{requestedStudentName || requestedStudentEmail}</strong>
               {requestedFocus ? (
                 <>
@@ -1238,8 +1266,11 @@ export default function GradebookPage() {
                   </thead>
                   <tbody>
                     {spreadsheetStudents.map((student) => (
-                      <tr key={student.student_user_id}>
+                      <tr key={student.student_user_id}
+                        id={fromQuickLookup && lookupStudentMatches(student, requestedStudentId, requestedStudentEmail) ? "quick-lookup-student-row" : undefined}
+                        style={fromQuickLookup && lookupStudentMatches(student, requestedStudentId, requestedStudentEmail) ? {background:"#eaf4ff",outline:"2px solid #2563eb",outlineOffset:-2} : undefined}>
                         <td style={spreadsheetStudentCellStyle}>
+                          {fromQuickLookup && lookupStudentMatches(student, requestedStudentId, requestedStudentEmail) && <div style={{fontSize:12,fontWeight:800,color:"#1d4ed8"}}>QUICK LOOK UP</div>}
                           <strong style={{ whiteSpace: "nowrap" }}>{student.student_name}</strong>
                           {allSections && student.section_title ? <div style={spreadsheetStudentDetailStyle} title={student.section_title}>{student.section_title}</div> : null}
                           <div style={spreadsheetStudentEmailStyle} title={student.student_email}>

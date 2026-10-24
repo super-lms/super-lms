@@ -1,3 +1,4 @@
+import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import API_BASE from "../apiBase"
@@ -726,6 +727,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="content-area" style={{ display: "grid", gap: "18px" }}>
+        <TeacherQuickLookup students={students} courses={courses} teacherId={teacherId} onOpen={goTo} />
         <section className="panel">
           <h2 style={{ marginTop: 0, fontSize: "28px" }}>My Teaching Dashboard</h2>
 

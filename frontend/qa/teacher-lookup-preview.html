@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Teacher Quick Look Up — Demo</title></head><body style="font-family:system-ui;background:#f4f6f8;color:#111827;margin:0"><div id="root"></div><script type="module">
+import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,Routes,Route,useNavigate}from'react-router-dom';import Lookup from'/src/components/TeacherQuickLookup.jsx';import Gradebook from'/src/pages/GradebookPage.jsx';import'/src/index.css';
+const courses=[{id:901,title:'Composition 10A'},{id:902,title:'Composition 10B',master_course_id:901}];
+const students=[{id:101,name:'Anna Li',email:'anna@example.test',class_id:901,class_name:'Composition 10A'},{id:101,name:'Anna Li',email:'anna@example.test',class_id:902,class_name:'Composition 10B'},{id:102,name:'Ben Wang',email:'ben@example.test',class_id:902,class_name:'Composition 10B'}];
+const scores={};
+window.fetch=async(url,options={})=>{
+ let data={};const path=String(url);
+ if(path.endsWith('/api/classes'))data=courses;
+ else if(path.includes('/kdu-gradebook')){const id=Number(path.match(/classes\/(\d+)/)[1]);data={class:{id,class_name:courses.find(c=>c.id===id)?.title},assignments:[{id:700,title:'Personal Narrative',points_possible:100,due_date:'2026-10-24T00:00:00Z',course_weight_percent:100}],assessment_groups:[],students:students.filter(s=>s.class_id===id).map(s=>({student_user_id:s.id,student_name:s.name,student_email:s.email,assignment_scores:[{assignment_id:700,score:scores[s.email]??65}],group_breakdown:[],current_percent:scores[s.email]??65,graded_weight_percent:100,earned_course_points:scores[s.email]??65}))}}
+ else if(options.method==='POST'){const body=JSON.parse(options.body||'{}');scores[body.student_email]=Number(body.overallScore??body.score??65);data={success:true}}
+ return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}})
+};
+function Dashboard(){const navigate=useNavigate();return React.createElement('main',{style:{maxWidth:1000,margin:'24px auto',padding:20}},React.createElement('h1',null,'Teacher Dashboard'),React.createElement('p',null,'Fictional preview — no school records are accessed or changed.'),React.createElement(Lookup,{students,courses,teacherId:'demo',onOpen:navigate}))}
+function App(){return React.createElement(MemoryRouter,{initialEntries:['/dashboard']},React.createElement(Routes,null,React.createElement(Route,{path:'/dashboard',element:React.createElement(Dashboard)}),React.createElement(Route,{path:'/gradebook',element:React.createElement(Gradebook)})))}
+createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>
