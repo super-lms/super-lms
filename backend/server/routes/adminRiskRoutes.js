@@ -8,7 +8,7 @@ function createAdminRiskRouter(pool) {
   try {
    const account=await pool.query("SELECT NULLIF(to_jsonb(u)->>'school_id','')::INTEGER AS school_id FROM users u WHERE u.id=$1",[req.user.id]);
    if(!account.rows.length)return res.status(403).json({error:'Account unavailable'});
-   const courses=await pool.query(`SELECT c.*,COALESCE((SELECT json_agg(DISTINCT u.id) FROM users u WHERE u.id=c.teacher_id OR u.id=(SELECT teacher_id FROM courses WHERE id=c.master_course_id) OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.teacher_id=u.id AND ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)))),'[]'::json) AS teacher_ids FROM courses c WHERE c.school_id IS NOT DISTINCT FROM $1 ORDER BY c.title,c.id`,[account.rows[0].school_id]);
+   const courses=await pool.query(`SELECT c.*,COALESCE((SELECT m.title FROM courses m WHERE m.id=c.master_course_id AND m.school_id IS NOT DISTINCT FROM c.school_id),c.title) AS risk_master_title,COALESCE((SELECT json_agg(DISTINCT u.id) FROM users u WHERE u.id=c.teacher_id OR u.id=(SELECT teacher_id FROM courses WHERE id=c.master_course_id) OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.teacher_id=u.id AND ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)))),'[]'::json) AS teacher_ids FROM courses c WHERE c.school_id IS NOT DISTINCT FROM $1 ORDER BY c.title,c.id`,[account.rows[0].school_id]);
    const ids=courses.rows.map(c=>c.id);
    const students=await pool.query(`SELECT DISTINCT u.id,COALESCE(NULLIF(TRIM(to_jsonb(u)->>'name'),''),NULLIF(TRIM(CONCAT(u.first_name,' ',u.last_name)),''),u.email) AS name,u.email,ce.class_id FROM class_enrollments ce JOIN users u ON u.id=ce.student_user_id WHERE ce.class_id=ANY($1::int[])`,[ids]);
    const teacherIds=[...new Set(courses.rows.flatMap(c=>c.teacher_ids))];
