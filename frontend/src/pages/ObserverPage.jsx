@@ -1,3 +1,4 @@
+import ParentQuestionAssistant from "../components/ParentQuestionAssistant.jsx"
 import {observerCourseText, observerAttentionItems, observerWorkStatus, observerCourseLabel} from '../services/observerCourseView.js'
 import {beijingDateTime} from '../services/assignmentTime.js'
 import { useEffect, useMemo, useState } from "react"
@@ -191,6 +192,8 @@ export default function ObserverPage() {
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("")
   const [viewMode, setViewMode] = useState("dashboard")
+  const [assistantSection, setAssistantSection] = useState("")
+  const [assistantCourseRequest, setAssistantCourseRequest] = useState(0)
   const [language, setLanguage] = useState(() => {
     try {return localStorage.getItem("super-lms-observer-language") === "zh" ? "zh" : "en"} catch {return "en"}
   })
@@ -373,7 +376,7 @@ export default function ObserverPage() {
     String(observerData.observer?.relationship || "").trim().toLowerCase() ===
     "chinese_homeroom_teacher"
   const isParent =
-    String(observerData.observer?.relationship || "").trim().toLowerCase() === "parent"
+    String(observerData.observer?.relationship || user?.observer_relationship || "").trim().toLowerCase() === "parent" || String(user?.role || "").toLowerCase() === "parent"
   const portalTitle = isChineseHomeroomTeacher
     ? t.homeroomTeacherPortal
     : isParent
@@ -400,6 +403,7 @@ export default function ObserverPage() {
   }, [observerData.submissions, selectedStudentEmail, selectedCourseId])
 
   useEffect(() => {
+    let active = true
     async function loadReadOnlyCourseDashboard() {
       if (viewMode !== "progress" || !user?.email || !selectedStudentEmail || !selectedCourseId) {
         return
@@ -413,19 +417,27 @@ export default function ObserverPage() {
           `/api/observers/${encodeURIComponent(user.email)}/students/${encodeURIComponent(selectedStudentEmail)}/courses/${encodeURIComponent(selectedCourseId)}/dashboard`
         )
         const data = await response.json().catch(() => null)
+        if (!active) return
         if (!response.ok) {
           throw new Error((data && data.error) || "Failed to load this student course")
         }
         setCourseDashboard(data)
       } catch (err) {
-        setCourseDashboardError(err.message || "Failed to load this student course")
+        if (active) setCourseDashboardError(err.message || "Failed to load this student course")
       } finally {
-        setCourseDashboardLoading(false)
+        if (active) setCourseDashboardLoading(false)
       }
     }
 
     loadReadOnlyCourseDashboard()
-  }, [viewMode, user?.email, selectedStudentEmail, selectedCourseId])
+    return () => { active = false }
+  }, [viewMode, user?.email, selectedStudentEmail, selectedCourseId, assistantCourseRequest])
+
+  useEffect(() => {
+    if (!assistantSection || viewMode !== "progress" || courseDashboardLoading || !courseDashboard) return
+    openCourseSection(assistantSection)
+    setAssistantSection("")
+  }, [assistantSection, viewMode, courseDashboardLoading, courseDashboard])
 
   const readOnlyCourseItems = useMemo(() => {
     return toArray(courseDashboard?.assignments).map((assignment) => {
@@ -884,6 +896,19 @@ export default function ObserverPage() {
 
       {loading ? <p>{t.loadingPortal}</p> : null}
       {error ? <p style={{ color: "#991b1b" }}>{error}</p> : null}
+
+      {!loading && !error && isParent ? (
+        <ParentQuestionAssistant students={uniqueStudents} enrollments={observerData.students}
+          observerEmail={user.email} language={language} onLanguageChange={setLanguage}
+          onOpenCourse={(course, studentEmail, section) => {
+            setCourseDashboard(null)
+            setAssistantCourseRequest(value => value + 1)
+            setSelectedStudentEmail(studentEmail)
+            setSelectedCourseId(String(course.class_id))
+            setViewMode("progress")
+            setAssistantSection(section)
+          }} />
+      ) : null}
 
       {!loading && !error && viewMode === "dashboard" ? (
         <div style={{ display: "grid", gap: "18px" }}>

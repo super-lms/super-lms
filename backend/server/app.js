@@ -5300,7 +5300,7 @@ app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRol
 });
 
 
-app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin", "observer"), async (req, res) => {
+app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin", "observer", "parent"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
@@ -5308,6 +5308,11 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
 
     if (!observerEmail) {
       return res.status(400).json({ error: "Observer email is required" });
+    }
+
+    if (String(req.user.role).toLowerCase() !== "admin" &&
+        String(req.user.email || "").trim().toLowerCase() !== observerEmail) {
+      return res.status(403).json({ error: "You can only view your own linked students" });
     }
 
     const observerResult = await pool.query(
@@ -6214,11 +6219,16 @@ app.delete("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin
 });
 
 
+/* Read-only attendance for an authenticated observer's linked student. */
+app.get("/api/observers/:observerEmail/students/:studentEmail/courses/:courseId/attendance",
+  authenticateJWT, requireRole("admin", "observer", "parent"),
+  require("./observerAttendance").createObserverAttendanceHandler({ pool, getObserverStudents }));
+
 /* GET STUDENT COURSE DASHBOARD V1 */
 app.get(
   "/api/observers/:observerEmail/students/:studentEmail/courses/:courseId/dashboard",
   authenticateJWT,
-  requireRole("admin", "observer"),
+  requireRole("admin", "observer", "parent"),
   async (req, res) => {
     try {
       const observerEmail = String(req.params.observerEmail || "").trim().toLowerCase();
@@ -6227,6 +6237,11 @@ app.get(
 
       if (!observerEmail || !studentEmail || !courseId) {
         return res.status(400).json({ error: "Valid observer, student, and course are required" });
+      }
+
+      if (String(req.user.role).toLowerCase() !== "admin" &&
+          String(req.user.email || "").trim().toLowerCase() !== observerEmail) {
+        return res.status(403).json({ error: "You can only view your own linked students" });
       }
 
       const linkedStudents = await getObserverStudents(observerEmail);

@@ -26,7 +26,6 @@ import HomeformAssignmentPage from "./pages/HomeformAssignmentPage.jsx";
 import LessonsPage from "./pages/LessonsPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ObserverPage from "./pages/ObserverPage.jsx";
-import ParentDashboardPage from "./pages/ParentDashboardPage.jsx";
 import QuestionBanksPage from "./pages/QuestionBanksPage.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import RubricRepositoryPage from "./pages/RubricRepositoryPage.jsx";
@@ -236,7 +235,7 @@ function App() {
         path="/parent"
         element={
           <ProtectedRoute allowedRoles={["parent"]}>
-            <ParentDashboardPage />
+            <ObserverPage />
           </ProtectedRoute>
         }
       />
