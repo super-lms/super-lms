@@ -1,3 +1,4 @@
+import AssignmentDueDate from "../components/AssignmentDueDate.jsx";
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
 import { beijingDateTime, assignmentInstant } from "../services/assignmentTime.js";
@@ -1339,7 +1340,7 @@ export default function EditAssignmentPage() {
                 </div>
                 <div>
                   <EditAssignmentFieldLabel>Due Date</EditAssignmentFieldLabel>
-                  <AssignmentDateTime value={dueDate} onChange={setDueDate} min={availableFrom || undefined}
+                  <AssignmentDueDate assignmentId={assignmentId} onSaved={() => setAssignment(item => ({...item, due_date: null}))} value={dueDate} onChange={setDueDate} min={availableFrom || undefined}
                     style={inputStyle} />
                 </div>
               </div>

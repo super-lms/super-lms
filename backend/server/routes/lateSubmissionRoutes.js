@@ -2,6 +2,7 @@ const {DECLINED_MESSAGE}=require('../submissionDeadline');
 const express=require('express');const {authenticateJWT,requireRole}=require('../../middleware/auth');
 function createLateSubmissionRouter(pool,deadlines,held){
  const router=express.Router();const approvalAccess=[authenticateJWT,requireRole('admin','teacher')];
+ router.post('/:assignmentId/no-due-date',...approvalAccess,require('../removeAssignmentDeadline').createRemoveDeadlineHandler(pool,deadlines,held));
  router.get('/late-submission-alerts',...approvalAccess,async(req,res)=>{try{
   const classId=req.query?.classId ? Number(req.query.classId) : null;
   if(classId!==null&&(!Number.isInteger(classId)||classId<=0))return res.status(400).json({error:'Choose a valid class.'});

@@ -1,3 +1,4 @@
+import AssignmentDueDate from "../components/AssignmentDueDate.jsx";
 import LateSubmissionAlerts from "../components/LateSubmissionAlerts.jsx";
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
 import { beijingDateTime, assignmentInstant, displayAssignmentTime } from "../services/assignmentTime.js";
@@ -2008,7 +2009,7 @@ export default function AssignmentsPage() {
                               <AssignmentDateTime value={availableFrom} onChange={setAvailableFrom} />
                             </InputBlock>
                             <InputBlock label="Due Date">
-                              <AssignmentDateTime value={dueDate} onChange={setDueDate} min={availableFrom || undefined} />
+                              <AssignmentDueDate value={dueDate} onChange={setDueDate} min={availableFrom || undefined} />
                             </InputBlock>
                           </div>
 
@@ -2269,7 +2270,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                       <AssignmentDateTime value={editAvailableFrom} onChange={setEditAvailableFrom} />
                                     </InputBlock>
                                     <InputBlock label="Due Date">
-                                      <AssignmentDateTime value={editDueDate} onChange={setEditDueDate} min={editAvailableFrom || undefined} />
+                                      <AssignmentDueDate assignmentId={editingAssignmentId} onSaved={() => setAssignments(items => items.map(item => String(item.id) === String(editingAssignmentId) ? {...item, due_date: null} : item))} value={editDueDate} onChange={setEditDueDate} min={editAvailableFrom || undefined} />
                                     </InputBlock>
                                     <InputBlock label="Points Possible">
                                       <input type="number" min="0.01" step="0.01" value={editPointsPossible} onChange={(e) => setEditPointsPossible(e.target.value)} />

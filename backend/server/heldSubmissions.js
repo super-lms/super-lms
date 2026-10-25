@@ -1,4 +1,4 @@
-const {DECLINED_MESSAGE}=require('./submissionDeadline');
+const {DECLINED_MESSAGE,pastDue}=require('./submissionDeadline');
 // Late work stays outside submissions/gradebook until a teacher approves it.
 function createHeldSubmissions(pool, deadlines, ensureAttachments) {
   let ready;
@@ -64,6 +64,7 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock($1::INTEGER,0)', [assignmentId]);
       await lock(client, assignmentId, studentId);
       if(await deadlines.activeDecline(assignmentId,studentId,client))throw Object.assign(Error(DECLINED_MESSAGE),{status:403,code:'SUBMISSION_DECLINED'});
       // Keep the newest held text; files accumulate, just as normal attachments do.
@@ -77,11 +78,14 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
       // A teacher may have approved while an upload was in flight.
       const permission = await client.query(`SELECT id,enabled FROM assignment_late_permissions
         WHERE assignment_id=$1 AND student_id=$2 ORDER BY id DESC LIMIT 1`, [assignmentId, studentId]);
-      const approved = permission.rows[0]?.enabled === true;
-      if (approved) await promote(client, assignmentId, studentId, permission.rows[0].id);
+      const currentDeadline = await client.query('SELECT due_date FROM assignments WHERE id=$1', [assignmentId]);
+      if (!currentDeadline.rows.length) throw Object.assign(Error('Assignment not found'), {status:404});
+      const stillPastDue = pastDue(currentDeadline.rows[0].due_date);
+      const approved = !stillPastDue || permission.rows[0]?.enabled === true;
+      if (approved) await promote(client, assignmentId, studentId, permission.rows[0]?.id || null);
       const heldWork = approved ? [] : await pending(assignmentId, studentId, client);
       await client.query('COMMIT');
-      return {held_work:heldWork,success:true,pending_approval:!approved,accepted_past_due:approved,
+      return {held_work:heldWork,success:true,pending_approval:!approved,accepted_past_due:approved && stillPastDue,
         submission_status:approved ? 'submitted' : 'awaiting_approval',submission:{content:content || ''}};
     } catch (error) {
       await client.query('ROLLBACK');
