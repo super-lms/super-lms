@@ -1262,6 +1262,9 @@ export default function GradebookPage() {
                           >
                             {assignment.category_name || "No assessment pathway"}
                           </div>
+                          <div style={spreadsheetAssignmentMetaStyle}>
+                            <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not assigned"}
+                          </div>
                         </th>
                       ))}
                       <th style={spreadsheetSummaryHeaderStyle}>Current Grade</th>
