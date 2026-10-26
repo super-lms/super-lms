@@ -68,6 +68,7 @@ export default function AdminLayout() {
     if (location.pathname === "/admin/quick-enrollment") return "Quick Student Enrollment"
     if (location.pathname === "/admin/calendar") return "School Calendar"
     if (location.pathname === "/admin/departments") return "Departments"
+    if (location.pathname === "/admin/fitness-tracker") return "Fitness Unit Tracker"
     if (location.pathname === "/admin/gradebooks") return "School Gradebooks"
     if (location.pathname === "/admin/quizzes") return "All Teachers’ Quizzes & Tests"
     if (location.pathname === "/courses") return "Course Builder"
@@ -173,6 +174,7 @@ export default function AdminLayout() {
             if (params.get("view") === "master") query.set("view", "master")
             navigate(`/assignments?${query}`)
           }} style={getNavLinkStyle("/assignments")} icon={ClipboardList}>Assignments</NavItem>
+          <NavItem to="/admin/fitness-tracker" style={getNavLinkStyle("/admin/fitness-tracker")} icon={ClipboardCheck}>Fitness Tracker</NavItem>
           <NavItem to="/admin/gradebooks" onClick={(event) => {
             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
             const params = new URLSearchParams(window.location.search)

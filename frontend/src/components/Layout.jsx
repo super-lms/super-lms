@@ -177,6 +177,7 @@ export default function Layout() {
     if (location.pathname === "/homeform-assignment") return "Homeform Assignment"
     if (location.pathname === "/class-roster") return "Class Roster"
     if (location.pathname === "/enrolled-students") return "Class Roster"
+    if (location.pathname === "/fitness-tracker") return "Fitness Unit Tracker"
     if (location.pathname.endsWith("/attendance")) return "Attendance"
     if (location.pathname === "/calendar") return "School Calendar"
 
@@ -327,6 +328,7 @@ export default function Layout() {
             <NavItem to={attendancePath} style={getNavLinkStyle(attendancePath)} icon={CalendarCheck}>
               Attendance
             </NavItem>
+            <NavItem to="/fitness-tracker" style={getNavLinkStyle("/fitness-tracker")} icon={ClipboardCheck}>Fitness Tracker</NavItem>
             <NavItem to="/announcements" style={getNavLinkStyle("/announcements")} icon={FileText}>Announcements</NavItem>
             <NavItem to="/calendar" style={getNavLinkStyle("/calendar")} icon={CalendarDays}>
               School Calendar
