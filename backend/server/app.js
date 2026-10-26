@@ -60,6 +60,7 @@ app.use(express.json({ limit: "75mb" }));
 const heldSubmissions = require('./heldSubmissions').createHeldSubmissions(pool, submissionDeadlines, ensureSubmissionAttachmentsTable);
 app.use('/api/assignments',require('./routes/lateSubmissionRoutes').createLateSubmissionRouter(pool,submissionDeadlines,heldSubmissions));
 app.use('/api/assignments',require('./routes/readAloudRoutes').createReadAloudRouter(pool,submissionDeadlines,{studentHasLiveCourseAccess,assignmentIsAvailableToStudents}));
+app.use('/api/stock-game',require('./routes/stockGameRoutes').createStockGameRouter(pool));
 app.use('/api/fitness',require('./routes/fitnessRoutes').createFitnessRouter(pool));
 app.use('/api/admin/grade-export',require('./schoolGradeExport').createSchoolGradeExportRouter(pool));
 app.use('/api/admin/risk-alerts',require('./routes/adminRiskRoutes').createAdminRiskRouter(pool));

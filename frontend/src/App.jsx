@@ -1,3 +1,4 @@
+import StockGamePage from "./pages/StockGamePage.jsx";
 import FitnessTrackerPage from "./pages/FitnessTrackerPage.jsx";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
@@ -150,6 +151,7 @@ function App() {
         <Route path="/class-enrollment" element={<ClassEnrollmentPage />} />
         <Route path="/class-roster" element={<ClassRosterPage />} />
         <Route path="/enrolled-students" element={<Navigate to="/class-roster" replace />} />
+        <Route path="/stock-game" element={<StockGamePage />} />
         <Route path="/fitness-tracker" element={<FitnessTrackerPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/courses/:courseId/attendance" element={<AttendancePage />} />
@@ -176,6 +178,7 @@ function App() {
         <Route path="/admin/student-schedules" element={<AdminStudentSchedulePrinterPage />} />
         <Route path="/admin/quick-enrollment" element={<AdminQuickEnrollmentPage />} />
         <Route path="/admin/calendar" element={<SchoolCalendarPage />} />
+        <Route path="/admin/stock-game" element={<StockGamePage />} />
         <Route path="/admin/fitness-tracker" element={<FitnessTrackerPage />} />
         <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
         <Route path="/admin/reports" element={<AdminReportsPage />} />
@@ -196,6 +199,7 @@ function App() {
         <Route path="/admin/courses/:courseId/analytics" element={<DashboardPage />} />
       </Route>
 
+      <Route path="/student-stock-game" element={<ProtectedRoute allowedRoles={["student"]}><StockGamePage /></ProtectedRoute>} />
       <Route path="/student-fitness" element={<ProtectedRoute allowedRoles={["student"]}><FitnessTrackerPage /></ProtectedRoute>} />
       <Route
         path="/student"

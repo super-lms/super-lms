@@ -1445,6 +1445,9 @@ export default function StudentDashboardPage() {
             subtitle="Use these actions to move through the student experience."
             action={
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <ActionButton quiet onClick={() => navigate("/student-stock-game")}>
+                  Stock Market Game
+                </ActionButton>
                 <ActionButton quiet onClick={() => navigate("/student-fitness")}>
                   Fitness Workout Card
                 </ActionButton>
