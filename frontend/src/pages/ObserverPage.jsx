@@ -95,7 +95,7 @@ const translations = {
     recentFeedbackHelp: "Review the latest teacher feedback across linked students.",
     viewFeedback: "View Feedback →",
     manageHomeroom: "Manage My Homeroom",
-    manageHomeroomHelp: "Select homeroom students from the official grade roster.",
+    manageHomeroomHelp: "Select your homeroom students from all active students.",
     openHomeroom: "Open Homeroom →",
     rtiStudentSupport: "RTI / Student Support",
     rtiStudentSupportHelp: "Open the intervention and student-support workspace.",
@@ -147,7 +147,7 @@ const translations = {
     recentFeedbackHelp: "查看关联学生的最新教师反馈。",
     viewFeedback: "查看反馈 →",
     manageHomeroom: "管理我的班级",
-    manageHomeroomHelp: "从官方年级名单中选择本班学生。",
+    manageHomeroomHelp: "从所有在校学生中选择并关联本班学生。",
     openHomeroom: "打开班级管理 →",
     rtiStudentSupport: "RTI / 学生支持",
     rtiStudentSupportHelp: "打开干预与学生支持工作区。",
@@ -207,7 +207,6 @@ export default function ObserverPage() {
   }
   const [homeroomRoster, setHomeroomRoster] = useState([])
   const [homeroomSearch, setHomeroomSearch] = useState("")
-  const [homeroomGrade, setHomeroomGrade] = useState("")
   const [selectedHomeroomIds, setSelectedHomeroomIds] = useState([])
   const [homeroomLoading, setHomeroomLoading] = useState(false)
   const [homeroomSaving, setHomeroomSaving] = useState(false)
@@ -293,7 +292,7 @@ export default function ObserverPage() {
       setHomeroomMessage("")
 
       const response = await authFetch(
-        `/api/observers/${encodeURIComponent(user.email)}/grade-roster?current_grade=11`
+        `/api/observers/${encodeURIComponent(user.email)}/grade-roster`
       )
 
       const data = await response.json().catch(() => null)
@@ -304,7 +303,6 @@ export default function ObserverPage() {
 
       const roster = toArray(data?.students)
       setHomeroomRoster(roster)
-      setHomeroomGrade(String(data?.current_grade || "11"))
       setSelectedHomeroomIds(
         roster
           .filter((student) => student.already_linked)
@@ -828,7 +826,6 @@ export default function ObserverPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            current_grade: Number(homeroomGrade || 11),
             masterStudentIds: selectedHomeroomIds.map(Number).filter(Boolean),
           }),
         }
@@ -1069,18 +1066,18 @@ export default function ObserverPage() {
           <h2 style={sectionTitleStyle}>{t.manageHomeroom}</h2>
 
           <p style={{ marginTop: 0, color: "#4b5563", lineHeight: 1.5 }}>
-            Select students from the official Grade {homeroomGrade || "11"} roster. This updates your linked student list.
+            {t.manageHomeroomHelp}
           </p>
 
           <div style={metricGridStyle}>
-            <MetricCard title="Current Grade" value={homeroomGrade || "11"} />
+            <MetricCard title={language === "zh" ? "学生范围" : "Student Scope"} value={language === "zh" ? "所有年级" : "All Grades"} />
             <MetricCard title="Roster Students" value={homeroomRoster.length} />
             <MetricCard title="Selected Students" value={selectedHomeroomIds.length} />
           </div>
 
           <div style={{ marginTop: "18px", marginBottom: "18px" }}>
             <label style={{ display: "block", fontWeight: 800, marginBottom: "8px" }}>
-              Search Grade {homeroomGrade || "11"} Students
+              {language === "zh" ? "搜索所有学生" : "Search All Students"}
             </label>
             <input
               value={homeroomSearch}
@@ -1112,6 +1109,7 @@ export default function ObserverPage() {
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={!student.student_email}
                       onChange={() => toggleHomeroomStudent(id)}
                       style={{ width: "18px", height: "18px", marginTop: "3px" }}
                     />
@@ -1121,7 +1119,7 @@ export default function ObserverPage() {
                         {student.display_name || student.student_email || "Unnamed Student"}
                       </div>
                       <div style={{ marginTop: "4px", color: "#4b5563" }}>
-                        {student.student_email || "No email"} {student.current_homeform ? `• ${student.current_homeform}` : ""}
+                        {student.student_email || "No student email — contact an administrator to enable linking"} {student.current_homeform ? `• ${student.current_homeform}` : ""}
                       </div>
                       <div style={{ marginTop: "4px", color: "#6b7280", fontSize: "0.9rem" }}>
                         Student ID: {student.student_id || "—"} • PEN: {student.pen || "—"}

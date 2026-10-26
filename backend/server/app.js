@@ -5076,29 +5076,29 @@ async function getObserverStudents(observerEmail) {
 }
 
 
-/* OBSERVER GRADE 11 ROSTER CANDIDATES - HOMEROOM SELF-LINKING V1 */
+/* ACTIVE SCHOOL ROSTER CANDIDATES - HOMEROOM SELF-LINKING */
 app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admin", "observer"), async (req, res) => {
   try {
     await ensureStudentInfoColumns();
 
     const observerEmail = String(req.params.email || "").trim().toLowerCase();
-    const currentGrade = Number(req.query.current_grade || 11);
     const search = String(req.query.search || "").trim().toLowerCase();
 
     if (!observerEmail) {
       return res.status(400).json({ error: "Observer email is required" });
     }
 
-    if (currentGrade !== 11) {
-      return res.status(403).json({ error: "Observer roster self-linking is limited to Grade 11 in V1." });
-    }
-
     const observerResult = await pool.query(
       `
-      SELECT id, name, email, role
+      SELECT id, name, email, role, observer_relationship,
+        EXISTS (
+          SELECT 1 FROM observer_student_links links
+          WHERE links.observer_user_id = users.id
+            AND links.relationship = 'chinese_homeroom_teacher'
+        ) AS has_homeroom_links
       FROM users
       WHERE LOWER(email) = $1
-        AND LOWER(COALESCE(role, '')) IN ('observer', 'parent')
+        AND LOWER(COALESCE(role, '')) = 'observer'
       LIMIT 1
       `,
       [observerEmail]
@@ -5108,16 +5108,23 @@ app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admi
       return res.status(404).json({ error: "Observer user not found" });
     }
 
-    const values = [currentGrade, observerResult.rows[0].id];
+    const observer = observerResult.rows[0];
+    const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
+    if (!isAdmin && Number(req.user?.id) !== Number(observer.id)) {
+      return res.status(403).json({ error: "You may only manage your own homeroom." });
+    }
+    if (String(observer.observer_relationship || "").toLowerCase() !== "chinese_homeroom_teacher" && !observer.has_homeroom_links) {
+      return res.status(403).json({ error: "Homeroom selection is available to homeroom teachers only." });
+    }
+
+    const values = [observer.id];
     const filters = [
-      "TRIM(ms.current_grade::TEXT) = $1::TEXT",
-      "LOWER(COALESCE(ms.status, 'active')) = 'active'",
-      "COALESCE(ms.student_email, '') <> ''"
+      "LOWER(COALESCE(ms.status, 'active')) = 'active'"
     ];
 
     if (search) {
       values.push(`%${search}%`);
-      filters.push(`LOWER(COALESCE(ms.display_name, '') || ' ' || COALESCE(ms.student_email, '') || ' ' || COALESCE(ms.student_id, '') || ' ' || COALESCE(ms.pen, '')) LIKE $${values.length}`);
+      filters.push(`LOWER(COALESCE(ms.display_name, '') || ' ' || COALESCE(ms.student_email, '') || ' ' || COALESCE(ms.student_id, '') || ' ' || COALESCE(ms.pen, '') || ' ' || COALESCE(ms.current_homeform, '')) LIKE $${values.length}`);
     }
 
     const result = await pool.query(
@@ -5128,7 +5135,6 @@ app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admi
         ms.student_id,
         ms.display_name,
         ms.student_email,
-        ms.parent_email,
         ms.current_grade,
         ms.current_homeform,
         u.id AS student_user_id,
@@ -5139,10 +5145,10 @@ app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admi
        AND LOWER(COALESCE(u.role, '')) = 'student'
       LEFT JOIN observer_student_links osl
         ON osl.student_user_id = u.id
-       AND osl.observer_user_id = $2
+       AND osl.observer_user_id = $1
+       AND osl.relationship = 'chinese_homeroom_teacher'
       WHERE ${filters.join(" AND ")}
       ORDER BY ms.current_homeform ASC NULLS LAST, ms.display_name ASC, ms.pen ASC
-      LIMIT 300
       `,
       values
     );
@@ -5150,7 +5156,7 @@ app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admi
     return res.json({
       success: true,
       observer: observerResult.rows[0],
-      current_grade: currentGrade,
+      roster_scope: "all_active_students",
       students: result.rows,
     });
   } catch (err) {
@@ -5159,7 +5165,7 @@ app.get("/api/observers/:email/grade-roster", authenticateJWT, requireRole("admi
   }
 });
 
-/* OBSERVER SAVE GRADE 11 STUDENT LINKS - HOMEROOM SELF-LINKING V1 */
+/* SAVE THE HOMEROOM TEACHER SELECTION ACROSS ALL GRADES */
 app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRole("admin", "observer"), async (req, res) => {
   const client = await pool.connect();
 
@@ -5167,27 +5173,30 @@ app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRol
     await ensureStudentInfoColumns();
 
     const observerEmail = String(req.params.email || "").trim().toLowerCase();
-    const currentGrade = Number(req.body?.current_grade || 11);
-    const requestedMasterStudentIds = Array.isArray(req.body?.masterStudentIds)
-      ? req.body.masterStudentIds.map(Number).filter(Boolean)
-      : [];
+    if (!Array.isArray(req.body?.masterStudentIds) || req.body.masterStudentIds.some(
+      (id) => !Number.isSafeInteger(Number(id)) || Number(id) <= 0
+    )) {
+      return res.status(400).json({ error: "A list of valid student IDs is required." });
+    }
+    const requestedMasterStudentIds = req.body.masterStudentIds.map(Number);
 
     if (!observerEmail) {
       return res.status(400).json({ error: "Observer email is required" });
-    }
-
-    if (currentGrade !== 11) {
-      return res.status(403).json({ error: "Observer roster self-linking is limited to Grade 11 in V1." });
     }
 
     const uniqueMasterStudentIds = [...new Set(requestedMasterStudentIds)];
 
     const observerResult = await client.query(
       `
-      SELECT id, name, email, role
+      SELECT id, name, email, role, observer_relationship,
+        EXISTS (
+          SELECT 1 FROM observer_student_links links
+          WHERE links.observer_user_id = users.id
+            AND links.relationship = 'chinese_homeroom_teacher'
+        ) AS has_homeroom_links
       FROM users
       WHERE LOWER(email) = $1
-        AND LOWER(COALESCE(role, '')) IN ('observer', 'parent')
+        AND LOWER(COALESCE(role, '')) = 'observer'
       LIMIT 1
       `,
       [observerEmail]
@@ -5195,6 +5204,15 @@ app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRol
 
     if (observerResult.rows.length === 0) {
       return res.status(404).json({ error: "Observer user not found" });
+    }
+
+    const observer = observerResult.rows[0];
+    const isAdmin = String(req.user?.role || "").toLowerCase() === "admin";
+    if (!isAdmin && Number(req.user?.id) !== Number(observer.id)) {
+      return res.status(403).json({ error: "You may only manage your own homeroom." });
+    }
+    if (String(observer.observer_relationship || "").toLowerCase() !== "chinese_homeroom_teacher" && !observer.has_homeroom_links) {
+      return res.status(403).json({ error: "Homeroom selection is available to homeroom teachers only." });
     }
 
     const masterStudentsResult = uniqueMasterStudentIds.length > 0
@@ -5209,22 +5227,26 @@ app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRol
             current_grade
           FROM master_students
           WHERE id = ANY($1::int[])
-            AND TRIM(current_grade::TEXT) = $2::TEXT
             AND LOWER(COALESCE(status, 'active')) = 'active'
             AND COALESCE(student_email, '') <> ''
           ORDER BY display_name ASC, pen ASC
           `,
-          [uniqueMasterStudentIds, currentGrade]
+          [uniqueMasterStudentIds]
         )
       : { rows: [] };
 
     if (masterStudentsResult.rows.length !== uniqueMasterStudentIds.length) {
       return res.status(400).json({
-        error: "One or more selected students are not valid Grade 11 roster students.",
+        error: "One or more selected students are not active roster students with a student email.",
       });
     }
 
     await client.query("BEGIN");
+    // Preserve the staff relationship even when the final homeroom link is removed.
+    await client.query(
+      `UPDATE users SET observer_relationship = 'chinese_homeroom_teacher' WHERE id = $1`,
+      [observer.id]
+    );
 
     const linkedStudentIds = [];
 
@@ -5283,12 +5305,21 @@ app.post("/api/observers/:email/grade-roster-links", authenticateJWT, requireRol
       }
     }
 
+    // Replace only this teacher's homeroom links, preserving other relationships.
+    await client.query(
+      `DELETE FROM observer_student_links
+       WHERE observer_user_id = $1
+         AND relationship = 'chinese_homeroom_teacher'
+         AND NOT (student_user_id = ANY($2::int[]))`,
+      [observer.id, linkedStudentIds]
+    );
+
     await client.query("COMMIT");
 
     return res.json({
       success: true,
       observer: observerResult.rows[0],
-      current_grade: currentGrade,
+      roster_scope: "all_active_students",
       linkedStudentIds,
       linkedCount: linkedStudentIds.length,
     });
