@@ -10,9 +10,9 @@ test('manual-price stock game accounting and permissions against PostgreSQL',{sk
  CREATE TABLE courses(id INTEGER PRIMARY KEY,title TEXT,teacher_id INTEGER,master_course_id INTEGER,is_live BOOLEAN DEFAULT true,school_id INTEGER);
  CREATE TABLE course_teachers(course_id INTEGER,teacher_id INTEGER);CREATE TABLE class_enrollments(class_id INTEGER,student_user_id INTEGER);
  INSERT INTO users(id,name,email,school_id) VALUES(3,'Accounting Teacher','teacher@test',1),(4,'Other Teacher','other@test',1),(9,'Other School Admin','admin@test',2),(10,'Student One','one@test',1),(11,'Student Two','two@test',1),(12,'Outsider','outsider@test',1);
- INSERT INTO users(id,name,email,school_id) SELECT n,'Student '||n,'student'||n||'@test',1 FROM generate_series(20,79)n;
+ INSERT INTO users(id,name,email,school_id) SELECT n,'Student '||n,'student'||n||'@test',1 FROM generate_series(20,99)n;
  INSERT INTO courses(id,title,teacher_id,school_id) VALUES(1,'Accounting 11 for Grade 12s',3,1),(2,'Other class',4,1);
- INSERT INTO class_enrollments VALUES(1,10),(1,11),(2,12);INSERT INTO class_enrollments SELECT 1,n FROM generate_series(20,79)n;`);
+ INSERT INTO class_enrollments VALUES(1,10),(1,11),(2,12);INSERT INTO class_enrollments SELECT 1,n FROM generate_series(20,99)n;`);
  const app=express();app.use(express.json());app.use('/api/stock-game',createStockGameRouter(pool));await new Promise(r=>{server=app.listen(0,'127.0.0.1',r)});const base=`http://127.0.0.1:${server.address().port}/api/stock-game`;
  const teacher={id:3,role:'teacher'},other={id:4,role:'teacher'},student={id:10,role:'student'},second={id:11,role:'student'};
  async function request(user,method,url,body){const headers={'Content-Type':'application/json'};if(user)headers.Authorization='Bearer '+jwt.sign(user,process.env.JWT_SECRET||'super-lms-development-secret-change-before-production');const r=await fetch(base+url,{method,headers,body:body?JSON.stringify(body):undefined});return {status:r.status,body:await r.json()}}
@@ -28,10 +28,23 @@ test('manual-price stock game accounting and permissions against PostgreSQL',{sk
   const r=await request(teacher,'POST','/courses/1/games',config);assert.equal(r.status,201);game=r.body.id;
   assert.equal((await request({id:12,role:'student'},'GET',`/games/${game}`)).status,403);
  });
- await t.test('joining is idempotent, bank opens at 100000 CAD, and participation is capped at 60',async()=>{
+ await t.test('shared game adds authorized classes without resetting accounts or granting outsiders access',async()=>{
+  await pool.query(`INSERT INTO courses(id,title,teacher_id,school_id) VALUES(3,'Accounting 11A',3,1),(4,'Accounting 11B',3,1),(5,'Other School',3,2);INSERT INTO class_enrollments VALUES(3,11);DELETE FROM class_enrollments WHERE class_id=1 AND student_user_id=11;`);
+  assert.equal((await read(second)).status,403);
+  assert.equal((await request(teacher,'POST',`/games/${game}/classes`,{course_id:2})).status,403);
+  assert.equal((await request(teacher,'POST',`/games/${game}/classes`,{course_id:5})).status,403);
+  assert.equal((await request(student,'POST',`/games/${game}/classes`,{course_id:3})).status,403);
+  for(const id of [3,4,3])assert.equal((await request(teacher,'POST',`/games/${game}/classes`,{course_id:id})).status,200);
+  assert.equal((await read(second)).status,200);
+  assert.ok((await request(second,'GET','/courses')).body.courses.some(c=>c.id===3));
+  assert.equal((await request(second,'GET','/courses/3/games')).body.games[0].id,game);
+  assert.equal((await read(teacher)).body.classes.length,3);
+  assert.equal((await request({id:12,role:'student'},'GET',`/games/${game}`)).status,403);
+ });
+ await t.test('joining is idempotent, bank opens at 100000 CAD, and participation is capped at 80',async()=>{
   for(const who of [student,student,second])assert.equal((await request(who,'POST',`/games/${game}/join`,{})).status,200);
   assert.equal((await read(student)).body.portfolio.state.cash_cents,10000000);assert.equal((await read(teacher)).body.leaders.length,2);
-  const cap=(await request(teacher,'POST','/courses/1/games',config)).body.id;await pool.query('INSERT INTO stock_game_players(game_id,student_id) SELECT $1,n FROM generate_series(20,79)n',[cap]);assert.equal((await request(student,'POST',`/games/${cap}/join`,{})).status,409);
+  const cap=(await request(teacher,'POST','/courses/1/games',config)).body.id;await pool.query('INSERT INTO stock_game_players(game_id,student_id) SELECT $1,n FROM generate_series(20,99)n',[cap]);assert.equal((await request(student,'POST',`/games/${cap}/join`,{})).status,409);
  });
  await t.test('initial portfolio requires ten distinct stocks, handles fees and rejects overspending atomically',async()=>{
   assert.equal((await trade(student,orders(1000).slice(0,1),0)).status,400);const duplicate=orders(1000);duplicate[9].symbol=duplicate[0].symbol;assert.equal((await trade(student,duplicate,0)).status,400);
