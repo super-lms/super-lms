@@ -32,3 +32,10 @@ test('root A class can have its own schedule like its child cohorts',async()=>{
  await createQuizDelivery(pool).configure(id,{user:{id:3},schoolId:7},{scope:'cohorts',rows:[{targetId:1,config:{maxAttempts:1,timeLimitMinutes:35}}]});
  assert.equal(calls.find(c=>c.sql.startsWith('INSERT')).args[1],1);assert.equal(calls.at(-1).sql,'COMMIT');
 });
+
+test('students start and submit tests without providing gender; legacy gender is not copied',async()=>{
+ for(const details of [{name:'Learner',email:'ignored@example.com',grade:'10',class:'10C'},student]){
+ const f=fixture();const a=await f.delivery.studentAction(id,{id:10},'start',{student:details});assert.equal(Object.hasOwn(f.attempts[0].student,'gender'),false);
+ await f.delivery.studentAction(id,{id:10},'submit',{attemptId:a.attempt.id,answers:{q:'B'}});const saved=JSON.parse(f.responses[0][2]);assert.equal(Object.hasOwn(saved,'gender'),false);assert.equal(saved.email,'real@example.com');
+ }
+});

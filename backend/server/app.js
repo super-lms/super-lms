@@ -75,6 +75,7 @@ const uploadDir = process.env.RAILWAY_VOLUME_MOUNT_PATH
   ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH)
   : path.join(__dirname, "uploads");
 fs.mkdirSync(uploadDir, { recursive: true });
+app.use('/api/pdf-feedback',require('./routes/pdfFeedbackRoutes').createPdfFeedbackRouter(pool,{uploadDir,ensureAttachments:ensureSubmissionAttachmentsTable}));
 app.use('/api/assignments', require('./routes/assignmentBatchDownload').createAssignmentBatchDownloadRouter(pool, { uploadDir, ensureAttachments: ensureSubmissionAttachmentsTable }));
 
 const upload = multer({

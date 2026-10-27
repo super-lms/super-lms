@@ -1,3 +1,4 @@
+import PdfMarkup from "../components/PdfMarkup.jsx";
 import "./AssignmentSpeedGradingPage.css";
 import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
 import { RubricContribution } from '../components/rubrics/RubricContribution.jsx';
@@ -1969,6 +1970,9 @@ export default function AssignmentSpeedGradingPage() {
                       </div>
                     </div>
 
+                    <div style={{display:'grid',gap:8,marginBottom:12}}>
+                      {studentAttachments.filter(file=>file.mime_type==='application/pdf'||String(file.original_name||'').toLowerCase().endsWith('.pdf')).map(file=><div key={file.id}><strong>{file.original_name}</strong>{' '}<PdfMarkup key={file.id} attachmentId={file.id} fileName={file.original_name}/></div>)}
+                    </div>
                     <textarea
                       value={teacherFeedback}
                       onChange={(event) => {
@@ -2815,6 +2819,7 @@ function SubmissionPreviewPanel({
                 : ""}
             </div>
 
+            {isPdf && activeFile?.id ? <PdfMarkup key={activeFile.id} attachmentId={activeFile.id} fileName={activeFileName}/> : null}
             {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isDocx ? <DocxPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}

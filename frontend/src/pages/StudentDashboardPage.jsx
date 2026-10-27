@@ -1,3 +1,4 @@
+import {PdfFeedbackFiles} from "../components/PdfMarkup.jsx";
 import StudentAssignmentRubric from '../components/rubrics/StudentAssignmentRubric.jsx';
 import SubmissionDecisionMessages from "../components/SubmissionDecisionMessages.jsx"
 import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
@@ -246,6 +247,7 @@ function ResultCard({ assignment, submissionState, onOpen }) {
 
       <SavedTeacherRubric rubric={submission?.rubric_selection?.teacherRubric} overallPercent={submission?.rubric_selection?.overallScore} />
       <DetailCard title="Teacher Feedback">
+        <PdfFeedbackFiles assignmentId={assignment?.id}/>
         <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
           {submission?.feedback || "No feedback yet."}
         </div>
@@ -506,6 +508,7 @@ function SubmissionEditor({
             </DetailCard>
 
             <DetailCard title="Teacher Feedback">
+        <PdfFeedbackFiles assignmentId={assignment?.id}/>
               <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
                 {existingFeedback || "No feedback yet."}
               </div>

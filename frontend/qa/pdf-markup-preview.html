@@ -1,0 +1,4 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PDF feedback preview</title></head><body><div id="root"></div><script type="module">
+import React from 'react';import {createRoot} from 'react-dom/client';import PdfMarkup,{PdfFeedbackFiles} from '/src/components/PdfMarkup.jsx';
+createRoot(document.getElementById('root')).render(React.createElement('main',{style:{fontFamily:'Arial',padding:24}},React.createElement('h1',null,'PDF feedback — sample preview'),React.createElement('p',null,'Fictional practice work only. No student records.'),React.createElement(PdfMarkup,{attachmentId:1,fileName:'Sample assignment.pdf'}),React.createElement('h2',null,'Student feedback download'),React.createElement(PdfFeedbackFiles,{assignmentId:1})));
+</script></body></html>
