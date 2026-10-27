@@ -1,4 +1,4 @@
-const ALLOWED_TAGS = new Set(["P", "BR", "STRONG", "B", "EM", "I", "U", "H2", "H3", "UL", "OL", "LI", "A"])
+const ALLOWED_TAGS = new Set(["P", "BR", "STRONG", "B", "EM", "I", "U", "H2", "H3", "UL", "OL", "LI", "A", "IMG"])
 
 function escapeHtml(value) {
   return String(value || "")
@@ -10,7 +10,7 @@ function escapeHtml(value) {
 }
 
 function hasRichTextMarkup(value) {
-  return /<\/?(?:p|br|strong|b|em|i|u|h2|h3|ul|ol|li|a)\b/i.test(String(value || ""))
+  return /<\/?(?:p|br|strong|b|em|i|u|h2|h3|ul|ol|li|a|img)\b/i.test(String(value || ""))
 }
 
 export function sanitizeRichText(value) {
@@ -30,12 +30,24 @@ export function sanitizeRichText(value) {
     Array.from(node.childNodes).forEach((child) => {
       if (child.nodeType !== window.Node.ELEMENT_NODE) return
       if (!ALLOWED_TAGS.has(child.tagName)) {
+        if (["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "SVG", "MATH"].includes(child.tagName)) { child.remove(); return }
+        clean(child)
         child.replaceWith(...Array.from(child.childNodes))
         return
       }
 
+      const originalSrc = child.tagName === "IMG" ? child.getAttribute("src") || "" : ""
+      const originalAlt = child.tagName === "IMG" ? child.getAttribute("alt") || "QR code" : ""
       const originalHref = child.tagName === "A" ? child.getAttribute("href") || "" : ""
       Array.from(child.attributes).forEach((attribute) => child.removeAttribute(attribute.name))
+      if (child.tagName === "IMG") {
+        if (!/^data:image\/png;base64,[a-z0-9+/]+=*$/i.test(originalSrc) || originalSrc.length > 400000) { child.remove(); return }
+        child.setAttribute("src", originalSrc)
+        child.setAttribute("alt", originalAlt.slice(0, 300))
+        child.setAttribute("width", "240")
+        child.setAttribute("height", "240")
+        child.setAttribute("style", "max-width:100%;height:auto")
+      }
       if (child.tagName === "A") {
         const safeHref = /^(https?:|mailto:)/i.test(originalHref) ? originalHref : ""
         if (safeHref) {

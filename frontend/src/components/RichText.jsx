@@ -37,6 +37,23 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
     event.preventDefault()
     const html = event.clipboardData.getData("text/html")
     const plainText = event.clipboardData.getData("text/plain")
+    const image = Array.from(event.clipboardData.files || []).find(file => file.type === "image/png")
+    if (!html && image && image.size <= 290000) {
+      const selection = window.getSelection()
+      const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (!editorRef.current?.isConnected) return
+        editorRef.current.focus()
+        if (range && editorRef.current.contains(range.commonAncestorContainer)) { const current = window.getSelection(); current.removeAllRanges(); current.addRange(range) }
+        const imageHtml = `<img src="${reader.result}" alt="QR code" width="240" height="240">`
+        const href = /^(https?:)\/\/[^\s<>"']+$/i.test(plainText.trim()) ? plainText.trim().replace(/&/g, "&amp;") : ""
+        document.execCommand("insertHTML", false, sanitizeRichText(href ? `<p><a href="${href}">${imageHtml}</a></p><p><a href="${href}">Open quiz</a></p>` : `<p>${imageHtml}</p>`))
+        onChange(editorRef.current.innerHTML)
+      }
+      reader.readAsDataURL(image)
+      return
+    }
     const normalized = normalizePastedRichText(html, plainText)
     document.execCommand("insertHTML", false, normalized)
     onChange(editorRef.current?.innerHTML || "")
@@ -67,6 +84,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={addLink} style={toolbarButtonStyle}>Link</button>
         {toolbarButton("Clear formatting", "removeFormat")}
       </div>
+      <div style={{padding:"6px 9px",fontSize:"0.85rem",color:"#4b5563"}}>Paste text or a copied quiz QR code here using Paste or Ctrl/Cmd+V.</div>
       <div
         ref={editorRef}
         contentEditable
