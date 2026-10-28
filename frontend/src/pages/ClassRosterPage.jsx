@@ -4,6 +4,7 @@ import { useAuth } from "../AuthContext.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
 import { printCompactClassRoster, printMultipleClassRosters } from "../services/compactClassRoster.js";
+import { buildRosterPrintChoices, rosterPrintEndpoint } from "../services/rosterPrintChoices.js";
 
 
 const emptyStudentForm = {
@@ -463,8 +464,8 @@ export default function ClassRosterPage() {
     }catch(error){setExportError(error.message);}finally{setExportingWord(false);}
   }
 
-  function togglePrintCourse(courseId) {
-    const id = String(courseId);
+  function togglePrintCourse(choiceKey) {
+    const id = String(choiceKey);
     setPrintCourseIds((current) =>
       current.includes(id)
         ? current.filter((value) => value !== id)
@@ -483,9 +484,13 @@ export default function ClassRosterPage() {
     setBatchPrinting(true);
     try {
       const rosters = await Promise.all(
-        printCourseIds.map(async (courseId) => {
-          const course = courses.find((item) => String(item.id) === courseId);
-          const response = await authFetch(`/api/class-roster/${courseId}`);
+        printCourseIds.map(async (choiceKey) => {
+          const choice = printChoices.find((item) => item.key === choiceKey);
+          const course = choice?.course;
+          if (!choice) {
+            throw new Error("A selected class is no longer available. Clear the selection and try again.");
+          }
+          const response = await authFetch(rosterPrintEndpoint(choice));
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
             throw new Error(`Could not load ${course?.title || "a selected class"}.`);
@@ -511,6 +516,8 @@ export default function ClassRosterPage() {
     );
   }, [courses, selectedCourseId]);
 
+  const printChoices = useMemo(() => buildRosterPrintChoices(courses), [courses]);
+
   return (
     <div className="content-area">
       <section className="panel">
@@ -534,8 +541,11 @@ export default function ClassRosterPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "12px" }}>
-              <button type="button" onClick={() => setPrintCourseIds(courses.map((course) => String(course.id)))} disabled={!courses.length}>
-                Select All
+              <button type="button" onClick={() => setPrintCourseIds(printChoices.filter((choice) => choice.scope === "section").map((choice) => choice.key))} disabled={!printChoices.some((choice) => choice.scope === "section")}>
+                Select All Cohorts
+              </button>
+              <button type="button" onClick={() => setPrintCourseIds(printChoices.map((choice) => choice.key))} disabled={!printChoices.length}>
+                Select Everything
               </button>
               <button type="button" onClick={() => setPrintCourseIds([])} disabled={!printCourseIds.length}>
                 Clear
@@ -545,16 +555,16 @@ export default function ClassRosterPage() {
               </button>
             </div>
             <div style={printChecklistStyle}>
-              {courses.map((course) => (
-                <label key={course.id} style={printChoiceStyle}>
+              {printChoices.map((choice) => (
+                <label key={choice.key} style={printChoiceStyle}>
                   <input
                     type="checkbox"
-                    checked={printCourseIds.includes(String(course.id))}
-                    onChange={() => togglePrintCourse(course.id)}
+                    checked={printCourseIds.includes(choice.key)}
+                    onChange={() => togglePrintCourse(choice.key)}
                   />
                   <span>
-                    <strong>{course.title}</strong><br />
-                    <small>{course.master_course_id ? "Cohort" : "Master Class"}</small>
+                    <strong>{choice.label}</strong><br />
+                    <small>{choice.typeLabel}</small>
                   </span>
                 </label>
               ))}
