@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
-import { printCompactClassRoster } from "../services/compactClassRoster.js";
+import { printCompactClassRoster, printMultipleClassRosters } from "../services/compactClassRoster.js";
 
 
 const emptyStudentForm = {
@@ -36,6 +36,8 @@ export default function ClassRosterPage() {
   const [homeformImporting, setHomeformImporting] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [printCourseIds, setPrintCourseIds] = useState([]);
+  const [batchPrinting, setBatchPrinting] = useState(false);
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase();
   const isTeacher = normalizedRole === "teacher";
@@ -461,6 +463,47 @@ export default function ClassRosterPage() {
     }catch(error){setExportError(error.message);}finally{setExportingWord(false);}
   }
 
+  function togglePrintCourse(courseId) {
+    const id = String(courseId);
+    setPrintCourseIds((current) =>
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : [...current, id]
+    );
+    setExportError("");
+  }
+
+  async function printSelectedRosters() {
+    if (!printCourseIds.length) {
+      setExportError("Select at least one class or cohort to print.");
+      return;
+    }
+
+    setExportError("");
+    setBatchPrinting(true);
+    try {
+      const rosters = await Promise.all(
+        printCourseIds.map(async (courseId) => {
+          const course = courses.find((item) => String(item.id) === courseId);
+          const response = await authFetch(`/api/class-roster/${courseId}`);
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(`Could not load ${course?.title || "a selected class"}.`);
+          }
+          return {
+            course: data.course || course,
+            students: Array.isArray(data.students) ? data.students : [],
+          };
+        })
+      );
+      printMultipleClassRosters(rosters);
+    } catch (error) {
+      setExportError(error.message || "Could not prepare the selected class lists.");
+    } finally {
+      setBatchPrinting(false);
+    }
+  }
+
   const selectedCourse = useMemo(() => {
     return (
       courses.find((course) => String(course.id) === String(selectedCourseId)) ||
@@ -481,6 +524,43 @@ export default function ClassRosterPage() {
         </div>
 
         <div className="form-stack">
+          <section className="panel-subsection">
+            <div className="section-header">
+              <div>
+                <h3>Print Several Class Lists</h3>
+                <p className="section-subtitle">
+                  Check the Master Classes or cohorts you need. Each selected list starts on a separate PDF page.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "12px" }}>
+              <button type="button" onClick={() => setPrintCourseIds(courses.map((course) => String(course.id)))} disabled={!courses.length}>
+                Select All
+              </button>
+              <button type="button" onClick={() => setPrintCourseIds([])} disabled={!printCourseIds.length}>
+                Clear
+              </button>
+              <button type="button" className="primary-btn" onClick={printSelectedRosters} disabled={!printCourseIds.length || batchPrinting}>
+                {batchPrinting ? "Preparing PDF…" : `Print Selected (${printCourseIds.length})`}
+              </button>
+            </div>
+            <div style={printChecklistStyle}>
+              {courses.map((course) => (
+                <label key={course.id} style={printChoiceStyle}>
+                  <input
+                    type="checkbox"
+                    checked={printCourseIds.includes(String(course.id))}
+                    onChange={() => togglePrintCourse(course.id)}
+                  />
+                  <span>
+                    <strong>{course.title}</strong><br />
+                    <small>{course.master_course_id ? "Cohort" : "Master Class"}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </section>
+
           <div className="form-field" style={compactFieldStyle}>
             <label htmlFor="class-roster-course-select" className="form-label">
               Select Course
@@ -872,6 +952,26 @@ export default function ClassRosterPage() {
 
 const compactFieldStyle = {
   maxWidth: "420px",
+};
+
+const printChecklistStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+  gap: "10px",
+  maxHeight: "360px",
+  overflowY: "auto",
+  padding: "4px",
+};
+
+const printChoiceStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "10px",
+  padding: "12px",
+  border: "1px solid #d7dde8",
+  borderRadius: "10px",
+  background: "#fff",
+  cursor: "pointer",
 };
 
 const actionButtonsStyle = {
