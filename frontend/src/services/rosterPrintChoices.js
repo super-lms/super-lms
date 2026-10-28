@@ -49,20 +49,18 @@ export function buildRosterPrintChoices(courses) {
     };
 
     // Some older course groups use the A cohort as both the content root and
-    // the course's first section. Keep that exact A roster available, while
-    // offering the combined master roster as a separate explicit choice.
+    // the course's first section. In the batch printer it must behave only as
+    // the A cohort; exposing a second same-named aggregate choice is ambiguous
+    // and can silently print every linked cohort under the A heading.
     if (!isExplicitMaster) {
-      return [
-        {
-          key: `section:${courseId}`,
-          courseId,
-          scope: "section",
-          course,
-          label: course.title,
-          typeLabel: "Cohort",
-        },
-        masterChoice,
-      ];
+      return [{
+        key: `section:${courseId}`,
+        courseId,
+        scope: "section",
+        course,
+        label: course.title,
+        typeLabel: "Cohort",
+      }];
     }
 
     return [masterChoice];

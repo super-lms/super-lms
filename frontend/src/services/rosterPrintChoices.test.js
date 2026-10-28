@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildRosterPrintChoices, rosterPrintEndpoint } from "./rosterPrintChoices.js";
 
-test("legacy A root offers exact A cohort separately from combined master roster", () => {
+test("legacy A root is only an exact cohort choice in the batch printer", () => {
   const choices = buildRosterPrintChoices([
     { id: 10, title: "CTS 10A", master_course_id: null },
     { id: 11, title: "CTS 10B", master_course_id: 10 },
@@ -14,14 +14,13 @@ test("legacy A root offers exact A cohort separately from combined master roster
     choices.map(({ key, typeLabel }) => [key, typeLabel]),
     [
       ["section:10", "Cohort"],
-      ["master:10", "Master Class — all cohorts"],
       ["section:11", "Cohort"],
       ["section:12", "Cohort"],
       ["section:13", "Cohort"],
     ]
   );
   assert.equal(rosterPrintEndpoint(choices[0]), "/api/class-roster/10?scope=section");
-  assert.equal(rosterPrintEndpoint(choices[1]), "/api/class-roster/10");
+  assert.equal(choices.some((choice) => choice.scope === "master"), false);
 });
 
 test("explicit master course remains one combined choice and children are cohorts", () => {
