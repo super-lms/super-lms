@@ -65,6 +65,7 @@ export default function AdminLayout() {
     if (location.pathname === "/admin/teachers") return "Teachers"
     if (location.pathname === "/admin/students") return "Students"
     if (location.pathname === "/admin/student-schedules") return "Student Schedule Printer"
+    if (location.pathname === "/admin/class-rosters") return "Class Rosters"
     if (location.pathname === "/admin/quick-enrollment") return "Quick Student Enrollment"
     if (location.pathname === "/admin/calendar") return "School Calendar"
     if (location.pathname === "/admin/departments") return "Departments"
@@ -154,6 +155,9 @@ export default function AdminLayout() {
           </NavItem>
           <NavItem to="/admin/student-schedules" style={getNavLinkStyle("/admin/student-schedules")} icon={CalendarDays}>
             Schedule Printer
+          </NavItem>
+          <NavItem to="/admin/class-rosters" style={getNavLinkStyle("/admin/class-rosters")} icon={ClipboardList}>
+            Class Rosters
           </NavItem>
           <NavItem to="/announcements" style={getNavLinkStyle("/announcements")} icon={CalendarDays}>Announcements</NavItem>
           <NavItem to="/admin/calendar" style={getNavLinkStyle("/admin/calendar")} icon={CalendarDays}>

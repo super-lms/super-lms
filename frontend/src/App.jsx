@@ -176,6 +176,7 @@ function App() {
         <Route path="/admin/teachers" element={<AdminTeachersPage />} />
         <Route path="/admin/students" element={<AdminStudentsPage />} />
         <Route path="/admin/student-schedules" element={<AdminStudentSchedulePrinterPage />} />
+        <Route path="/admin/class-rosters" element={<ClassRosterPage />} />
         <Route path="/admin/quick-enrollment" element={<AdminQuickEnrollmentPage />} />
         <Route path="/admin/calendar" element={<SchoolCalendarPage />} />
         <Route path="/admin/stock-game" element={<StockGamePage />} />
