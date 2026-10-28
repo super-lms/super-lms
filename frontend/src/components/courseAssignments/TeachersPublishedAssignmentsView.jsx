@@ -11,22 +11,25 @@ export default function TeachersPublishedAssignmentsView({
   function getSubmissionSummary(assignment) {
     const submitted = Number(assignment?.submission_count || 0)
     const graded = Number(assignment?.graded_count || 0)
-    const missing = Number(assignment?.missing_count || 0)
+    const roster = Number(assignment?.roster_count)
+    const missing = Number(assignment?.not_submitted_count || 0)
     const ungraded = Number(assignment?.ungraded_count || 0)
 
+    if (!Number.isFinite(roster)) return "Loading submission count…"
+
     if (submitted === 0 && graded === 0 && missing === 0 && ungraded === 0) {
-      return "No submission data yet"
+      return `Submitted: 0 of ${roster} students`
     }
 
     if (ungraded > 0) {
-      return `${ungraded} waiting to grade`
+      return `Submitted: ${submitted} of ${roster} students · ${ungraded} waiting to grade`
     }
 
     if (submitted > 0 && graded >= submitted) {
-      return "All submitted work graded"
+      return `Submitted: ${submitted} of ${roster} students · All submitted work graded`
     }
 
-    return `Submitted ${submitted} · Graded ${graded} · Missing ${missing}`
+    return `Submitted: ${submitted} of ${roster} students · Graded ${graded} · Missing ${missing}`
   }
 
   function getShortText(value, fallback = "Not linked", maxLength = 34) {

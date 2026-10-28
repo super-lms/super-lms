@@ -2193,7 +2193,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   aria-label="Assignment submission and grading counts"
                                   style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}
                                 >
-                                  <span><strong>Submitted:</strong> {sectionCounts ? getAssignmentSubmissionCount(assignment) : "Loading…"}</span>
+                                  <span><strong>Submitted:</strong> {sectionCounts ? `${getAssignmentSubmissionCount(assignment)} of ${Number(assignment.roster_count || 0)} students` : "Loading…"}</span>
                                   <span><strong>Not submitted:</strong> {sectionCounts ? assignment.not_submitted_count : "Loading…"}</span>
                                   <span><strong>Graded:</strong> {getAssignmentGradedCount(assignment)}</span>
                                   <span><strong>Ungraded:</strong> {getAssignmentUngradedCount(assignment)}</span>

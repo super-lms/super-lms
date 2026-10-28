@@ -36,6 +36,12 @@ export default function AssignmentCardsView({
           <p>
             <strong>Weight:</strong> {formatPercent(assignment.calculated_weight)}
           </p>
+          <p style={submissionCountStyle} aria-label="Assignment submission count">
+            <strong>Submitted:</strong>{" "}
+            {Number.isFinite(Number(assignment.roster_count))
+              ? `${Number(assignment.submission_count || 0)} of ${Number(assignment.roster_count)} students`
+              : "Loading…"}
+          </p>
 
           <div style={buttonRowStyle}>
             <button
@@ -117,6 +123,13 @@ const buttonRowStyle = {
   gap: "10px",
   flexWrap: "wrap",
   marginTop: "14px",
+}
+
+const submissionCountStyle = {
+  padding: "10px 12px",
+  borderRadius: "10px",
+  background: "#edf7f0",
+  color: "#145c43",
 }
 
 const buttonStyle = {
