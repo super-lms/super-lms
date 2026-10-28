@@ -6,11 +6,11 @@ function decimalUnits(value,places,label){
 }
 function rounded(n,d){return Number((BigInt(n)+BigInt(d)/2n)/BigInt(d));}
 function amount(price,quantity){const n=(BigInt(price)*BigInt(quantity)+50000000n)/100000000n;if(n>BigInt(Number.MAX_SAFE_INTEGER))throw Error('Trade value is too large.');return Number(n);}
-function ticker(value){const s=String(value||'').trim().toUpperCase();if(!/^[A-Z0-9][A-Z0-9.-]{0,14}\.(TO|V)$/.test(s))throw Error('Use a Canadian listing symbol ending in .TO or .V.');return s;}
+function ticker(value){const s=String(value||'').trim().toUpperCase();if(!/^[A-Z0-9][A-Z0-9._:-]{0,24}$/.test(s))throw Error('Enter a valid exchange-listed stock symbol, such as AAPL, RY.TO, 0700.HK, VOD.L, or TSE:7203.');return s;}
 function source(value){let u;try{u=new URL(String(value||''));}catch{throw Error('Enter the web address where you found the stock price.');}if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.href.length>1500)throw Error('Enter a valid public price-source web address.');return u.href;}
 function orderInput(o){
  if(!['BUY','SELL'].includes(o.side))throw Error('Choose Buy or Sell.');
- return {side:o.side,symbol:ticker(o.symbol),quantity_units:decimalUnits(o.quantity,6,'share quantity'),price_units:decimalUnits(o.price,4,'CAD share price'),source_url:source(o.source_url),reason:String(o.reason||'').trim().slice(0,2000)};
+ return {side:o.side,symbol:ticker(o.symbol),quantity_units:decimalUnits(o.quantity,6,'share quantity'),price_units:decimalUnits(o.price,4,'CAD-equivalent share price'),source_url:source(o.source_url),reason:String(o.reason||'').trim().slice(0,2000)};
 }
 function ledger(transactions=[]){
  const state={cash_cents:CAPITAL,fees_cents:0,realized_cents:0,positions:{},trade_count:0};
