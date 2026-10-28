@@ -55,10 +55,11 @@ function createStockGameRouter(pool){
    if(!p.initialized&&(orders.length!==10||orders.some(o=>o.side!=='BUY')||new Set(orders.map(o=>o.symbol)).size!==10))throw error(400,'Start by purchasing exactly 10 different exchange-listed stocks.');
    if(p.initialized&&orders.length!==1)throw error(400,'After the initial portfolio, enter one buy or sell at a time.');
    const history=await trades(p,client);if(history.length!==b.expected_version)throw error(409,'Your portfolio changed in another session. Reload before trading.');
-   const state=A.ledger(history),receipts=[];
+   const state=A.ledger(history),receipts=[],initialPortfolio=!p.initialized;
    for(let i=0;i<orders.length;i++){let receipt;try{receipt=A.applyTrade(state,orders[i])}catch(e){throw error(400,e.message)}
     await client.query(`INSERT INTO stock_game_trades(player_id,side,symbol,quantity_units,price_units,gross_cents,fee_cents,cash_after_cents,price_date,source_url,reason,client_order_id,order_index) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,[p.id,receipt.side,receipt.symbol,receipt.quantity_units,receipt.price_units,receipt.gross_cents,receipt.fee_cents,receipt.cash_after_cents,b.price_date,receipt.source_url,receipt.reason,b.client_order_id,i]);receipts.push(receipt);
    }
+   if(initialPortfolio){try{A.validateInitialPortfolio(state)}catch(e){throw error(400,e.message)}}
    await client.query('UPDATE stock_game_players SET initialized=true,reviewed_valuation_id=NULL WHERE id=$1',[p.id]);return {success:true,receipts,cash_cents:state.cash_cents};
   }))
  }));

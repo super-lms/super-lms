@@ -43,4 +43,9 @@ function valuation(state,prices){
  if(![investments,unrealized,assets].every(Number.isSafeInteger))throw Error('Portfolio value exceeds the supported range.');
  return {cash_cents:state.cash_cents,investments_cents:investments,assets_cents:assets,liabilities_cents:0,equity_cents:assets,capital_cents:CAPITAL,realized_cents:state.realized_cents,unrealized_cents:unrealized,profit_cents:assets-CAPITAL,fees_cents:state.fees_cents,trade_count:state.trade_count,holdings};
 }
-module.exports={CAPITAL,FEE,SHARE_SCALE,PRICE_SCALE,decimalUnits,ticker,source,orderInput,ledger,applyTrade,valuation};
+function validateInitialPortfolio(state){
+ if(!state||!Number.isSafeInteger(state.cash_cents)||state.cash_cents<0)throw Error('Initial purchases cannot exceed $100,000.00 including fees.');
+ if(state.cash_cents>500)throw Error(`Your initial purchases must total between $99,995.00 and $100,000.00 including fees. You still have $${(state.cash_cents/100).toFixed(2)} to invest.`);
+ return true;
+}
+module.exports={CAPITAL,FEE,SHARE_SCALE,PRICE_SCALE,decimalUnits,ticker,source,orderInput,ledger,applyTrade,valuation,validateInitialPortfolio};
