@@ -20,6 +20,7 @@ export default function ClassRosterPage() {
   const [courses, setCourses] = useState([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [students, setStudents] = useState([]);
+  const [isMasterRoster, setIsMasterRoster] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Loading courses...");
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [newStudent, setNewStudent] = useState(emptyStudentForm);
@@ -58,6 +59,13 @@ export default function ClassRosterPage() {
     }
 
     return safeCourses.filter((course) => {
+      const sharedTeacherIds = Array.isArray(course?.shared_teacher_ids)
+        ? course.shared_teacher_ids.map((teacherId) => String(teacherId))
+        : [];
+      if (normalizedUserId && sharedTeacherIds.includes(normalizedUserId)) {
+        return true;
+      }
+
       const courseTeacherId = String(course?.teacher_id || "").trim();
       const courseTeacherEmail = String(course?.teacher_email || "")
         .trim()
@@ -80,6 +88,7 @@ export default function ClassRosterPage() {
   async function loadRoster(courseId) {
     if (!courseId) {
       setStudents([]);
+      setIsMasterRoster(false);
       return;
     }
 
@@ -87,7 +96,7 @@ export default function ClassRosterPage() {
     setStatusMessage("Loading class roster...");
 
     try {
-      const response = await authFetch(`/api/class-roster/${courseId}?scope=section`);
+      const response = await authFetch(`/api/class-roster/${courseId}`);
 
       if (!response.ok) {
         throw new Error("Failed to load class roster");
@@ -96,10 +105,12 @@ export default function ClassRosterPage() {
       const data = await response.json();
       const safeStudents = Array.isArray(data?.students) ? data.students : [];
       setStudents(safeStudents);
+      setIsMasterRoster(Boolean(data?.is_master_roster));
       setStatusMessage("");
     } catch (error) {
       console.error(error);
       setStudents([]);
+      setIsMasterRoster(false);
       setStatusMessage("Failed to load class roster");
     } finally {
       setStudentsLoading(false);
@@ -464,7 +475,7 @@ export default function ClassRosterPage() {
           <div>
             <h2>Class Roster</h2>
             <p className="section-subtitle">
-              View student names, emails, parent contacts, and student IDs.
+              View and print Master Class or individual cohort student lists.
             </p>
           </div>
         </div>
@@ -502,7 +513,7 @@ export default function ClassRosterPage() {
               </option>
               {courses.map((course) => (
                 <option key={course.id} value={course.id}>
-                  {course.title}
+                  {course.title}{course.master_course_id ? " — Cohort" : " — Master Class"}
                 </option>
               ))}
             </select>
@@ -528,9 +539,12 @@ export default function ClassRosterPage() {
             <div className="summary-card">
               <strong>Total Students:</strong> {students.length}
             </div>
+            <div className="summary-card">
+              <strong>List Type:</strong> {isMasterRoster ? "Master Class" : "Cohort"}
+            </div>
           </div>
 
-          <section className="panel-subsection">
+          {!isMasterRoster ? <section className="panel-subsection">
             <div className="section-header">
               <div>
                 <h3>Import Homeform</h3>
@@ -581,9 +595,9 @@ export default function ClassRosterPage() {
                 </button>
               </div>
             </div>
-          </section>
+          </section> : null}
 
-          <section className="panel-subsection">
+          {!isMasterRoster ? <section className="panel-subsection">
             <div className="section-header">
               <div>
                 <h3>Add Student Manually</h3>
@@ -682,7 +696,14 @@ export default function ClassRosterPage() {
                 <p className="form-message">{enrollmentError}</p>
               ) : null}
             </form>
-          </section>
+          </section> : (
+            <section className="panel-subsection">
+              <h3>Master Class List</h3>
+              <p className="section-subtitle">
+                This printable list combines students from every linked cohort. Manage enrollment inside the individual cohort.
+              </p>
+            </section>
+          )}
 
           {statusMessage ? <p className="form-message">{statusMessage}</p> : null}
 
@@ -694,7 +715,7 @@ export default function ClassRosterPage() {
                   <th>Student ID</th>
                   <th>Email</th>
                   <th>Parent Email</th>
-                  <th>Actions</th>
+                  {isMasterRoster ? <th>Cohort</th> : <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -776,6 +797,9 @@ export default function ClassRosterPage() {
                           )}
                         </td>
                         <td>
+                          {isMasterRoster ? (
+                            student.section_title || "Master Class"
+                          ) : (
                           <div style={actionButtonsStyle}>
                             {isEditing ? (
                               <>
@@ -821,6 +845,7 @@ export default function ClassRosterPage() {
                               </>
                             )}
                           </div>
+                          )}
                         </td>
                       </tr>
                       {isEditing && editingStudentError ? (

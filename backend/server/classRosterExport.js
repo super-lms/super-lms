@@ -10,6 +10,7 @@ function studentName(student) {
 }
 async function classRosterDocx(course, students) {
   const layout = rosterLayout(students.length);
+  const showSections = students.some((student) => student.section_title && student.section_title !== course.title);
   const widths = layout.panels === 1 ? [600,1400,5000,3200] : [500,1000,2600,875,250,500,1000,2600,875];
   const cell = (text, width, header = false, shaded = false) => new TableCell({
     width: {size: width, type: WidthType.DXA}, verticalAlign: VerticalAlign.CENTER,
@@ -18,14 +19,14 @@ async function classRosterDocx(course, students) {
     children: [new Paragraph({spacing:{before:0,after:0,line:Math.round(layout.fontSize*20)},
       children:[new TextRun({text:String(text || ''),font:'Arial',size:Math.floor(layout.fontSize*2),bold:header})]})],
   });
-  const headers = ['#','Student ID','Student name','Notes'];
+  const headers = ['#','Student ID','Student name',showSections ? 'Cohort' : 'Notes'];
   const rows = [new TableRow({tableHeader:true,children:widths.map((width,index)=>cell(index===4?'':headers[index>4?index-5:index],width,true))})];
   for(let row=0;row<layout.rows;row++) {
     const values=[];
     for(let panel=0;panel<layout.panels;panel++) {
       if(panel)values.push('');
       const index=panel*layout.rows+row, student=students[index];
-      values.push(...(student?[String(index+1),student.student_id || '',studentName(student),'']:['','','','']));
+      values.push(...(student?[String(index+1),student.student_id || '',studentName(student),showSections ? student.section_title || '' : '']:['','','','']));
     }
     rows.push(new TableRow({cantSplit:true,height:{value:layout.rowHeight*20,rule:HeightRule.ATLEAST},children:values.map((text,index)=>cell(text,widths[index],false,row % 2 === 1))}));
   }

@@ -12484,11 +12484,9 @@ app.get(["/api/class-roster/:courseId", "/api/class-roster/:courseId/export.docx
     const course = courseResult.rows[0];
     const isMasterCourse = !course.master_course_id;
     const isWordExport = req.path.endsWith("/export.docx");
-    const exactSectionRoster = isWordExport || String(req.query.scope || "").toLowerCase() === "section";
-    if (isWordExport) {
-      const access = await authorizeCourseModuleAccess(req, courseId);
-      if (!access.allowed) return res.status(access.status).json({error:"Course unavailable."});
-    }
+    const exactSectionRoster = String(req.query.scope || "").toLowerCase() === "section";
+    const access = await authorizeCourseModuleAccess(req, courseId);
+    if (!access.allowed) return res.status(access.status).json({error:"Course unavailable."});
     const sectionsResult = isMasterCourse
       ? await pool.query(
           `
