@@ -24,8 +24,14 @@ function createQuizDelivery(pool){
   const rows=b.rows.map(r=>({targetId:Number(r.targetId),remove:r.remove===true,config:r.remove===true?null:validatePolicy(r.config||{})}));
   if(rows.some(r=>!Number.isInteger(r.targetId)||r.targetId<1)||new Set(rows.map(r=>r.targetId)).size!==rows.length)throw Error('Choose each cohort once.');
   await ensure();const client=await pool.connect();try{
-   await client.query('BEGIN');const q=await owned(client,id,req);const base=q.delivery_course_id;
-   if(!base)throw Error('Save master course settings first.');
+   await client.query('BEGIN');const q=await owned(client,id,req);let base=q.delivery_course_id||q.course_id;
+   if(!base){
+    const {courseAccess}=require('./quizGradebook');
+    const c=(await client.query(courseAccess,[Number(b.courseId),quizActor(req),req.schoolId])).rows[0];
+    if(!c)throw Error('Choose a course you teach.');
+    base=c.content_id;
+    await client.query('UPDATE teacher_quizzes SET delivery_course_id=$1 WHERE id=$2',[base,id]);
+   }
    const allowed=(await client.query('SELECT id FROM courses WHERE master_course_id=$1 OR id=$1',[base])).rows.map(c=>Number(c.id));
    if(rows.some(r=>!allowed.includes(r.targetId)))throw Error('Choose cohorts in this master course.');
    for(const r of rows){if(r.remove)await client.query("DELETE FROM teacher_quiz_policies WHERE quiz_id=$1 AND scope='cohort' AND target_id=$2",[id,r.targetId]);

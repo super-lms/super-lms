@@ -22,6 +22,12 @@ test('class schedule batch validates all cohorts and commits distinct windows to
  await assert.rejects(service.configure(id,req,{scope:'cohorts',rows:[row(2,'08'),row(2,'10')]}),/once/);
 });
 
+test('first cohort schedule can establish the quiz master course without saving defaults first',async()=>{
+ const calls=[];const pool={async query(sql,args){calls.push({sql,args});if(sql.startsWith('ALTER')||['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[]};if(sql.startsWith('SELECT * FROM teacher_quizzes'))return {rows:[{delivery_course_id:null,course_id:null}]};if(sql.startsWith('SELECT c.id,c.title')){assert.equal(args[0],11);assert.equal(args[1],3);assert.equal(args[2],7);return {rows:[{id:11,content_id:10}]};}if(sql.startsWith('UPDATE teacher_quizzes SET delivery_course_id'))return {rows:[]};if(sql.startsWith('SELECT id FROM courses WHERE master_course_id'))return {rows:[{id:10},{id:11},{id:12}]};if(sql.startsWith('INSERT'))return {rows:[]};throw Error(sql);},async connect(){return {query:(...args)=>pool.query(...args),release(){}};}};
+ await createQuizDelivery(pool).configure(id,{user:{id:3},schoolId:7},{scope:'cohorts',courseId:11,rows:[{targetId:12,config:{maxAttempts:1,timeLimitMinutes:45}}]});
+ const link=calls.find(c=>c.sql.startsWith('UPDATE teacher_quizzes SET delivery_course_id'));assert.deepEqual(link.args,[10,id]);assert.equal(calls.find(c=>c.sql.startsWith('INSERT')).args[1],12);assert.equal(calls.at(-1).sql,'COMMIT');
+});
+
 test('administrator can inspect another teacher quiz policies with mandatory school scope',async()=>{
  const pool={async query(sql,args){if(sql.startsWith('ALTER'))return {rows:[]};if(sql.startsWith('SELECT * FROM teacher_quizzes')){assert.equal(args[1],null);assert.equal(args[2],7);assert.match(sql,/school_id IS NOT DISTINCT FROM \$3/);assert.match(sql,/author_id=\$2 OR \$2::integer IS NULL/);return {rows:args[0]===id?[{id,author_id:3}]:[]};}if(sql.startsWith('SELECT * FROM teacher_quiz_policies'))return {rows:[]};throw Error(sql);}};
  const d=createQuizDelivery(pool);const req={user:{id:8,role:'admin'},schoolId:7};assert.equal((await d.options(id,req)).courseId,undefined);await assert.rejects(d.options('other',req),/Quiz unavailable/);
