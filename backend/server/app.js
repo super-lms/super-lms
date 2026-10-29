@@ -5,6 +5,7 @@ const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
 const pool = require("./db");
+const { startDatabaseWatchdog } = require("./databaseWatchdog");
 const { ensureAssignmentTimeZones } = require("./assignmentTime");
 const { ensureAssignmentCohorts, resolveAssignmentCohort, cohortGradingMiddleware } = require("./assignmentCohorts");
 const { loadGradingRoster } = require("./gradingRoster");
@@ -14393,6 +14394,7 @@ Promise.all([
       console.log("Super LMS backend running on port 3000");
     });
     server.requestTimeout = 900000;
+    startDatabaseWatchdog(pool);
   })
   .catch((err) => {
     console.error("Failed to prepare backend database:", err);
