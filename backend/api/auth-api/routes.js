@@ -318,8 +318,8 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const result = await pool.query(
-      `
+    const result = await pool.query({
+      text: `
       SELECT
         id,
         CONCAT(first_name, ' ', last_name) AS name,
@@ -334,8 +334,10 @@ router.post("/login", async (req, res) => {
       WHERE LOWER(email) = $1
       LIMIT 1
       `,
-      [email]
-    );
+      values: [email],
+      // A stalled database must not leave the browser spinning indefinitely.
+      query_timeout: 10000,
+    });
 
     if (result.rows.length === 0) {
       return res.status(401).json({
