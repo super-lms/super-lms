@@ -22,6 +22,7 @@ Only teachers assigned to the course, its master course, or a co-teaching role c
 - The initial purchase contains exactly 10 different stocks. Use a Canadian listing symbol ending in `.TO` or `.V`.
 - Every buy or sell costs $10. The initial 10 orders therefore cost $100 in fees, leaving at most $99,900 for shares.
 - Hold no more than 10 different stocks at a time. Selling part of a holding does not free a stock slot; selling the whole holding does.
+- Every sale requires a PNG, JPEG, or WebP screenshot, up to 8 MB, showing the stock, market date, time, and displayed market price. The screenshot remains attached to the permanent transaction record for student and teacher review.
 - Shares may be fractional to six decimal places in this simulation. Prices support four decimal places; cash and trade amounts are rounded to cents using integer arithmetic.
 - No overdrafts, loans, short-selling, interest, dividends, or tax calculations.
 - This first version models share-price changes and trades. It does not automatically adjust for stock splits, mergers, or reorganizations. Explain that rule at the start; a corporate action affecting a chosen stock needs teacher review before finalizing results.
@@ -44,6 +45,8 @@ The teacher moves the common price date forward each session. Earlier saved valu
 Each student has an opening capital deposit, cash balance, permanent transaction ledger, cost-based holdings, daily market-value snapshots and weekly statements.
 
 Purchase commissions are included in the investment book cost. Sale commissions reduce proceeds. Partial sales allocate book cost proportionately; a complete sale removes the remaining book cost. Daily unrealized gain/loss is the market value less the remaining investment book cost.
+
+The student interface calculates the money returned to cash from a sale as quantity multiplied by the entered CAD-equivalent share price, less the $10 sale fee. Fully sold positions remain at the bottom of the student's stock list as history. Once a complete sale frees a portfolio slot, the student can use available cash to buy a different stock.
 
 - **Assets = cash + investment market value**
 - **Liabilities = $0** in this version, because borrowing is disabled
