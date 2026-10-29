@@ -11,4 +11,10 @@ function gradebookSubmissionIndex(rows) {
  }
  return {get(student,assignmentId){return byStudent.get(`${student.student_user_id}:${assignmentId}`) || legacyByEmail.get(`${email(student.student_email)}:${assignmentId}`);}};
 }
-module.exports={gradebookSubmissionIndex};
+function latestSubmissionByAssignment(rows) {
+ const result={};
+ const sorted=[...(rows||[])].sort((a,b)=>Number(graded(b))-Number(graded(a)) || Number(b.id)-Number(a.id));
+ for(const row of sorted){const key=String(row.assignment_id);if(!result[key])result[key]=row;}
+ return result;
+}
+module.exports={gradebookSubmissionIndex,latestSubmissionByAssignment};

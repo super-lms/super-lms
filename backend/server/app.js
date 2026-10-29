@@ -1,5 +1,5 @@
 const { calculateTeacherRubric } = require('./teacherRubricScoring');
-const {gradebookSubmissionIndex} = require('./gradebookSubmissions');
+const {gradebookSubmissionIndex,latestSubmissionByAssignment} = require('./gradebookSubmissions');
 const {loadCourseRisk} = require('./dashboardRisk');
 const express = require("express");
 const crypto = require("crypto");
@@ -6327,7 +6327,6 @@ app.get(
           LEFT JOIN course_categories cc ON cc.id = cs.course_category_id
           WHERE a.class_id = $1
             AND (a.cohort_id IS NULL OR a.cohort_id = $3)
-            AND COALESCE(a.source_type, 'assignment') <> 'assessment'
             AND ($2::boolean OR (a.is_published = TRUE AND (a.available_from IS NULL OR a.available_from <= NOW())))
           ORDER BY COALESCE(a.sort_order, a.id), a.id
           `,
@@ -6390,9 +6389,7 @@ app.get(
         return res.status(404).json({ error: "Course not found" });
       }
 
-      const submissionsByAssignmentId = Object.fromEntries(
-        submissionsResult.rows.map((submission) => [String(submission.assignment_id), submission])
-      );
+      const submissionsByAssignmentId = latestSubmissionByAssignment(submissionsResult.rows);
       const heldWork = await heldSubmissions.forCourse(contentCourseId, studentEmail);
     const declinedWork = await submissionDeadlines.declinesForCourse(contentCourseId, studentEmail);
       const submissionStatesByAssignmentId = {};
@@ -6644,7 +6641,6 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         ON cc.id = cs.course_category_id
       WHERE a.class_id = $1
         AND (a.cohort_id IS NULL OR a.cohort_id = $3)
-        AND COALESCE(a.source_type, 'assignment') <> 'assessment'
         AND ($2::boolean OR (a.is_published = TRUE AND (a.available_from IS NULL OR a.available_from <= NOW())))
       ORDER BY COALESCE(a.sort_order, a.id), a.id
       `,
@@ -6717,10 +6713,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       [contentCourseId]
     );
 
-    const submissionsByAssignmentId = {};
-    submissionsResult.rows.forEach((submission) => {
-      submissionsByAssignmentId[String(submission.assignment_id)] = submission;
-    });
+    const submissionsByAssignmentId = latestSubmissionByAssignment(submissionsResult.rows);
 
     const heldWork = await heldSubmissions.forCourse(contentCourseId, studentEmail);
     const declinedWork = await submissionDeadlines.declinesForCourse(contentCourseId, studentEmail);

@@ -22,6 +22,7 @@ import { FormattedText } from "../components/RichText.jsx"
 import CourseModulesView from "../components/CourseModulesView.jsx"
 import { useAuth } from "../AuthContext.jsx"
 import useStudentDashboard from "../hooks/dashboard/useStudentDashboard.js"
+import { weightedCourseStanding } from "../services/courseStanding.js"
 
 function SectionHeader({ title, subtitle, action }) {
   return (
@@ -751,20 +752,7 @@ export default function StudentDashboardPage() {
 
   const gradedAverage = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
-
-    const gradedScores = list
-      .map((assignment) => {
-        const assignmentId = String(assignment.id)
-        const submissionState = submissionStateByAssignmentId[assignmentId]
-        return submissionState?.submission?.score
-      })
-      .filter((score) => score !== null && score !== undefined && !Number.isNaN(Number(score)))
-      .map((score) => Number(score))
-
-    if (gradedScores.length === 0) return null
-
-    const total = gradedScores.reduce((sum, score) => sum + score, 0)
-    return total / gradedScores.length
+    return weightedCourseStanding(list, submissionStateByAssignmentId)
   }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
 
   const missingAssignments = useMemo(() => {
