@@ -34,3 +34,11 @@ test('assignment states preserve the selected course and unsubmitted default', (
   assert.equal(result[1].status,'not_submitted')
   assert.equal(result[0].course,course)
 })
+
+test('teacher entered marks never appear as missing or upcoming submissions even with stale status', () => {
+ const pending=item(80,'not_submitted',null);
+ pending.assignment.submission_required=false;
+ assert.deepEqual(missingWork([pending],now),[]);
+ pending.assignment.due_date='2026-10-28T00:00:00Z';
+ assert.deepEqual(upcomingWork([pending],now),[]);
+});

@@ -15,3 +15,10 @@ test('Chinese labels cover every course-view key and translated subjects retain 
  assert.equal(observerCourseLabel('Science 10D','en'),'Science 10D');
  assert.equal(observerCourseLabel('Custom Teacher Title','zh'),'Custom Teacher Title');
 });
+
+test('teacher entered assignments await a mark without missing work warnings and retain zero marks',()=>{
+ const item={assignment:{submission_required:false,due_date:'2020-01-01'},submission:null,submissionStatus:'not_submitted'};
+ assert.equal(observerWorkStatus(item),'teacherMark');
+ assert.deepEqual(observerAttentionItems([item]),[]);
+ assert.equal(observerWorkStatus({...item,submission:{score:0}}),'graded');
+});

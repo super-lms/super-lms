@@ -153,7 +153,7 @@ function CourseOverviewCard({ course, isSelected, onSelect, onOpenResources }) {
 
 function AssignmentCard({ assignment, compact = false, footer = null, submissionStatus = "" }) {
   const dueLabel = formatDueDate(assignment?.due_date)
-  const status = getAssignmentStatus(assignment?.due_date)
+  const status = assignment?.submission_required === false ? "Teacher enters mark" : getAssignmentStatus(assignment?.due_date)
 
   return (
     <div style={assignmentCardStyle(compact)}>
@@ -220,7 +220,7 @@ function ResultCard({ assignment, submissionState, onOpen }) {
       <div style={resultHeaderStyle}>
         <h3 style={{ margin: 0 }}>{assignment?.title || "Untitled Assignment"}</h3>
         <ActionButton quiet onClick={onOpen}>
-          View Submission
+          {assignment?.submission_required === false ? "View Mark" : "View Submission"}
         </ActionButton>
       </div>
 
@@ -267,7 +267,7 @@ function ResultCard({ assignment, submissionState, onOpen }) {
   )
 }
 
-function SubmissionEditor({
+export function SubmissionEditor({
   assignment,
   submissionState,
   submissionLoading,
@@ -328,7 +328,7 @@ function SubmissionEditor({
     <div style={submissionEditorStyle}>
       <SectionHeader
         title={assignment?.title || "Assignment Submission"}
-        subtitle="Review the assignment details, write your response, and save your work."
+        subtitle={assignment?.submission_required === false ? "No submission required. Your teacher enters your mark." : "Review the assignment details, write your response, and save your work."}
         action={<ActionButton quiet onClick={onClose}>Close</ActionButton>}
       />
 
@@ -346,8 +346,8 @@ function SubmissionEditor({
         </DetailCard>
       </div>
 
-      {submissionState?.decline ? <NoticeBox>{submissionState.decline.message}</NoticeBox> : null}
-      {submissionState?.held_work?.length > 0 ? (
+      {assignment?.submission_required !== false && submissionState?.decline ? <NoticeBox>{submissionState.decline.message}</NoticeBox> : null}
+      {assignment?.submission_required !== false && submissionState?.held_work?.length > 0 ? (
         <NoticeBox>
           Your late work is saved and awaiting teacher approval. Once approved, your teacher can mark it without another submission.
           {submissionState.held_work.filter(item => item.method === "attachment").map(item => (
@@ -389,10 +389,13 @@ function SubmissionEditor({
         </div>
       ) : null}
 
-      <StudentAssignmentRubric key={`rubric-${assignment?.id}`} assignmentId={assignment?.id} />
+      {assignment?.submission_required !== false && <StudentAssignmentRubric key={`rubric-${assignment?.id}`} assignmentId={assignment?.id} />}
 
-      <ReadAloudAssignment key={assignment?.id} assignmentId={assignment?.id} onModeChange={setReadAloudMode} />
-      {readAloudMode === null ? <NoticeBox>Checking assignment type...</NoticeBox> : readAloudMode ? null : submissionLoading ? (
+      {assignment?.submission_required !== false && <ReadAloudAssignment key={assignment?.id} assignmentId={assignment?.id} onModeChange={setReadAloudMode} />}
+      {assignment?.submission_required === false ? <>
+        <NoticeBox>No submission required. {existingScore === null || existingScore === undefined ? 'Awaiting teacher mark.' : `Published mark: ${existingScore}%.`}</NoticeBox>
+        <DetailCard title="Teacher Feedback"><div style={{whiteSpace: 'pre-wrap'}}>{existingFeedback || 'No feedback yet.'}</div></DetailCard>
+      </> : readAloudMode === null ? <NoticeBox>Checking assignment type...</NoticeBox> : readAloudMode ? null : submissionLoading ? (
         <NoticeBox>Loading submission details...</NoticeBox>
       ) : (
         <>
@@ -562,6 +565,7 @@ function getAssignmentStatus(dueDateValue) {
 function formatSubmissionStatus(value) {
   if (value === "declined") return "Declined — see your teacher"
   if (value === "awaiting_approval") return "Awaiting teacher approval"
+  if (value === "no_submission_required") return "No submission required — teacher enters mark"
   if (value === "submitted") return "Submitted"
   if (value === "not_submitted") return "Not submitted"
   return "Unknown"
@@ -724,7 +728,7 @@ export default function StudentDashboardPage() {
 
   const dueSoonCount = useMemo(() => {
     return upcomingAssignments.filter((assignment) => {
-      const status = getAssignmentStatus(assignment?.due_date)
+      const status = assignment?.submission_required === false ? "Teacher enters mark" : getAssignmentStatus(assignment?.due_date)
       return status === "Due today" || status === "Due soon"
     }).length
   }, [upcomingAssignments])
@@ -761,7 +765,7 @@ export default function StudentDashboardPage() {
     return list.filter((assignment) => {
       const assignmentId = String(assignment.id)
       const submissionState = submissionStateByAssignmentId[assignmentId]
-      return submissionState?.submission_status !== "submitted"
+      return assignment.submission_required !== false && submissionState?.submission_status !== "submitted"
     })
   }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
 
@@ -1369,7 +1373,7 @@ export default function StudentDashboardPage() {
 
     const openAssignment = selectedCourseAssignments.find((assignment) => {
       const status = String(assignment.submission_status || assignment.status || "").toLowerCase()
-      return status.includes("not") || status.includes("missing") || status.includes("draft")
+      return assignment.submission_required !== false && (status.includes("not") || status.includes("missing") || status.includes("draft"))
     })
 
     if (openAssignment) {
@@ -1917,7 +1921,7 @@ export default function StudentDashboardPage() {
                     {resultAssignments.map((assignment) => (
                       <td key={assignment.id} style={assignmentSheetCellStyle}>
                         <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
-                          View Submission
+                          {assignment?.submission_required === false ? "View Mark" : "View Submission"}
                         </ActionButton>
                       </td>
                     ))}
@@ -1998,7 +2002,7 @@ export default function StudentDashboardPage() {
                       <td key={assignment.id} style={assignmentSheetCellStyle}>
                           <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
                             {String(selectedSubmissionAssignmentId) === String(assignment.id)
-                              ? "Continue Work"
+                              ? (assignment.submission_required === false ? "View Mark" : "Continue Work")
                               : "Open Assignment"}
                           </ActionButton>
                       </td>

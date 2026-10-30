@@ -1580,7 +1580,8 @@ async function ensureCourseStructureTemplateTables() {
 
 async function ensureAssignmentSectionTables() {
   await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS available_from TIMESTAMP`);
-  await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100`);
+  await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100`);
   await ensureAssignmentTimeZones(pool);
 
   await pool.query(`
@@ -4897,6 +4898,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
       ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment',
       ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
     `);
 
@@ -5545,7 +5547,7 @@ app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole(
     if(!access.allowed)return res.status(access.status).json({error:'Class unavailable.'});
     const roster=await loadGradingRoster(pool,access.courseId,req.query.scope==='all'?'all':classId);
     const ids=roster.students.map(s=>Number(s.student_user_id));
-    const result=await pool.query(`SELECT a.id,
+    const result=await pool.query(`SELECT a.id, a.submission_required,
       (SELECT COUNT(DISTINCT ce.student_user_id)::integer FROM class_enrollments ce
        WHERE ce.student_user_id=ANY($2::integer[]) AND (a.cohort_id IS NULL OR ce.class_id=a.cohort_id)) AS roster_count,
       COUNT(s.id)::integer AS submission_count,
@@ -5563,7 +5565,7 @@ app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole(
       ) s ON TRUE
       WHERE a.class_id=$1 AND ($3::INTEGER IS NULL OR a.cohort_id IS NULL OR a.cohort_id=$3) AND COALESCE(a.source_type,'assignment')<>'assessment'
       GROUP BY a.id`,[access.courseId,ids,req.query.scope==='all'?null:classId]);
-    res.json({class_id:classId,roster_count:ids.length,assignments:result.rows.map(r=>({...r,ungraded_count:r.submission_count-r.graded_count,not_submitted_count:Math.max(r.roster_count-r.submission_count,0)}))});
+    res.json({class_id:classId,roster_count:ids.length,assignments:result.rows.map(r=>({...r,ungraded_count:r.submission_count-r.graded_count,not_submitted_count:r.submission_required===false?0:Math.max(r.roster_count-r.submission_count,0)}))});
   }catch(error){console.error('Class assignment counts:',error);res.status(error.status||500).json({error:'Could not load class submission counts.'});}
 });
 
@@ -5577,12 +5579,14 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
       ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
       ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
       ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
     `);
 
     await ensureAssignmentTimeZones(pool);
     const { class_id, teacher_id, title, description, available_from, due_date, subcategory_id } = req.body;
     const isPublished = req.body.is_published === true;
+    const submissionRequired = req.body.submission_required !== false;
     const pointsPossible = Number(req.body.points_possible ?? 100);
 
     if (!class_id || !title || !subcategory_id) {
@@ -5617,10 +5621,10 @@ app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), a
     const sortOrder = Number(sortResult.rows[0]?.next_sort_order || 1);
 
     const result = await pool.query(
-      `INSERT INTO assignments (class_id, teacher_id, title, description, points_possible, available_from, due_date, subcategory_id, is_published, sort_order, cohort_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      `INSERT INTO assignments (class_id, teacher_id, title, description, points_possible, available_from, due_date, subcategory_id, is_published, sort_order, cohort_id, submission_required, scoring_method)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
-      [contentCourseId, teacher_id, title, description, pointsPossible, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder, cohortId]
+      [contentCourseId, teacher_id, title, description, pointsPossible, available_from || null, due_date || null, subcategory_id, isPublished, sortOrder, cohortId, submissionRequired, submissionRequired ? "rubric" : "single_score_kdu"]
     );
 
     return res.json(result.rows[0]);
@@ -5708,6 +5712,8 @@ app.post("/api/assignments/:assignmentId/duplicate", authenticateJWT, requireRol
     );
 
     const newAssignment = newAssignmentResult.rows[0];
+    const modeCopy = await client.query(`UPDATE assignments SET submission_required = original.submission_required, scoring_method = original.scoring_method FROM assignments original WHERE original.id=$1 AND assignments.id=$2 RETURNING assignments.*`, [assignmentId, newAssignment.id]);
+    Object.assign(newAssignment, modeCopy.rows[0]);
 
     const sectionResult = await client.query(
       `
@@ -6022,6 +6028,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
           single_score_understand_percent = $9,
           is_published = COALESCE($10, is_published),
           points_possible = COALESCE($11, points_possible),
+          submission_required = COALESCE($13, submission_required),
           updated_at = NOW()
       WHERE id = $12
       RETURNING *
@@ -6039,6 +6046,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
         isPublished,
         pointsPossible,
         assignmentId,
+        typeof req.body.submission_required === "boolean" ? req.body.submission_required : null,
       ]
     );
 
@@ -6406,7 +6414,7 @@ app.get(
           submission,
           held_work: heldWork.filter(item => Number(item.assignment_id) === Number(assignment.id)),
           decline: declinedWork.find(item => Number(item.assignment_id) === Number(assignment.id)) || null,
-        submission_status: declinedWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "declined" : heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
+        submission_status: assignment.submission_required === false ? "no_submission_required" : declinedWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "declined" : heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
         };
       });
 
@@ -6732,7 +6740,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         submission,
         held_work: heldWork.filter(item => Number(item.assignment_id) === Number(assignment.id)),
         decline: declinedWork.find(item => Number(item.assignment_id) === Number(assignment.id)) || null,
-        submission_status: declinedWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "declined" : heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
+        submission_status: assignment.submission_required === false ? "no_submission_required" : declinedWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "declined" : heldWork.some(item => Number(item.assignment_id) === Number(assignment.id)) ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
       };
     });
 
@@ -6773,7 +6781,7 @@ app.get(
 
       const assignmentResult = await pool.query(
         `
-        SELECT id, cohort_id, class_id, title, description, available_from, due_date, subcategory_id, is_published
+        SELECT id, submission_required, points_possible, cohort_id, class_id, title, description, available_from, due_date, subcategory_id, is_published
         FROM assignments
         WHERE id = $1
         LIMIT 1
@@ -6852,7 +6860,7 @@ app.get(
         held_work: held,
         assignment: assignmentResult.rows[0],
         submission,
-        submission_status: decline ? "declined" : held.length ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
+        submission_status: assignmentResult.rows[0].submission_required === false ? "no_submission_required" : decline ? "declined" : held.length ? "awaiting_approval" : hasSubmittedContent ? "submitted" : "not_submitted",
       });
     } catch (err) {
       console.error("GET /api/assignments/:assignmentId/student-submission failed:", err);
@@ -7577,6 +7585,7 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
         description,
         due_date,
         points_possible,
+        submission_required,
         scoring_method,
         single_score_know_percent,
         single_score_do_percent,
@@ -11178,6 +11187,7 @@ app.post("/api/courses/:courseId/duplicate", authenticateJWT, requireRole("admin
       );
 
       const newAssignmentId = Number(newAssignmentResult.rows[0].id);
+      await client.query(`UPDATE assignments SET submission_required = original.submission_required, scoring_method = original.scoring_method FROM assignments original WHERE original.id=$1 AND assignments.id=$2`, [assignment.id, newAssignmentId]);
       copiedAssignmentCount += 1;
 
       const sectionResult = await client.query(
@@ -13394,6 +13404,7 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
         a.title,
         a.description,
         a.points_possible,
+        a.submission_required,
         a.due_date,
         a.subcategory_id,
         cs.name AS subcategory_name,

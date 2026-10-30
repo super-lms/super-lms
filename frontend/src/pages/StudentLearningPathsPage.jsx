@@ -1,3 +1,4 @@
+import authFetch from "../services/authFetch";
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
@@ -119,23 +120,12 @@ export default function StudentLearningPathsPage() {
         const nextSubmissionStatusByAssignmentId = {}
 
         for (const assignmentId of linkedAssignmentIds) {
-          const gradebookRes = await fetch(`${API_BASE}/api/assignments/${assignmentId}/gradebook`)
+          const response = await authFetch(`/api/assignments/${assignmentId}/student-submission`);
+          if (!response.ok) { nextSubmissionStatusByAssignmentId[assignmentId] = "Unavailable"; continue; }
+          const state = await response.json();
+          nextSubmissionStatusByAssignmentId[assignmentId] = state.assignment?.submission_required === false
+            ? "Teacher enters mark" : normalizeSubmissionStatus(state.submission_status);
 
-          if (!gradebookRes.ok) {
-            nextSubmissionStatusByAssignmentId[assignmentId] = "Not submitted"
-            continue
-          }
-
-          const gradebookData = await gradebookRes.json()
-          const rows = Array.isArray(gradebookData.rows) ? gradebookData.rows : []
-
-          const studentRow = rows.find((row) => {
-            return String(row.student_email || "").trim().toLowerCase() === studentEmail
-          })
-
-          nextSubmissionStatusByAssignmentId[assignmentId] = normalizeSubmissionStatus(
-            studentRow?.submission_status
-          )
         }
 
         if (!isMounted) return
@@ -294,7 +284,7 @@ export default function StudentLearningPathsPage() {
 
                             {assignmentId ? (
                               <div style={statusStyle}>
-                                {submissionStatus === "Submitted" ? "✓ Complete" : "○ Not Submitted"}
+                                {submissionStatus === "Submitted" ? "✓ Complete" : submissionStatus === "Teacher enters mark" ? "No submission required — teacher enters mark" : submissionStatus === "Unavailable" ? "Open assignment to check status" : "○ Not Submitted"}
                               </div>
                             ) : null}
 

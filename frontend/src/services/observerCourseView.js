@@ -1,15 +1,16 @@
 export function observerWorkStatus({assignment, submission, submissionStatus}, now = Date.now()) {
   if (submission?.score !== null && submission?.score !== undefined && submission?.score !== '' && Number.isFinite(Number(submission.score))) return 'graded';
+  if (assignment?.submission_required === false) return 'teacherMark';
   if (submissionStatus === 'submitted') return 'awaitingMark';
   const deadline = assignment?.due_date ? Date.parse(assignment.due_date) : NaN;
   if (Number.isFinite(deadline) && deadline < now) return 'overdue';
   return 'notSubmitted';
 }
 export function observerAttentionItems(items, now = Date.now()) {
-  return items.filter(item => observerWorkStatus(item, now) !== 'graded');
+  return items.filter(item => observerWorkStatus(item, now) !== 'graded' && item.assignment?.submission_required !== false);
 }
 export const observerCourseText = {
- en: {
+ en: {teacherMark:'No submission required — awaiting teacher mark',
   student:'Student', currentStanding:'Current Standing', lessons:'Lessons', courseIntro:'Course progress, assignments, grades, feedback, and learning evidence for this student.',
   chooseCourse:'Choose a course to view progress, assignments, grades, feedback, and work needing attention.', courseEvidence:'Course progress and learning evidence.',openCourse:'Open Course →',openStudent:'Open Student →',
   openGradebook:'Open Read-only Gradebook', gradebookTitle:'Read-only Student Gradebook', gradebookHelp:'Review course grades and feedback here. Only the BC course teacher can enter or change marks.',printGradebook:'Print Gradebook',
@@ -26,7 +27,7 @@ export const observerCourseText = {
   noStudents:'No linked students found.',noStudentsHelp:'Ask the school office to link students to this observer account.',noCourses:'No courses found for this student.',noCoursesHelp:'No course records are currently visible for this linked student.',
   Extending:'Extending',Emerging:'Emerging',Superior:'Superior',Proficient:'Proficient',Satisfactory:'Satisfactory',Developing:'Developing',Beginning:'Beginning',Insufficient:'Insufficient',
  },
- zh: {
+ zh: {teacherMark:'无需提交 — 等待老师评分',
   student:'学生',currentStanding:'当前课程成绩',lessons:'课时',courseIntro:'查看该学生的课程进度、作业、成绩、教师反馈和学习表现。',
   chooseCourse:'请选择课程，查看学习进度、作业、成绩、教师反馈及需要关注的事项。',courseEvidence:'课程进度与学习表现。',openCourse:'查看课程 →',openStudent:'查看学生 →',
   openGradebook:'查看成绩册（只读）',gradebookTitle:'学生成绩册（只读）',gradebookHelp:'在此查看课程成绩和教师反馈。只有 BC 课程教师可以录入或修改成绩。',printGradebook:'打印成绩册',

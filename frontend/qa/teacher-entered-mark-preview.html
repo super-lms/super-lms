@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Teacher entered assignment mark preview</title><style>body{font:16px Arial,sans-serif;color:#111827;background:#f5f6f8;margin:0}main{max-width:1050px;margin:32px auto;padding:24px}section{padding:24px;background:white;margin:20px 0;border:1px solid #d7dce5;border-radius:12px}h1{font-size:30px}h2{font-size:22px}small{line-height:1.6}button{padding:10px}</style></head><body><main id="root"></main><script type="module">
+import React,{useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import AssignmentSubmissionSetting from '/src/components/AssignmentSubmissionSetting.jsx';
+import {SubmissionEditor} from '/src/pages/StudentDashboardPage.jsx';
+function Preview(){const [required,setRequired]=useState(false);const [graded,setGraded]=useState(true);return React.createElement(React.Fragment,null,
+ React.createElement('h1',null,'Teacher entered assignment marks'),React.createElement('p',null,'Sample preview — no school records are changed.'),
+ React.createElement('section',null,React.createElement('h2',null,'Assignment setting'),React.createElement(AssignmentSubmissionSetting,{value:required,onChange:setRequired}),React.createElement('p',null,'Points Possible: 20. A teacher may enter 15 out of 20 or 75 percent.')),
+ React.createElement('section',null,React.createElement('h2',null,'Student view with no submission required'),React.createElement('button',{onClick:()=>setGraded(!graded)},graded?'Show awaiting mark':'Show published mark'),React.createElement(SubmissionEditor,{assignment:{id:'sample',title:'In class participation',submission_required:false,points_possible:20,description:'Your teacher records your participation mark.'},submissionState:{submission_status:'no_submission_required',submission:graded?{score:75,feedback:'Good participation in the class discussion.'}:null},onClose:()=>{},resources:[]}))
+)}
+createRoot(document.getElementById('root')).render(React.createElement(Preview));
+</script></body></html>

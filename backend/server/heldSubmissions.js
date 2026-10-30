@@ -103,9 +103,11 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
     try {
       await ensure();
       const declined = await pool.query(`SELECT 1 FROM assignment_submission_declines WHERE assignment_id=$1 AND resolved_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.id=$1 AND a.submission_required=FALSE)
         AND (student_id=$2 OR student_id=(SELECT id FROM users WHERE LOWER(email)=$3 LIMIT 1)) LIMIT 1`,[Number(req.params.assignmentId),Number(req.body.student_user_id)||null,String(req.body.student_email||'').trim().toLowerCase()]);
       if(declined.rows.length)return res.status(409).json({code:'SUBMISSION_DECLINED',error:'This submission was declined. Speak with the student and approve it before marking.'});
       const result=await pool.query(`SELECT 1 FROM assignment_held_work WHERE assignment_id=$1 AND approved_at IS NULL AND declined_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.id=$1 AND a.submission_required=FALSE)
         AND (student_id=$2 OR student_email=$3) LIMIT 1`, [Number(req.params.assignmentId),
         Number(req.body.student_user_id)||null, String(req.body.student_email||'').trim().toLowerCase()]);
       if(result.rows.length)return res.status(409).json({code:'AWAITING_APPROVAL',error:'Approve the held late submission before marking this student.'});

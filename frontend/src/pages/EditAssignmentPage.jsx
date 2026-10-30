@@ -1,3 +1,4 @@
+import AssignmentSubmissionSetting from "../components/AssignmentSubmissionSetting";
 import AssignmentDueDate from "../components/AssignmentDueDate.jsx";
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
@@ -78,6 +79,7 @@ export default function EditAssignmentPage() {
   const [description, setDescription] = useState("");
   const [availableFrom, setAvailableFrom] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [submissionRequired, setSubmissionRequired] = useState(true);
   const [pointsPossible, setPointsPossible] = useState("100");
   const [isPublished, setIsPublished] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
@@ -245,6 +247,7 @@ export default function EditAssignmentPage() {
         beijingDateTime(foundAssignment.due_date)
       );
       setPointsPossible(String(foundAssignment.points_possible || 100));
+      setSubmissionRequired(foundAssignment.submission_required !== false);
       setIsPublished(foundAssignment.is_published === true);
       setGeneratedRubricTitle(`${foundAssignment.title || "Assignment"} KDU Rubric`);
       setScoringMethod(foundAssignment.scoring_method || "rubric");
@@ -724,6 +727,7 @@ export default function EditAssignmentPage() {
           available_from: cleanAvailableFrom,
           due_date: cleanDueDate,
           points_possible: Number(pointsPossible),
+          submission_required: submissionRequired,
           is_published: isPublished,
           subcategory_id: Number(selectedSubcategoryId),
           scoring_method: scoringMethod,
@@ -748,6 +752,7 @@ export default function EditAssignmentPage() {
         available_from: cleanAvailableFrom,
         due_date: cleanDueDate,
         points_possible: Number(pointsPossible),
+          submission_required: submissionRequired,
         is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
         category_name: selectedCategory
@@ -1324,6 +1329,7 @@ export default function EditAssignmentPage() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
                 <div>
+                  <AssignmentSubmissionSetting value={submissionRequired} onChange={setSubmissionRequired} />
                   <EditAssignmentFieldLabel>Points Possible</EditAssignmentFieldLabel>
                   <input
                     type="number"

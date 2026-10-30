@@ -34,12 +34,12 @@ export function numericScore(item) {
   return value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? null : Number(value)
 }
 export function missingWork(items, now = Date.now()) {
-  return items.filter(item => numericScore(item) === null &&
+  return items.filter(item => item.assignment?.submission_required !== false && numericScore(item) === null &&
     ['not_submitted', 'declined'].includes(item.status) &&
     Number.isFinite(Date.parse(item.assignment.due_date)) && Date.parse(item.assignment.due_date) < now)
 }
 export function upcomingWork(items, now = Date.now()) {
-  return items.filter(item => numericScore(item) === null && ['not_submitted', 'declined'].includes(item.status) &&
+  return items.filter(item => item.assignment?.submission_required !== false && numericScore(item) === null && ['not_submitted', 'declined'].includes(item.status) &&
     Date.parse(item.assignment.due_date) >= now && Date.parse(item.assignment.due_date) <= now + 7 * 86400000)
     .sort((a,b) => Date.parse(a.assignment.due_date) - Date.parse(b.assignment.due_date))
 }

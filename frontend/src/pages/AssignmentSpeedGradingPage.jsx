@@ -46,7 +46,7 @@ function ActionButton({
   );
 }
 
-function StatusBanner({ filteredRows, selectedRow, searchText }) {
+function StatusBanner({ filteredRows, selectedRow, searchText, assignment }) {
   let text = "Ready to grade.";
 
   if (!filteredRows || filteredRows.length === 0) {
@@ -61,7 +61,7 @@ function StatusBanner({ filteredRows, selectedRow, searchText }) {
     !selectedRow.submission_status ||
     selectedRow.submission_status === "None"
   ) {
-    text = "This student has not submitted work yet.";
+    text = assignment?.submission_required === false ? "No submission required. Enter the teacher mark below." : "This student has not submitted work yet.";
   }
 
   return (
@@ -368,7 +368,7 @@ export default function AssignmentSpeedGradingPage() {
   const [teacherRubricError, setTeacherRubricError] = useState("");
   const [teacherRubricLoading, setTeacherRubricLoading] = useState(true);
   const [teacherSelections, setTeacherSelections] = useState({});
-  const isTeacherRubric = assignment?.scoring_method === "teacher_designed_rubric_ho";
+  const isTeacherRubric = assignment?.submission_required !== false && assignment?.scoring_method === "teacher_designed_rubric_ho";
   const teacherCalculation = useMemo(() => {
     if (!teacherRubric) return { error: "No teacher rubric is saved. Open Edit Assignment and save the teacher rubric." };
     try { return calculateTeacherRubric(teacherRubric, teacherSelections); }
@@ -396,7 +396,7 @@ export default function AssignmentSpeedGradingPage() {
     setTeacherSelections(saved && saved.revision === teacherRubric?.updated_at ? saved.selections || {} : {});
   }, [assignmentId, selectedRow?.student_email, teacherRubric]);
 
-  const isOneScoreAssignment = assignment?.scoring_method === "single_score_kdu";
+  const isOneScoreAssignment = assignment?.submission_required === false || assignment?.scoring_method === "single_score_kdu";
 
   useEffect(() => {
     setSearchText("");
@@ -1171,8 +1171,8 @@ export default function AssignmentSpeedGradingPage() {
         body: JSON.stringify({
           student_email: selectedRow.student_email,
           feedback: teacherFeedback,
-          ...(Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore")
-            ? { pointsEarned } : {}),
+          ...((assignment?.submission_required === false || Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore"))
+            ? { pointsEarned, ...(assignment?.submission_required === false ? {directPercentage: true} : {}) } : {}),
           ...(isTeacherRubric ? {
             teacherRubricSelections: teacherSelections,
             teacherRubricRevision: teacherRubric?.updated_at,
@@ -1180,7 +1180,7 @@ export default function AssignmentSpeedGradingPage() {
           doScore: toSafeScore(nextDoScore),
           knowScore: toSafeScore(nextKnowScore),
           understandScore: toSafeScore(nextUnderstandScore),
-          overallScore: Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore")
+          overallScore: (assignment?.submission_required === false || Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore"))
   ? (nextOverallScore === "" ? null : Number(nextOverallScore))
   : null,
         }),
@@ -1396,7 +1396,7 @@ export default function AssignmentSpeedGradingPage() {
         </ActionButton>
       </div>
 
-      <ReadAloudAssignment assignmentId={assignmentId} sectionId={sectionId} teacher reviewOnly onPublished={async () => { const row = await loadGradebook(); if (row) loadKduScoresFromSelectedStudent(row); }} />
+      {assignment?.submission_required !== false && <ReadAloudAssignment assignmentId={assignmentId} sectionId={sectionId} teacher reviewOnly onPublished={async () => { const row = await loadGradebook(); if (row) loadKduScoresFromSelectedStudent(row); }} />}
       <section className="panel">
         <div
           style={{
@@ -1590,6 +1590,7 @@ export default function AssignmentSpeedGradingPage() {
         ) : null}
 
         <StatusBanner
+          assignment={assignment}
           filteredRows={filteredRows}
           selectedRow={selectedRow}
           searchText={searchText}
@@ -2467,12 +2468,12 @@ export default function AssignmentSpeedGradingPage() {
                           marginBottom: "16px",
                         }}
                       >
-                        <div style={{ fontWeight: 900 }}>One Score → KDU Split</div>
+                        <div style={{ fontWeight: 900 }}>{assignment?.submission_required === false ? "Teacher entered mark" : "One Score → KDU Split"}</div>
                         <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                          Enter one overall percentage score. SUPER LMS will save it using this assignment's configured evidence split:
+                          {assignment?.submission_required === false ? 'Enter a score out of the assignment total or a percentage. Save to publish the mark and feedback to the student and gradebook. No student upload is needed.' : <>Enter one overall percentage score. SUPER LMS will save it using this assignment's configured evidence split:
                           KNOW {Number(assignment?.single_score_know_percent ?? 25)}%,
                           DO {Number(assignment?.single_score_do_percent ?? 50)}%,
-                          UNDERSTAND {Number(assignment?.single_score_understand_percent ?? 25)}%.
+                          UNDERSTAND {Number(assignment?.single_score_understand_percent ?? 25)}%.</>}
                         </div>
 
                         <div style={{ display: "flex", alignItems: "end", gap: "10px", flexWrap: "wrap" }}>
@@ -2506,6 +2507,12 @@ export default function AssignmentSpeedGradingPage() {
                             {Number(assignment?.points_possible || 100)}
                           </div>
                         </div>
+                        <label style={{display: 'grid', gap: 6, maxWidth: 220}}><strong>Or enter a percentage</strong>
+                          <input aria-label="Percentage mark" type="number" min="0" max="100" step="0.01" value={overallScore} style={inputStyle} onChange={e => {
+                            const value=e.target.value; setOverallScore(value);
+                            setPointsEarned(value === '' ? '' : String(Number(value) / 100 * Number(assignment?.points_possible || 100)));
+                            const level=convertOverallPercentToSixPointScore(value);setDoScore(level);setKnowScore(level);setUnderstandScore(level);
+                          }}/></label>
                         <div style={{ color: "#4b5563", fontWeight: 700 }}>
                           Calculated percentage: {overallScore === "" ? "—" : `${Number(overallScore).toFixed(2)}%`}
                         </div>

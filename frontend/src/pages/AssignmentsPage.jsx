@@ -1,3 +1,4 @@
+import AssignmentSubmissionSetting from "../components/AssignmentSubmissionSetting";
 import AssignmentDueDate from "../components/AssignmentDueDate.jsx";
 import LateSubmissionAlerts from "../components/LateSubmissionAlerts.jsx";
 import AssignmentDateTime from "../components/AssignmentDateTime.jsx";
@@ -270,6 +271,7 @@ export default function AssignmentsPage() {
   const [description, setDescription] = useState("")
   const [availableFrom, setAvailableFrom] = useState("")
   const [dueDate, setDueDate] = useState("")
+  const [submissionRequired, setSubmissionRequired] = useState(true)
   const [pointsPossible, setPointsPossible] = useState("100")
   const [isPublished, setIsPublished] = useState(false)
 
@@ -313,6 +315,7 @@ export default function AssignmentsPage() {
   const [editDescription, setEditDescription] = useState("")
   const [editAvailableFrom, setEditAvailableFrom] = useState("")
   const [editDueDate, setEditDueDate] = useState("")
+  const [editSubmissionRequired, setEditSubmissionRequired] = useState(true)
   const [editPointsPossible, setEditPointsPossible] = useState("100")
   const [editIsPublished, setEditIsPublished] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
@@ -898,6 +901,7 @@ export default function AssignmentsPage() {
         available_from: assignmentInstant(availableFrom),
         due_date: assignmentInstant(dueDate),
         points_possible: Number(pointsPossible),
+        submission_required: submissionRequired,
         is_published: isPublished,
         subcategory_id: Number(selectedSubcategoryId),
       }),
@@ -1031,6 +1035,7 @@ export default function AssignmentsPage() {
     setEditAvailableFrom(beijingDateTime(assignment.available_from))
     setEditDueDate(beijingDateTime(assignment.due_date))
     setEditPointsPossible(String(assignment.points_possible || 100))
+    setEditSubmissionRequired(assignment.submission_required !== false)
     setEditIsPublished(assignment.is_published === true)
     setError("")
     setMessage("")
@@ -1169,6 +1174,7 @@ export default function AssignmentsPage() {
         available_from: assignmentInstant(editAvailableFrom),
         due_date: assignmentInstant(editDueDate),
         points_possible: Number(editPointsPossible),
+        submission_required: editSubmissionRequired,
         is_published: editIsPublished,
       }),
     })
@@ -1325,6 +1331,7 @@ export default function AssignmentsPage() {
     e.preventDefault()
 
     if (submissionSaving || submissionSaved) return
+    if (assignments.find(a => String(a.id) === String(selectedAssignmentId))?.submission_required === false) { setError("No submission required. Your teacher enters the mark."); return }
 
     if (!selectedAssignmentId || !user?.name || !user?.email) {
       setError("Select an assignment")
@@ -2000,6 +2007,7 @@ export default function AssignmentsPage() {
                             <RichTextEditor value={description} onChange={setDescription} placeholder="Enter assignment description." />
                           </InputBlock>
 
+                          <AssignmentSubmissionSetting value={submissionRequired} onChange={setSubmissionRequired} />
                           <InputBlock label="Points Possible">
                             <input type="number" min="0.01" step="0.01" value={pointsPossible} onChange={(e) => setPointsPossible(e.target.value)} />
                           </InputBlock>
@@ -2273,6 +2281,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                       <AssignmentDueDate assignmentId={editingAssignmentId} onSaved={() => setAssignments(items => items.map(item => String(item.id) === String(editingAssignmentId) ? {...item, due_date: null} : item))} value={editDueDate} onChange={setEditDueDate} min={editAvailableFrom || undefined} />
                                     </InputBlock>
                                     <InputBlock label="Points Possible">
+                                      <AssignmentSubmissionSetting value={editSubmissionRequired} onChange={setEditSubmissionRequired} />
                                       <input type="number" min="0.01" step="0.01" value={editPointsPossible} onChange={(e) => setEditPointsPossible(e.target.value)} />
                                     </InputBlock>
                                     <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
@@ -2321,6 +2330,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                   </select>
                 </InputBlock>
 
+                {assignments.find(a => String(a.id) === String(selectedAssignmentId))?.submission_required === false ? <p>No submission required. Your teacher enters the mark. See My Grades and Feedback below.</p> : <>
                 <InputBlock label="Submission Text">
                   <textarea rows="6" value={submissionText} onChange={(e) => setSubmissionText(e.target.value)} />
                 </InputBlock>
@@ -2339,7 +2349,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
 
                 <ActionButton type="submit" disabled={submissionSaving || submissionSaved}>
                   {submissionSaving ? "Saving..." : submissionSaved ? "Submission Saved" : "Submit Assignment"}
-                </ActionButton>
+                </ActionButton></>}
               </div>
             </form>
           </DetailCard>

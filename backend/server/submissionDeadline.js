@@ -15,7 +15,8 @@ function createSubmissionDeadline(pool){
  }
  async function check(assignmentId,studentId,{hold=false}={}){
   await ensure();
-  const r=await pool.query('SELECT id,due_date FROM assignments WHERE id=$1',[assignmentId]);if(!r.rows.length)throw Object.assign(Error('Assignment not found'),{status:404});
+  const r=await pool.query('SELECT id,due_date,submission_required FROM assignments WHERE id=$1',[assignmentId]);if(!r.rows.length)throw Object.assign(Error('Assignment not found'),{status:404});
+  if(r.rows[0].submission_required === false)throw Object.assign(Error("No submission is required. Your teacher enters the mark."),{status:403,code:"NO_SUBMISSION_REQUIRED"});
   if(await activeDecline(assignmentId,studentId))throw Object.assign(Error(DECLINED_MESSAGE),{status:403,code:"SUBMISSION_DECLINED"});
   const due=r.rows[0].due_date;
   if(!pastDue(due))return {late:false};
