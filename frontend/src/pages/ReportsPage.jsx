@@ -318,6 +318,7 @@ function ReportsPage() {
 
   useEffect(() => {
     if (
+      reportScope === "self-reflection" ||
       initialCourseLoadedRef.current ||
       !requestedCourseId ||
       courses.length === 0
@@ -340,7 +341,7 @@ function ReportsPage() {
         value: String(requestedCourseId),
       },
     });
-  }, [courses, requestedCourseId]);
+  }, [courses, requestedCourseId, reportScope]);
 
   function handleCategoryChange(event) {
     const categoryId = event.target.value;
