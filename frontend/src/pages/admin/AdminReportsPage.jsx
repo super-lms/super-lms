@@ -65,6 +65,12 @@ export default function AdminReportsPage() {
 
   const reportCards = [
     {
+      title: "Competencies Self-Reflection",
+      description: "View survey submissions by student or class, check submission status, and print individual or class PDF reports.",
+      status: "Available now",
+      to: "/admin/print-reports?reportType=self-reflection",
+    },
+    {
       title: "Student Report Cards",
       description: "Create Interim, Semester and Year Final cards with PEN, course marks, attendance and comments. Print one student or a batch.",
       status: "Available now",

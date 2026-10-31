@@ -1,3 +1,4 @@
+import SurveyReflectionReports from "../components/SurveyReflectionReports.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
@@ -42,7 +43,7 @@ function ReportsPage() {
   const [selectedStudentKey, setSelectedStudentKey] = useState("");
   const [reportScope, setReportScope] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("reportType");
-    return ["student", "class", "ie", "attendance", "reportcard"].includes(requested) ? requested : "student";
+    return ["student", "class", "ie", "attendance", "reportcard", "self-reflection"].includes(requested) ? requested : "student";
   });
 
   const [reportData, setReportData] = useState(null);
@@ -960,6 +961,12 @@ function ReportsPage() {
     }, 300);
   }
 
+  if (reportScope === "self-reflection") {
+    return <SurveyReflectionReports courses={courses} initialCourseId={routeCourseId || new URLSearchParams(window.location.search).get("courseId") || ""}
+      isAdmin={normalizedRole === "admin"}
+      onBack={() => { setReportScope("student"); setReportData(null); setMessage(""); }} />;
+  }
+
   return (
     <div>
       <div style={floatingDashboardButtonWrapStyle}>
@@ -1015,6 +1022,7 @@ function ReportsPage() {
               <option value="ie">IE — Insufficient Evidence</option>
               <option value="attendance">Attendance Report</option>
               <option value="reportcard">Report Cards</option>
+              {normalizedRole === "admin" && <option value="self-reflection">Competencies Self-Reflection</option>}
             </select>
           </div>
 
