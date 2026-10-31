@@ -3,6 +3,7 @@ const id='1cf48748-394b-41e0-b945-f4be6acc8a0c',outside='ffffffff-ffff-ffff-ffff
 const token=role=>({Authorization:'Bearer '+jwt.sign({id:4,role},process.env.JWT_SECRET||'super-lms-development-secret-change-before-production')});
 async function withServer(fn,fail=false){
  const calls=[];const pool={async query(sql,args){calls.push({sql,args});if(sql.startsWith('CREATE'))return {rows:[]};if(sql.startsWith('SELECT NULLIF'))return {rows:[{school_id:12}]};if(fail)throw Error('database unavailable');
+ if(sql.includes('FROM users u')){assert.deepEqual(args,[12]);assert.match(sql,/LOWER\(COALESCE\(u.role, ''\)\) = 'student'/);assert.match(sql,/school_id.*IS NOT DISTINCT FROM \$1/);return {rows:[{student_user_id:1,student_name:'School student',student_email:'student@example.com'}]};}
  if(sql.includes('COUNT(r.id)')){assert.deepEqual(args,[12]);assert.match(sql,/school_id IS NOT DISTINCT FROM \$1/);return {rows:[{id,title:'Competencies',response_count:2,status:'closed'}]};}
  if(sql.includes('SELECT id, title, description, status FROM school_surveys')){assert.deepEqual(args,[args[0],12]);assert.match(sql,/school_id IS NOT DISTINCT FROM \$2/);return {rows:args[0]===id?[{id,title:'Competencies',status:'closed'}]:[]};}
  if(sql.includes('SELECT r.id, r.survey_id')){assert.deepEqual(args,[id,12]);assert.match(sql,/s.school_id IS NOT DISTINCT FROM \$2/);return {rows:[{id:'response',survey_id:id,student:'{"name":"Student"}',questions:'[{"id":"old","title":"Original question"}]',answers:'{"old":"Answer"}'}]};}throw Error('Unexpected SQL');}};
@@ -11,7 +12,7 @@ async function withServer(fn,fail=false){
  try{await fn(`http://127.0.0.1:${server.address().port}`,calls);}finally{await new Promise(resolve=>server.close(resolve));}
 }
 test('report catalog and responses require administrators',()=>withServer(async base=>{
- for(const suffix of ['/reports','/reports/'+id]){assert.equal((await fetch(base+'/api/surveys'+suffix)).status,401);for(const role of ['student','observer','teacher'])assert.equal((await fetch(base+'/api/surveys'+suffix,{headers:token(role)})).status,403);}
+ for(const suffix of ['/reports','/reports/'+id,'/report-students']){assert.equal((await fetch(base+'/api/surveys'+suffix)).status,401);for(const role of ['student','observer','teacher'])assert.equal((await fetch(base+'/api/surveys'+suffix,{headers:token(role)})).status,403);}
 }));
 test('school admins can report on closed surveys with archived responses and no-store caching',()=>withServer(async base=>{
  const catalog=await fetch(base+'/api/surveys/reports',{headers:token('admin')});assert.equal(catalog.status,200);assert.equal(catalog.headers.get('cache-control'),'no-store');assert.equal((await catalog.json()).surveys[0].response_count,2);
@@ -23,3 +24,10 @@ test('outside-school and invalid IDs never expose response data',()=>withServer(
 test('database failure hides internal diagnostics',()=>withServer(async base=>{
  const result=await fetch(base+'/api/surveys/reports',{headers:token('admin')});assert.equal(result.status,500);assert.doesNotMatch(JSON.stringify(await result.json()),/database unavailable/);
 },true));
+
+test('whole-school roster is school-scoped, does not depend on cohort enrollment, and disables caching',()=>withServer(async(base,calls)=>{
+ const result=await fetch(base+'/api/surveys/report-students',{headers:token('admin')});
+ assert.equal(result.status,200);assert.equal(result.headers.get('cache-control'),'no-store');
+ assert.equal((await result.json()).students[0].student_user_id,1);
+ const query=calls.find(c=>c.sql.includes('FROM users u'));assert.ok(query);assert.doesNotMatch(query.sql,/class_enrollments/);
+}));

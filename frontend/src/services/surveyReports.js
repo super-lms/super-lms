@@ -17,7 +17,7 @@ function studentKey(response) {
   // No name-only merging: different children may share a name.
   return normalizeEmail(response.student.email) || `response:${response.id}`;
 }
-export function buildSurveyReportRows(rawResponses, roster = null) {
+export function buildSurveyReportRows(rawResponses, roster = null, includeUnmatchedResponses = false) {
   const grouped = new Map();
   for (const raw of rawResponses) {
     const response = normalizeSurveyResponse(raw), key = studentKey(response);
@@ -27,11 +27,22 @@ export function buildSurveyReportRows(rawResponses, roster = null) {
   for (const responses of grouped.values()) responses.sort((a, b) =>
     (Date.parse(b.created) || 0) - (Date.parse(a.created) || 0) || String(b.id).localeCompare(String(a.id)));
   if (roster !== null) {
-    return roster.map(student => {
+    const rosterEmails = new Set(roster.map(student => normalizeEmail(student.student_email)).filter(Boolean));
+    const rosterRows = roster.map(student => {
       const email = normalizeEmail(student.student_email), responses = email ? grouped.get(email) || [] : [];
       return { key: `student:${student.student_user_id}`, name: student.student_name || email || 'Unnamed student',
         email, responses, latest: responses[0] || null, status: responses.length ? 'submitted' : 'pending' };
-    }).sort(sortRows);
+    });
+    // Whole-school reports must retain submitted responses even when the email
+    // is not found in the school directory. Cohort lists remain roster-limited.
+    if (includeUnmatchedResponses) {
+      for (const [key, responses] of grouped) {
+        if (!rosterEmails.has(key)) rosterRows.push({ key: `unmatched:${key}`,
+          name: responses[0].student.name || responses[0].student.email || 'Unnamed student',
+          email: normalizeEmail(responses[0].student.email), responses, latest: responses[0], status: 'submitted' });
+      }
+    }
+    return rosterRows.sort(sortRows);
   }
   return Array.from(grouped, ([key, responses]) => ({ key,
     name: responses[0].student.name || responses[0].student.email || 'Unnamed student',

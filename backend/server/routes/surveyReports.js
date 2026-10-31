@@ -1,5 +1,22 @@
 // Report reads reuse Survey Studio's administrator and school access checks.
 function registerSurveyReports(router, pool, admin, isId) {
+  router.get('/report-students', ...admin, async (req, res, next) => {
+    try {
+      const result = await pool.query(`
+        SELECT u.id AS student_user_id,
+               COALESCE(NULLIF(TRIM(to_jsonb(u)->>'name'), ''),
+                        NULLIF(TRIM(CONCAT_WS(' ', to_jsonb(u)->>'first_name', to_jsonb(u)->>'last_name')), ''),
+                        u.email) AS student_name,
+               u.email AS student_email
+        FROM users u
+        WHERE LOWER(COALESCE(u.role, '')) = 'student'
+          AND NULLIF(to_jsonb(u)->>'school_id', '')::INTEGER IS NOT DISTINCT FROM $1
+        ORDER BY student_name, student_email, u.id
+      `, [req.schoolId]);
+      res.set('Cache-Control', 'no-store').json({ students: result.rows });
+    } catch (error) { next(error); }
+  });
+
   router.get('/reports', ...admin, async (req, res, next) => {
     try {
       const result = await pool.query(`

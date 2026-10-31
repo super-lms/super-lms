@@ -30,3 +30,15 @@ test('bad stored JSON is flagged instead of silently printing missing answers', 
   assert.throws(()=>buildSurveyPrintHtml({title:'Survey'},[]),/at least one/);
   assert.equal(normalizeSurveyResponse({...response('one','a@example.com'),questions:'[null]'}).readable,false);
 });
+
+test('whole-school list includes pending students and unlisted respondents without changing cohort matching',()=>{
+ const responses=[response('listed','listed@example.com'),response('unlisted','unlisted@example.com')];
+ const roster=[{student_user_id:1,student_name:'Listed student',student_email:'listed@example.com'},
+   {student_user_id:2,student_name:'Student in another cohort',student_email:'pending@example.com'}];
+ const whole=buildSurveyReportRows(responses,roster,true);
+ assert.equal(whole.length,3);assert.equal(whole.filter(row=>row.status==='submitted').length,2);
+ assert.equal(whole.find(row=>row.email==='pending@example.com').status,'pending');
+ assert.equal(whole.find(row=>row.email==='unlisted@example.com').latest.id,'unlisted');
+ const cohort=buildSurveyReportRows(responses,[roster[0]]);
+ assert.equal(cohort.length,1);assert.equal(cohort[0].email,'listed@example.com');
+});

@@ -13,10 +13,11 @@ async function getJson(url) {
 
 export default function SurveyReflectionReports({ courses = [], initialCourseId = '', isAdmin, onBack }) {
   const [surveys, setSurveys] = useState([]), [surveyId, setSurveyId] = useState('');
-  const [data, setData] = useState(null), [courseId, setCourseId] = useState(initialCourseId || '');
+  const [data, setData] = useState(null), [courseId, setCourseId] = useState(initialCourseId || 'whole-school');
   const [roster, setRoster] = useState(null), [rosterError, setRosterError] = useState('');
   const [error, setError] = useState(''), [loading, setLoading] = useState(true), [rosterLoading, setRosterLoading] = useState(false);
   const [search, setSearch] = useState(''), [reportedClass, setReportedClass] = useState(''), [status, setStatus] = useState('all');
+  const [studentFilter, setStudentFilter] = useState('');
   const [selectedKey, setSelectedKey] = useState(''), [attemptId, setAttemptId] = useState('');
   const [reload, setReload] = useState(0), [printError, setPrintError] = useState('');
 
@@ -50,19 +51,19 @@ export default function SurveyReflectionReports({ courses = [], initialCourseId 
     if (!isAdmin || !courseId) { setRosterLoading(false); return; }
     let active = true;
     setRosterLoading(true);
-    getJson(`/api/classes/${encodeURIComponent(courseId)}/report-students`).then(body => {
+    getJson(courseId === 'whole-school' ? '/api/surveys/report-students' : `/api/classes/${encodeURIComponent(courseId)}/report-students`).then(body => {
       if (active) { setRoster(body.students || []); setRosterLoading(false); }
     }).catch(e => { if (active) { setRosterError(e.message); setRosterLoading(false); } });
     return () => { active = false; };
   }, [isAdmin, courseId, reload]);
 
-  const rows = useMemo(() => buildSurveyReportRows(data?.responses || [], courseId ? roster || [] : null), [data, roster, courseId]);
+  const rows = useMemo(() => buildSurveyReportRows(data?.responses || [], courseId ? roster || [] : null, courseId === 'whole-school'), [data, roster, courseId]);
   const classes = useMemo(() => [...new Set(rows.map(row => row.latest?.student.class).filter(Boolean))].sort(), [rows]);
   const filteredRows = useMemo(() => rows.filter(row => {
     const query = search.trim().toLowerCase();
-    return (!query || `${row.name} ${row.email} ${row.latest?.student.chineseName || ''}`.toLowerCase().includes(query)) &&
+    return (!studentFilter || row.key === studentFilter) && (!query || `${row.name} ${row.email} ${row.latest?.student.chineseName || ''}`.toLowerCase().includes(query)) &&
       (!reportedClass || row.latest?.student.class === reportedClass) && (status === 'all' || row.status === status);
-  }), [rows, search, reportedClass, status]);
+  }), [rows, search, reportedClass, status, studentFilter]);
   const selectedRow = filteredRows.find(row => row.key === selectedKey);
   const selectedResponse = selectedRow?.responses.find(response => response.id === attemptId) || selectedRow?.latest;
   const printable = filteredRows.map(row => row.latest).filter(response => response?.readable);
@@ -90,23 +91,26 @@ export default function SurveyReflectionReports({ courses = [], initialCourseId 
     <h1>Competencies Self-Reflection</h1>
     <p>View saved student responses and print individual or class reports. In the print dialog, choose <strong>Save as PDF</strong> to save a PDF.</p>
     <div className="reflection-filters">
-      <label>Survey<select aria-label="Survey" value={surveyId} onChange={e => { resetSelection(); setData(null); setSurveyId(e.target.value); }}>
+      <label>Survey<select aria-label="Survey" value={surveyId} onChange={e => { resetSelection(); setData(null); setSurveyId(e.target.value); setStudentFilter(''); }}>
         <option value="">Select a survey</option>{surveys.map(survey => <option key={survey.id} value={survey.id}>{survey.title} ({survey.response_count} submissions)</option>)}
       </select></label>
-      <label>Class roster<select aria-label="Class roster" value={courseId} onChange={e => { resetSelection(); setCourseId(e.target.value); setReportedClass(''); setStatus('all'); }}>
-        <option value="">All submitted students</option>{courses.map(course => <option key={course.id} value={course.id}>{course.title}</option>)}
+      <label>Student list<select aria-label="Student list" value={courseId} onChange={e => { resetSelection(); setCourseId(e.target.value); setReportedClass(''); setStatus('all'); setStudentFilter(''); }}>
+        <option value="whole-school">Whole school — all students</option><option value="">All submitted students</option>{courses.map(course => <option key={course.id} value={course.id}>{course.title}</option>)}
       </select></label>
       {!courseId && <label>Reported class<select aria-label="Reported class" value={reportedClass} onChange={e => { resetSelection(); setReportedClass(e.target.value); }}>
         <option value="">All reported classes</option>{classes.map(name => <option key={name}>{name}</option>)}
       </select></label>}
+      <label>Student<select aria-label="Student" value={studentFilter} onChange={e => {
+        resetSelection(); setStudentFilter(e.target.value); setSearch(''); setStatus('all'); setReportedClass(''); setSelectedKey(e.target.value);
+      }}><option value="">All students in selected list</option>{rows.map(row => <option key={row.key} value={row.key}>{row.name}{row.email ? ` — ${row.email}` : ''}</option>)}</select></label>
       <label>Student name or email<input aria-label="Student name or email" value={search} onChange={e => { resetSelection(); setSearch(e.target.value); }} placeholder="Find a student" /></label>
       <label>Submission status<select aria-label="Submission status" value={status} onChange={e => { resetSelection(); setStatus(e.target.value); }}>
         <option value="all">All statuses</option><option value="submitted">Submitted</option><option value="pending" disabled={!courseId}>No matched submission</option>
       </select></label>
     </div>
-    <p className="reflection-note">Choose a class roster to identify students with no matched submission. Matching uses the email students supplied; this public survey does not verify identity. Reports use each submission’s saved questions. For repeat submissions, the latest is selected by default and earlier submissions remain available.</p>
+    <p className="reflection-note">The whole-school list includes all student accounts plus survey respondents whose emails are not in the directory. Existing cohort lists are still available. Students without a matched submission are included. Matching uses the email students supplied; this public survey does not verify identity. Reports use each submission’s saved questions. For repeat submissions, the latest is selected by default and earlier submissions remain available.</p>
     {loading && <p role="status">Loading survey reports…</p>}
-    {rosterLoading && <p role="status">Loading class roster…</p>}
+    {rosterLoading && <p role="status">Loading student list…</p>}
     {(error || rosterError || printError) && <p role="alert" className="reflection-error">{error || rosterError || printError}</p>}
     {!loading && !surveyId && <p role="status">Select a survey to view its reports. No survey is automatically substituted if the Competencies Self-Reflection survey is unavailable.</p>}
     {ready && <>
