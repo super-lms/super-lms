@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>Assignment notices class approval preview</title><style>body{font:16px Arial;color:#111827;background:#f5f6f8;margin:0}main{max-width:1100px;margin:32px auto;padding:24px}button,a{font:inherit}</style></head><body><main id="root"></main><script type="module">
+import React from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router-dom';import LateSubmissionAlerts from '/src/components/LateSubmissionAlerts.jsx';
+let approved=false;
+window.fetch=async(url,options={})=>{
+ if(String(url).includes('/late-submission/class')){const b=JSON.parse(options.body);if(b.sectionId!==144)throw Error('Unexpected class');approved=true;return new Response(JSON.stringify({students:29,promoted:3,skipped_declined:0}),{status:200});}
+ if(String(url).includes('/late-submission-alerts'))return new Response(JSON.stringify({alerts:approved?[]:[{assignment_id:501,student_id:10,student_name:'Example student',student_email:'example@school.test',course_title:'Accounting 11A',section_id:144,title:'Ledger Check in',last_attempt_at:'2026-10-29T15:01:00Z',due_at:'2026-09-24T00:00:00Z',current_due_date:'2026-09-24T00:00:00Z',attempt_count:3,has_held_work:true}]}),{status:200});
+ throw Error('Preview only');
+};
+createRoot(document.getElementById('root')).render(React.createElement(MemoryRouter,null,React.createElement('h1',null,'Assignments'),React.createElement('p',null,'Sample preview — no school records are changed.'),React.createElement(LateSubmissionAlerts,{classId:144})));
+</script></body></html>
