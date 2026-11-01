@@ -12536,15 +12536,18 @@ app.get(["/api/class-roster/:courseId", "/api/class-roster/:courseId/export.docx
       [rosterCourseIds]
     );
 
+    const displayCourse = isMasterCourse && !exactSectionRoster && sectionsResult.rows.length > 0
+      ? {...course, title: String(course.title).replace(/(\d)\s*[A-D]$/i, '$1')}
+      : course;
     if (isWordExport) {
-      const buffer = await require('./classRosterExport').classRosterDocx(course,studentsResult.rows);
+      const buffer = await require('./classRosterExport').classRosterDocx(displayCourse,studentsResult.rows);
       res.set('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.set('Content-Disposition',`attachment; filename="class-roster-${courseId}.docx"`);
       return res.send(buffer);
     }
 
     return res.json({
-      course,
+      course: displayCourse,
       is_master_roster: isMasterCourse && !exactSectionRoster,
       sections: sectionsResult.rows,
       students: studentsResult.rows,

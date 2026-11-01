@@ -11,3 +11,15 @@ function fixture(allowed){let handler,calls=0;const context={
 const response=()=>({code:200,headers:{},status(n){this.code=n;return this},set(k,v){this.headers[k]=v;return this},send(b){this.body=b;return this},json(b){this.body=b;return this}});
 test('Word export combines linked cohorts when the selected course is a master class',async()=>{const f=fixture(true),res=response();await f.handler({params:{courseId:'11'},query:{},path:'/api/class-roster/11/export.docx'},res);assert.equal(res.code,200);assert.match(res.headers['Content-Disposition'],/class-roster-11.docx/);assert.equal(res.body.toString(),'PK');});
 test('Word export denies course access before loading student details',async()=>{const f=fixture(false),res=response();await f.handler({params:{courseId:'11'},query:{},path:'/api/class-roster/11/export.docx'},res);assert.equal(res.code,403);assert.equal(f.calls,1);});
+
+test('legacy Accounting 11A exports only A when selected as cohort and all students under Accounting 11 when selected as master',async()=>{
+ for(const scope of ['section','master']){
+  let handler,calls=0,exportTitle;
+  const context={app:{get:(paths,...handlers)=>{handler=handlers.at(-1)}},authenticateJWT(){},requireRole:()=>()=>{},ensureStudentInfoColumns:async()=>{},authorizeCourseModuleAccess:async()=>({allowed:true}),console,
+   pool:{query:async(sql,args)=>{calls++;if(calls===1)return {rows:[{id:144,title:'Accounting 11A',master_course_id:null}]};if(calls===2)return {rows:[{id:145,title:'Accounting 11B'},{id:146,title:'Accounting 11C'}]};assert.deepEqual(Array.from(args[0]),scope==='section'?[144]:[144,145,146]);return {rows:[{id:1,name:'Student'}]};}},
+   require:()=>({classRosterDocx:async(course)=>{exportTitle=course.title;return Buffer.from('PK')}})};
+  vm.runInNewContext(source.slice(source.indexOf('app.get(["/api/class-roster/:courseId"'),source.indexOf('/* GET CLASS ATTENDANCE */')),context);
+  const res=response();await handler({params:{courseId:'144'},query:{scope},path:'/api/class-roster/144/export.docx'},res);
+  assert.equal(res.code,200);assert.equal(exportTitle,scope==='section'?'Accounting 11A':'Accounting 11');
+ }
+});

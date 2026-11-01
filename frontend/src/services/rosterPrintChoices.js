@@ -73,3 +73,15 @@ export function rosterPrintEndpoint(choice) {
     ? `/api/class-roster/${courseId}?scope=section`
     : `/api/class-roster/${courseId}`;
 }
+
+// The roster viewer exposes the aggregate and the exact A section separately.
+// Keep the batch printer's cohort-only defaults unchanged.
+export function buildRosterViewChoices(courses) {
+  const choices = buildRosterPrintChoices(courses);
+  const rootsWithChildren = new Set((courses || []).map(c => text(c.master_course_id)).filter(Boolean));
+  return choices.flatMap(choice => {
+    if (choice.scope !== 'section' || !rootsWithChildren.has(choice.courseId) || choice.course.master_course_id) return [choice];
+    const title = text(choice.course.title).replace(/(\d)\s*[A-D]$/i, '$1');
+    return [{...choice, key:`master:${choice.courseId}`, scope:'master', label:title, typeLabel:'Master Class — all cohorts'}, choice];
+  });
+}

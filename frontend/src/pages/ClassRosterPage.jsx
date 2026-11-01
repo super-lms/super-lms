@@ -4,7 +4,7 @@ import { useAuth } from "../AuthContext.jsx";
 import API_BASE from "../apiBase";
 import authFetch from "../services/authFetch";
 import { printCompactClassRoster, printMultipleClassRosters } from "../services/compactClassRoster.js";
-import { buildRosterPrintChoices, rosterPrintEndpoint } from "../services/rosterPrintChoices.js";
+import { buildRosterPrintChoices, buildRosterViewChoices, rosterPrintEndpoint } from "../services/rosterPrintChoices.js";
 
 
 const emptyStudentForm = {
@@ -20,6 +20,7 @@ export default function ClassRosterPage() {
 
   const [courses, setCourses] = useState([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [selectedScope, setSelectedScope] = useState(searchParams.get("scope") || "section");
   const [students, setStudents] = useState([]);
   const [isMasterRoster, setIsMasterRoster] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Loading courses...");
@@ -99,7 +100,9 @@ export default function ClassRosterPage() {
     setStatusMessage("Loading class roster...");
 
     try {
-      const response = await authFetch(`/api/class-roster/${courseId}`);
+      const choices = buildRosterViewChoices(courses);
+      const choice = choices.find(item => item.courseId === String(courseId) && item.scope === selectedScope) || choices.find(item => item.courseId === String(courseId));
+      const response = await authFetch(rosterPrintEndpoint(choice || {courseId, scope:selectedScope}));
 
       if (!response.ok) {
         throw new Error("Failed to load class roster");
@@ -419,7 +422,7 @@ export default function ClassRosterPage() {
             "super-lms-class-roster-course-id",
             matchedCourseId
           );
-          setSearchParams({ courseId: matchedCourseId });
+          setSearchParams({ courseId: matchedCourseId, scope: selectedScope });
         } else if (selectableCourses.length > 0) {
           const fallbackCourseId = String(selectableCourses[0].id);
           setSelectedCourseId(fallbackCourseId);
@@ -427,7 +430,7 @@ export default function ClassRosterPage() {
             "super-lms-class-roster-course-id",
             fallbackCourseId
           );
-          setSearchParams({ courseId: fallbackCourseId });
+          setSearchParams({ courseId: fallbackCourseId, scope: selectedScope });
         } else {
           setSelectedCourseId("");
           setStatusMessage("Course not found");
@@ -451,12 +454,12 @@ export default function ClassRosterPage() {
     setEnrollmentError("");
     cancelEditingStudent();
     loadRoster(selectedCourseId);
-  }, [selectedCourseId]);
+  }, [selectedCourseId, selectedScope]);
 
   async function downloadRosterWord() {
     setExportError("");setExportingWord(true);
     try {
-      const response=await authFetch(`/api/class-roster/${selectedCourseId}/export.docx`);
+      const response=await authFetch(`/api/class-roster/${selectedCourseId}/export.docx${selectedChoice?.scope === "section" ? "?scope=section" : ""}`);
       if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error || "Could not download class roster.");}
       const url=URL.createObjectURL(await response.blob()),link=document.createElement("a");
       link.href=url;link.download=`${selectedCourse?.title || "Class"} Roster.docx`;link.click();
@@ -509,12 +512,10 @@ export default function ClassRosterPage() {
     }
   }
 
-  const selectedCourse = useMemo(() => {
-    return (
-      courses.find((course) => String(course.id) === String(selectedCourseId)) ||
-      null
-    );
-  }, [courses, selectedCourseId]);
+  const viewChoices = useMemo(() => buildRosterViewChoices(courses), [courses]);
+  const selectedChoice = viewChoices.find(choice => choice.courseId === String(selectedCourseId) && choice.scope === selectedScope)
+    || viewChoices.find(choice => choice.courseId === String(selectedCourseId));
+  const selectedCourse = selectedChoice ? {...selectedChoice.course, title:selectedChoice.label} : null;
 
   const printChoices = useMemo(() => buildRosterPrintChoices(courses), [courses]);
 
@@ -577,9 +578,12 @@ export default function ClassRosterPage() {
             </label>
             <select
               id="class-roster-course-select"
-              value={selectedCourseId}
+              value={selectedChoice?.key || ""}
               onChange={(event) => {
-                const nextCourseId = event.target.value;
+                const choice = viewChoices.find(item => item.key === event.target.value);
+                const nextCourseId = choice?.courseId || "";
+                const scope = choice?.scope || "section";
+                setSelectedScope(scope);
                 setSelectedCourseId(nextCourseId);
 
                 if (nextCourseId) {
@@ -587,7 +591,7 @@ export default function ClassRosterPage() {
                     "super-lms-class-roster-course-id",
                     nextCourseId
                   );
-                  setSearchParams({ courseId: nextCourseId });
+                  setSearchParams({ courseId: nextCourseId, scope });
                 } else {
                   window.localStorage.removeItem(
                     "super-lms-class-roster-course-id"
@@ -601,9 +605,9 @@ export default function ClassRosterPage() {
               <option value="">
                 {courses.length === 0 ? "No courses available" : "Select a course"}
               </option>
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.title}{course.master_course_id ? " — Cohort" : " — Master Class"}
+              {viewChoices.map((choice) => (
+                <option key={choice.key} value={choice.key}>
+                  {choice.label} — {choice.typeLabel}
                 </option>
               ))}
             </select>
