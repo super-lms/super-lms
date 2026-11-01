@@ -1,3 +1,4 @@
+import ClassLateSubmissionApproval from '../components/ClassLateSubmissionApproval';
 import PdfMarkup from "../components/PdfMarkup.jsx";
 import "./AssignmentSpeedGradingPage.css";
 import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
@@ -280,6 +281,7 @@ export default function AssignmentSpeedGradingPage() {
   const [understandScore, setUnderstandScore] = useState("");
   const [overallScore, setOverallScore] = useState("");
   const [pointsEarned, setPointsEarned] = useState("");
+  const [approvalRevision, setApprovalRevision] = useState(0);
   const [teacherFeedback, setTeacherFeedback] = useState("");
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [feedbackSaveMessage, setFeedbackSaveMessage] = useState("");
@@ -1487,6 +1489,7 @@ export default function AssignmentSpeedGradingPage() {
         {gradingLoadError ? <p role="alert">{gradingLoadError}</p> : null}
         {sectionLoadError ? <p role="alert">{sectionLoadError}</p> : null}
         <AssignmentBatchDownloads key={`${assignmentId}:${sectionId}`} assignmentId={assignmentId} sectionId={sectionId} />
+        <ClassLateSubmissionApproval key={`${assignmentId}:${sectionId}`} assignment={assignment} sectionId={sectionId || String(assignment?.cohort_id || assignment?.class_id || '')} classTitle={gradingSections.find(c => String(c.id) === String(sectionId || assignment?.cohort_id || assignment?.class_id))?.title || 'Selected class'} studentCount={rows.length} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow?.student_email); await loadStudentAttachments(selectedRow?.student_email); setApprovalRevision(value => value + 1); }} />
 
         {isOneScoreAssignment ? (
           <div
@@ -1947,7 +1950,7 @@ export default function AssignmentSpeedGradingPage() {
                     ) : null}
                   </div>
 
-                    <LateSubmissionApproval key={`${assignmentId}:${selectedRow.student_email}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow.student_email); await loadStudentAttachments(selectedRow.student_email); }} />
+                    <LateSubmissionApproval key={`${assignmentId}:${selectedRow.student_email}:${approvalRevision}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow.student_email); await loadStudentAttachments(selectedRow.student_email); }} />
 
                   <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
                     <strong>Submission:</strong>{" "}
