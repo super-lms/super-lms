@@ -1,8 +1,11 @@
+import {lateApprovalState} from '../services/lateApprovalVisibility';
 import {useEffect,useState} from 'react';
 import authFetch from '../services/authFetch';
 import {displayAssignmentTime} from '../services/assignmentTime';
 export default function LateSubmissionApproval({assignmentId,studentEmail,onApproved}){
  const [data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [now,setNow]=useState(Date.now);
+ useEffect(()=>{const refresh=()=>setNow(Date.now());const timer=setInterval(refresh,1000);window.addEventListener('focus',refresh);return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);};},[]);
  const url=`/api/assignments/${assignmentId}/late-submission?student_email=${encodeURIComponent(studentEmail||'')}`;
  useEffect(()=>{let active=true;setData(null);setError('');if(studentEmail)authFetch(url).then(async r=>{const b=await r.json();if(!r.ok)throw Error(b.error);if(active)setData(b);}).catch(e=>{if(active)setError(e.message);});return ()=>{active=false;};},[url,studentEmail]);
  async function change(){
@@ -33,8 +36,12 @@ export default function LateSubmissionApproval({assignmentId,studentEmail,onAppr
    const link=document.createElement('a');link.href=objectUrl;link.download=item.original_name;link.click();URL.revokeObjectURL(objectUrl);
   }catch(e){setError(e.message);}
  }
+ const visibility=lateApprovalState(data,now);
+ if(!data)return error?<p role="alert">{error}</p>:null;
+ if(visibility==='hidden')return null;
  return <section style={{border:'1px solid #d7dce5',borderRadius:12,padding:16,margin:'12px 0',background:'#fff'}}>
-  <h3>Past-due submission approval</h3>
+  <h3>{visibility==='previous_work'?'Previously held submission':'Past-due submission approval'}</h3>
+  {visibility==='previous_work'&&<p>The current deadline has not passed or has been removed. New submissions do not need late approval. The saved work below was held or declined earlier and still needs review.</p>}
   <p>Late work is saved and held until approved. Approval releases the saved work for marking; the student does not need to submit it again. The student can also resubmit after approval until you revoke it.</p>
   {error&&<p role="alert">{error}</p>}
   {data?<>

@@ -21,3 +21,16 @@ test('holding mode permits saving unapproved late work but read-aloud rejection 
  await assert.rejects(service.check(5,10), e=>e.code==='PAST_DUE');
  let next=false;await service.holdMiddleware({user:{id:10,role:'student'},params:{assignmentId:5}}, {status(){throw Error('Should not reject')}},()=>{next=true});assert.equal(next,true);
 });
+
+test('future-dated submissions pass without approval or being held',async()=>{
+ let permissionQueries=0;
+ const due=new Date(Date.now()+86400000).toISOString();
+ const pool={async query(sql){
+  if(sql.startsWith('SELECT id,due_date'))return {rows:[{id:5,due_date:due}]};
+  if(sql.startsWith('SELECT * FROM assignment_late_permissions'))permissionQueries++;
+  return {rows:[]};
+ }};
+ const service=createSubmissionDeadline(pool);
+ assert.deepEqual(await service.check(5,10,{hold:true}),{late:false});
+ assert.equal(permissionQueries,0);
+});
