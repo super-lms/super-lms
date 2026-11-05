@@ -1,3 +1,4 @@
+import SelfStudyPage from "./pages/SelfStudyPage.jsx";
 import StockGamePage from "./pages/StockGamePage.jsx";
 import FitnessTrackerPage from "./pages/FitnessTrackerPage.jsx";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -179,6 +180,7 @@ function App() {
         <Route path="/admin/class-rosters" element={<ClassRosterPage />} />
         <Route path="/admin/quick-enrollment" element={<AdminQuickEnrollmentPage />} />
         <Route path="/admin/calendar" element={<SchoolCalendarPage />} />
+        <Route path="/admin/self-study" element={<SelfStudyPage />} />
         <Route path="/admin/stock-game" element={<StockGamePage />} />
         <Route path="/admin/fitness-tracker" element={<FitnessTrackerPage />} />
         <Route path="/admin/gradebooks" element={<AdminGradebooksPage />} />
@@ -230,6 +232,8 @@ function App() {
       />
 
       <Route path="/announcements" element={<ProtectedRoute allowedRoles={["admin", "teacher", "student"]}><AnnouncementsPage /></ProtectedRoute>} />
+
+      <Route path="/self-study" element={<ProtectedRoute allowedRoles={["admin", "teacher", "observer", "parent", "student"]}><SelfStudyPage /></ProtectedRoute>} />
 
       <Route
         path="/calendar"

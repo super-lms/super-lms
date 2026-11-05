@@ -1501,6 +1501,7 @@ export default function StudentDashboardPage() {
               <div style={{ fontSize: "0.8rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: "8px" }}>Portal Menu</div>
               <button type="button" onClick={() => navigate("/announcements")} style={portalMenuButtonStyle(false)}>Announcements</button>
               <button type="button" onClick={() => navigate("/calendar")} style={portalMenuButtonStyle(false)}>Calendar</button>
+              <button type="button" onClick={() => navigate("/self-study")} style={portalMenuButtonStyle(false)}>Self-study iPads</button>
               {[
                 ["dashboard", "Dashboard"],
                 ["due", "Current Assignments Due"],

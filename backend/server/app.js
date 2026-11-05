@@ -64,6 +64,7 @@ app.use('/api/assignments',require('./routes/readAloudRoutes').createReadAloudRo
 app.use('/api/stock-game',require('./routes/stockGameRoutes').createStockGameRouter(pool));
 app.use('/api/fitness',require('./routes/fitnessRoutes').createFitnessRouter(pool));
 app.use('/api/feedback-files',require('./routes/feedbackFileRoutes').createFeedbackFileRouter(pool));
+app.use('/api/self-study',require('./routes/selfStudyRoutes').createSelfStudyRouter(pool));
 app.use('/api/admin/grade-export',require('./schoolGradeExport').createSchoolGradeExportRouter(pool));
 app.use('/api/admin/risk-alerts',require('./routes/adminRiskRoutes').createAdminRiskRouter(pool));
 app.use("/api", (req, res, next) => {

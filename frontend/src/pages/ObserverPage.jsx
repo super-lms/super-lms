@@ -881,6 +881,10 @@ export default function ObserverPage() {
             <option value="zh">{t.chinese}</option>
           </select>
 
+          <button type="button" onClick={() => navigate("/self-study")} style={logoutButtonStyle}>
+            {language === "zh" ? "自习 iPad 通知" : "Self-study iPads"}
+          </button>
+
           <button type="button" onClick={() => navigate("/calendar")} style={logoutButtonStyle}>
             {language === "zh" ? "学校日历" : "School Calendar"}
           </button>

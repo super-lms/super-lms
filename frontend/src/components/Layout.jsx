@@ -181,6 +181,7 @@ export default function Layout() {
     if (location.pathname === "/fitness-tracker") return "Fitness Unit Tracker"
     if (location.pathname.endsWith("/attendance")) return "Attendance"
     if (location.pathname === "/calendar") return "School Calendar"
+    if (location.pathname === "/self-study") return "Self-study iPads"
 
     if (location.pathname === "/student") return "My Learning"
     if (location.pathname === "/student-progress") return "My Progress"
@@ -335,6 +336,7 @@ export default function Layout() {
             <NavItem to="/calendar" style={getNavLinkStyle("/calendar")} icon={CalendarDays}>
               School Calendar
             </NavItem>
+            <NavItem to="/self-study" style={getNavLinkStyle("/self-study")} icon={CalendarDays}>Self-study iPads</NavItem>
 
             <div
               style={{
@@ -377,6 +379,7 @@ export default function Layout() {
             <NavItem to="/calendar" style={getNavLinkStyle("/calendar")} icon={CalendarDays}>
               School Calendar
             </NavItem>
+            <NavItem to="/self-study" style={getNavLinkStyle("/self-study")} icon={CalendarDays}>Self-study iPads</NavItem>
 
             <div
               style={{

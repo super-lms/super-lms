@@ -68,6 +68,7 @@ export default function AdminLayout() {
     if (location.pathname === "/admin/class-rosters") return "Class Rosters"
     if (location.pathname === "/admin/quick-enrollment") return "Quick Student Enrollment"
     if (location.pathname === "/admin/calendar") return "School Calendar"
+    if (location.pathname === "/admin/self-study") return "Self-study iPads"
     if (location.pathname === "/admin/departments") return "Departments"
     if (location.pathname === "/admin/stock-game") return "Stock Market Game"
     if (location.pathname === "/admin/fitness-tracker") return "Fitness Unit Tracker"
@@ -163,6 +164,7 @@ export default function AdminLayout() {
           <NavItem to="/admin/calendar" style={getNavLinkStyle("/admin/calendar")} icon={CalendarDays}>
             School Calendar
           </NavItem>
+          <NavItem to="/admin/self-study" style={getNavLinkStyle("/admin/self-study")} icon={CalendarDays}>Self-study iPads</NavItem>
           <NavItem to="/admin/departments" style={getNavLinkStyle("/admin/departments")} icon={Building2}>
             Departments
           </NavItem>

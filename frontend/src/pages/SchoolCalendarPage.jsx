@@ -158,6 +158,7 @@ export default function SchoolCalendarPage() {
         </div>
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" onClick={() => navigate(String(user?.role).toLowerCase() === "parent" ? "/parent" : String(user?.role).toLowerCase() === "observer" ? "/observer" : String(user?.role).toLowerCase() === "student" ? "/student" : "/dashboard")} style={secondaryButtonStyle}>Back to portal</button>
+          <button type="button" onClick={() => navigate(isAdmin ? "/admin/self-study" : "/self-study")} style={secondaryButtonStyle}>Self-study iPads · 自习 iPad 通知</button>
           {isAdmin ? <button type="button" onClick={() => openNewEvent()} style={primaryButtonStyle}><Plus size={17} /> New event</button> : null}
         </div>
       </div>
