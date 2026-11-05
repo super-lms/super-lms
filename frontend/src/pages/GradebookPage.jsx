@@ -10,7 +10,7 @@ import authFetch from "../services/authFetch";
 import { groupCoursesByMaster } from "../services/courseSections.js";
 import { speedGradingPath } from "../services/gradebookNavigation.js";
 
-import { getPointsPossible, getEarnedPoints, pointsToPercentage, isExcusedMark, isExcusedEntry } from "../services/gradebookMarks.js";
+import { getPointsPossible, getEarnedPoints, pointsToPercentage, isExcusedMark, isExcusedEntry, fillAssignmentPercentage } from "../services/gradebookMarks.js";
 
 const QUICK_SCORES = [1, 2, 3, 4, 5, 6];
 
@@ -146,6 +146,8 @@ export default function GradebookPage() {
   const [status, setStatus] = useState("Loading classes...");
   const [draftScores, setDraftScores] = useState({});
   const [spreadsheetMarkDrafts, setSpreadsheetMarkDrafts] = useState({});
+  const [columnFillPercentages, setColumnFillPercentages] = useState({});
+  const [columnFillMessages, setColumnFillMessages] = useState({});
   const [savingKey, setSavingKey] = useState("");
   const [cellSaveStatus, setCellSaveStatus] = useState({});
   const [expandedCompetencyStudents, setExpandedCompetencyStudents] = useState({});
@@ -427,6 +429,23 @@ export default function GradebookPage() {
     } finally {
       spreadsheetSavesRef.current.delete(key);
       setSavingKey("");
+    }
+  }
+
+  function fillSpreadsheetColumn(assignment) {
+    if (columnSaveRef.current || spreadsheetSavesRef.current.size) return;
+    try {
+      const updates = fillAssignmentPercentage(
+        spreadsheetStudents, assignment, spreadsheetMarkDrafts, columnFillPercentages[assignment.id]
+      );
+      setSpreadsheetMarkDrafts(current => ({ ...current, ...updates }));
+      setCellSaveStatus(current => ({
+        ...current, ...Object.fromEntries(Object.keys(updates).map(key => [key, "Editing..."]))
+      }));
+      setColumnFillMessages(current => ({ ...current, [assignment.id]:
+        `${Object.keys(updates).length} marks filled. EX kept. Review, then Save all.` }));
+    } catch (error) {
+      setColumnFillMessages(current => ({ ...current, [assignment.id]: error.message }));
     }
   }
 
@@ -1267,6 +1286,46 @@ export default function GradebookPage() {
                           </div>
                           <div style={spreadsheetAssignmentMetaStyle}>
                             <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not assigned"}
+                          </div>
+                          <div
+                            style={{ marginTop: "10px" }}
+                            onDragStart={event => event.stopPropagation()}
+                            onKeyDown={event => {
+                              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                                event.preventDefault();
+                                if (!event.repeat) fillSpreadsheetColumn(assignment);
+                              }
+                            }}
+                          >
+                            <label style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
+                              Fill all with
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="any"
+                                aria-label={`Fill percentage for ${assignment.title || "assignment"}`}
+                                value={columnFillPercentages[assignment.id] ?? ""}
+                                disabled={savingColumn !== null || spreadsheetSavesRef.current.size > 0}
+                                onChange={event => {
+                                  setColumnFillPercentages(current => ({ ...current, [assignment.id]: event.target.value }));
+                                  setColumnFillMessages(current => ({ ...current, [assignment.id]: "" }));
+                                }}
+                                style={{ width: "65px", padding: "5px", border: "1px solid #94a3b8", borderRadius: "5px" }}
+                              />
+                              %
+                            </label>
+                            <button
+                              type="button"
+                              disabled={savingColumn !== null || spreadsheetSavesRef.current.size > 0}
+                              onClick={() => fillSpreadsheetColumn(assignment)}
+                              style={spreadsheetEditMarkButtonStyle}
+                            >
+                              Fill all
+                            </button>
+                            {columnFillMessages[assignment.id] ? (
+                              <div role="status" style={spreadsheetMarkStatusStyle}>{columnFillMessages[assignment.id]}</div>
+                            ) : null}
                           </div>
                         </th>
                       ))}

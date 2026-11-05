@@ -71,3 +71,22 @@ test('EX displays instead of zero or blank, exports as EX, and is case insensiti
   for (const value of ['', 0, '0', null, 'EXTRA']) assert.equal(isExcusedEntry(value), false);
   assert.equal(isExcusedMark({ score: 0 }), false);
 });
+
+test('column fill converts percentages to points while preserving EX and other columns', async () => {
+  const { fillAssignmentPercentage } = await import('./gradebookMarks.js');
+  const students = [
+    { student_email: 'a', assignment_scores: [{ assignment_id: 1, score: 50 }] },
+    { student_email: 'b', assignment_scores: [{ assignment_id: 1, score: null, rubric_selection: { excused: true } }] },
+    { student_email: 'c', assignment_scores: [{ assignment_id: 1, score: 75 }] },
+    { student_email: 'other-cohort', assignment_scores: [] },
+  ];
+  const drafts = { 'c:1': 'ex', 'a:2': '8' };
+  const assignment = { id: 1, points_possible: 20 };
+  assert.deepEqual(fillAssignmentPercentage(students, assignment, drafts, '80'), { 'a:1': '16' });
+  assert.deepEqual(drafts, { 'c:1': 'ex', 'a:2': '8' });
+  assert.deepEqual(fillAssignmentPercentage(students, assignment, drafts, '0'), { 'a:1': '0' });
+  assert.deepEqual(fillAssignmentPercentage(students, { ...assignment, points_possible: 14 }, {}, '87.5'), { 'a:1': '12.25', 'c:1': '12.25' });
+  for (const invalid of ['', ' ', undefined, null, -1, 101, 'EX', Infinity]) {
+    assert.throws(() => fillAssignmentPercentage(students, assignment, {}, invalid), /percentage from 0 to 100/);
+  }
+});

@@ -32,3 +32,22 @@ export function pointsToPercentage(value, assignment) {
   }
   return points / total * 100;
 }
+
+export function fillAssignmentPercentage(students, assignment, drafts, value) {
+  const percentage = Number(value);
+  if (value === null || value === undefined || String(value).trim() === "" ||
+      !Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+    throw new Error("Enter a percentage from 0 to 100");
+  }
+  const points = Number((percentage * getPointsPossible(assignment) / 100).toPrecision(12));
+  const updates = {};
+  for (const student of students) {
+    const match = (student.assignment_scores || []).find(item => Number(item.assignment_id) === Number(assignment.id));
+    // A shared gradebook can include students outside this assignment's cohort.
+    if (!match) continue;
+    const key = `${student.student_email}:${assignment.id}`;
+    if (isExcusedEntry(drafts[key] ?? getEarnedPoints(assignment, match))) continue;
+    updates[key] = String(points);
+  }
+  return updates;
+}
