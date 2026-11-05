@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import authFetch from "../services/authFetch";
+import { FormattedText } from "../components/RichText";
 
 function toArray(value) {
   return Array.isArray(value) ? value : [];
@@ -536,7 +537,19 @@ export default function AttendancePage() {
                 </DetailCard>
 
                 <DetailCard title="Description">
-                  <div>{classInfo.description || "No class description"}</div>
+                  {classInfo.description ? (
+                    <details key={selectedClassId}>
+                      <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+                        View class description
+                      </summary>
+                      <FormattedText
+                        value={classInfo.description}
+                        style={{ maxHeight: "180px", overflowY: "auto", marginTop: "10px" }}
+                      />
+                    </details>
+                  ) : (
+                    <div>No class description</div>
+                  )}
                 </DetailCard>
               </div>
             </section>
