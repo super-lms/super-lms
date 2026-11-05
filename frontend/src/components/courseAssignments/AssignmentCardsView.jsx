@@ -1,3 +1,5 @@
+import AssignmentCard from "../AssignmentCard.jsx"
+
 export default function AssignmentCardsView({
   assignments,
   movingAssignmentId,
@@ -16,8 +18,12 @@ export default function AssignmentCardsView({
   return (
     <div style={assignmentGridStyle}>
       {assignments.map((assignment) => (
-        <div key={assignment.id} style={assignmentCardStyle}>
-          <h3 style={{ marginTop: 0 }}>{assignment.title || "Untitled Assignment"}</h3>
+        <AssignmentCard
+          key={assignment.id}
+          title={assignment.title || "Untitled Assignment"}
+          compact={getStatusLabel(assignment) === "Completed"}
+          style={assignmentCardStyle}
+        >
 
           <div style={statusPillStyle}>{getStatusLabel(assignment)}</div>
 
@@ -96,7 +102,7 @@ export default function AssignmentCardsView({
               {String(deletingAssignmentId) === String(assignment.id) ? "Deleting..." : "Delete"}
             </button>
           </div>
-        </div>
+        </AssignmentCard>
       ))}
     </div>
   )
