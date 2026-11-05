@@ -10,17 +10,19 @@ import authFetch from "../services/authFetch";
 import { groupCoursesByMaster } from "../services/courseSections.js";
 import { speedGradingPath } from "../services/gradebookNavigation.js";
 
-import { getPointsPossible, getEarnedPoints, pointsToPercentage } from "../services/gradebookMarks.js";
+import { getPointsPossible, getEarnedPoints, pointsToPercentage, isExcusedMark, isExcusedEntry } from "../services/gradebookMarks.js";
 
 const QUICK_SCORES = [1, 2, 3, 4, 5, 6];
 
 function formatPercent(value) {
+  if (value === null || value === undefined || value === "") return "—";
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return "—";
   return `${numberValue.toFixed(1)}%`;
 }
 
 function getProficiency(value) {
+  if (value === null || value === undefined || value === "") return "Not graded";
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue)) return "Not graded";
   if (numberValue >= 86) return "Extending";
@@ -366,9 +368,10 @@ export default function GradebookPage() {
     const nextStudent = spreadsheetStudents[studentIndex + 1];
     const nextKey = nextStudent ? getDraftKey(nextStudent.student_email, assignment.id) : null;
     const rawMark = spreadsheetMarkDrafts[key] ?? getEarnedPoints(assignment, match);
+    const excused = isExcusedEntry(rawMark);
     let percentage;
     try {
-      percentage = pointsToPercentage(rawMark, assignment);
+      percentage = excused ? null : pointsToPercentage(rawMark, assignment);
     } catch (error) {
       setCellSaveStatus((current) => ({ ...current, [key]: error.message }));
       return;
@@ -385,7 +388,7 @@ export default function GradebookPage() {
         body: JSON.stringify({
           student_email: student.student_email,
           overallScore: percentage,
-          pointsEarned: Number(rawMark),
+          ...(excused ? { excused: true } : { pointsEarned: Number(rawMark) }),
           directPercentage: true,
         }),
       });
@@ -526,13 +529,13 @@ export default function GradebookPage() {
         (item) => item.assignment_id === assignment.id
       );
 
-      return !match || match.score === null || match.score === undefined;
+      return !isExcusedMark(match) && (!match || match.score === null || match.score === undefined);
     });
   }
 
   function getStudentAssignmentSummary(student) {
     const graded = (student?.assignment_scores || []).filter((item) =>
-      Number.isFinite(Number(item.score))
+      !isExcusedMark(item) && item.score !== null && item.score !== undefined && Number.isFinite(Number(item.score))
     );
 
     if (graded.length === 0) {
@@ -550,7 +553,7 @@ export default function GradebookPage() {
 
   function getStudentKduSummary(student) {
     const scored = (student?.assignment_scores || []).filter(
-      (item) => item.rubric_selection
+      (item) => item.rubric_selection && !isExcusedMark(item)
     );
 
     if (scored.length === 0) {
@@ -689,7 +692,7 @@ export default function GradebookPage() {
           const match = (student.assignment_scores || []).find((item) => item.assignment_id === assignment.id);
           return getEarnedPoints(assignment, match);
         }),
-        Number.isFinite(Number(student.current_percent)) ? Number(student.current_percent) : "",
+        student.current_percent !== null && student.current_percent !== undefined && Number.isFinite(Number(student.current_percent)) ? Number(student.current_percent) : "",
       ]),
     ];
     const workbook = XLSX.utils.book_new();
@@ -1097,7 +1100,7 @@ export default function GradebookPage() {
           <section className="panel">
             <h2>Spreadsheet Gradebook{allSections ? " — All sections" : ""}</h2>
             <p className="section-subtitle">
-              Enter the points earned, then press Enter to save and move to the next student in the same column. Use Save all at the bottom of a column to save any remaining edits. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading.
+              Enter the points earned, then press Enter to save and move to the next student in the same column. Use Save all at the bottom of a column to save any remaining edits. Course grades are calculated automatically as percentages. Assignment headings open Speed Grading. Type EX or choose Excused for a medical or other approved excuse; excused assessments are excluded from grade calculations. Save with Enter or Save all.
             </p>
 
             <div style={spreadsheetToolbarStyle}>
@@ -1297,7 +1300,8 @@ export default function GradebookPage() {
                                     if (node) spreadsheetInputsRef.current[markKey] = node;
                                     else delete spreadsheetInputsRef.current[markKey];
                                   }}
-                                  type="number"
+                                  type="text"
+                                  inputMode="text"
                                   readOnly={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
                                   onKeyDown={(event) => {
                                     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
@@ -1305,9 +1309,6 @@ export default function GradebookPage() {
                                     if (event.repeat) return;
                                     saveSpreadsheetMark(student, assignment, match, true);
                                   }}
-                                  min="0"
-                                  max={getPointsPossible(assignment)}
-                                  step="any"
                                   value={spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match)}
                                   onChange={(event) => {
                                     const value = event.target.value;
@@ -1318,6 +1319,18 @@ export default function GradebookPage() {
                                   aria-label={`${student.student_name} mark for ${assignment.title || "assignment"}, out of ${getPointsPossible(assignment)}` }
                                 />
                                 <span>/ {getPointsPossible(assignment)}</span>
+                                <select
+                                  aria-label={`${student.student_name} assessment status for ${assignment.title || "assignment"}`}
+                                  value={isExcusedEntry(spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match)) ? "EX" : "score"}
+                                  disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
+                                  onChange={(event) => {
+                                    setSpreadsheetMarkDrafts((current) => ({ ...current, [markKey]: event.target.value === "EX" ? "EX" : "" }));
+                                    setCellSaveStatus((current) => ({ ...current, [markKey]: "Editing..." }));
+                                  }}
+                                >
+                                  <option value="score">Score</option>
+                                  <option value="EX">EX — Excused</option>
+                                </select>
                               </div>
                               {cellSaveStatus[markKey] ? (
                                 <div style={spreadsheetMarkStatusStyle}>{cellSaveStatus[markKey]}</div>
@@ -1809,7 +1822,7 @@ export default function GradebookPage() {
                                 return (
                                   <td key={assignment.id} style={{ minWidth: "260px" }}>
                                     <div style={{ fontWeight: 700, marginBottom: "10px" }}>
-                                      Saved: {formatPercent(match?.score)}
+                                      Saved: {isExcusedMark(match) ? "EX — Excused" : formatPercent(match?.score)}
                                     </div>
 
                                     <div style={{ display: "grid", gap: "14px" }}>
@@ -2210,6 +2223,7 @@ const spreadsheetEditMarkButtonStyle = {
 
 const spreadsheetMarkEntryStyle = {
   display: "flex",
+  flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "center",
   gap: "0.25rem",

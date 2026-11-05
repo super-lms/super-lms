@@ -61,3 +61,13 @@ test('server validates raw marks including blanks and fractional marks', async (
   assert.equal(calculateRawMark(0, 14).percentage, 0);
   assert.equal(calculateRawMark(14, 14).percentage, 100);
 });
+
+test('EX displays instead of zero or blank, exports as EX, and is case insensitive on entry', async () => {
+  const { isExcusedMark, isExcusedEntry } = await import('./gradebookMarks.js');
+  const mark = { score: null, rubric_selection: { excused: true } };
+  assert.equal(isExcusedMark(mark), true);
+  assert.equal(getEarnedPoints({ points_possible: 20 }, mark), 'EX');
+  for (const value of ['EX', 'ex', ' Ex ']) assert.equal(isExcusedEntry(value), true);
+  for (const value of ['', 0, '0', null, 'EXTRA']) assert.equal(isExcusedEntry(value), false);
+  assert.equal(isExcusedMark({ score: 0 }), false);
+});

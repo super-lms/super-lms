@@ -8014,6 +8014,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     let overallScore = req.body.overallScore === null || req.body.overallScore === undefined
       ? null
       : Number(req.body.overallScore);
+    const excused = req.body.excused === true;
     const hasPointsEarned = Object.prototype.hasOwnProperty.call(req.body, "pointsEarned");
     const directPercentage = req.body.directPercentage === true || hasPointsEarned;
     const hasTeacherFeedback = Object.prototype.hasOwnProperty.call(req.body, "feedback");
@@ -8056,7 +8057,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
 
     const assignment = assignmentResult.rows[0];
     let rawMark = null;
-    if (hasPointsEarned) {
+    if (hasPointsEarned && !excused) {
       try {
         rawMark = require("./rawMark").calculateRawMark(req.body.pointsEarned, assignment.points_possible);
         overallScore = rawMark.percentage;
@@ -8093,7 +8094,13 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
     let saveFeedback;
     let saveContent;
 
-    if (directPercentage && !(rawMark && isSingleScoreKdu && req.body.directPercentage !== true)) {
+    if (excused) {
+      rubricSelection = { excused: true };
+      weightedScore = null;
+      percentScore = null;
+      saveFeedback = "Excused assessment — excluded from grade calculations.";
+      saveContent = "Teacher-entered excused assessment.";
+    } else if (directPercentage && !(rawMark && isSingleScoreKdu && req.body.directPercentage !== true)) {
       if (!Number.isFinite(overallScore) || overallScore < 0 || overallScore > 100) {
         return res.status(400).json({ error: "Percentage mark must be between 0 and 100" });
       }
@@ -8253,7 +8260,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
         `,
         [
           percentScore,
-          `${percentScore}%`,
+          excused ? "EX" : `${percentScore}%`,
           feedbackToSave,
           rubricSelection,
           existingResult.rows[0].id,
@@ -8295,7 +8302,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
           "teacher-entered-kdu-score",
           saveContent,
           percentScore,
-          `${percentScore}%`,
+          excused ? "EX" : `${percentScore}%`,
           feedbackToSave,
           rubricSelection,
         ]

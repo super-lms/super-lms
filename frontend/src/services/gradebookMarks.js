@@ -1,9 +1,18 @@
+export function isExcusedMark(match) {
+  return match?.rubric_selection?.excused === true;
+}
+
+export function isExcusedEntry(value) {
+  return typeof value === "string" && value.trim().toUpperCase() === "EX";
+}
+
 export function getPointsPossible(assignment) {
   const total = Number(assignment?.points_possible);
   return Number.isFinite(total) && total > 0 ? total : 100;
 }
 
 export function getEarnedPoints(assignment, match) {
+  if (isExcusedMark(match)) return "EX";
   if (match?.score === null || match?.score === undefined || match.score === "") return "";
   const rubric = match?.rubric_selection || {};
   if (rubric.pointsEarned !== null && rubric.pointsEarned !== undefined && rubric.pointsEarned !== "" &&

@@ -1,5 +1,5 @@
 const email = value => String(value || '').trim().toLowerCase();
-const graded = row => row.score !== null && row.score !== undefined && row.score !== '' && Number.isFinite(Number(row.score));
+const graded = row => row.rubric_selection?.excused === true || row.score !== null && row.score !== undefined && row.score !== '' && Number.isFinite(Number(row.score));
 function gradebookSubmissionIndex(rows) {
  const byStudent=new Map(), legacyByEmail=new Map();
  // A later blank duplicate must not erase an existing mark; among marked records use the latest ID.
