@@ -1273,22 +1273,8 @@ export default function GradebookPage() {
                           >
                             {assignment.title || "Untitled Assignment"}
                           </button>
-                          <div style={spreadsheetAssignmentMetaStyle}>
-                            {assignment.due_date
-                              ? `Due ${displayAssignmentTime(assignment.due_date)}`
-                              : "No due date"}
-                          </div>
                           <div
-                            style={spreadsheetAssignmentPathwayStyle}
-                            title={assignment.category_name || "No assessment pathway"}
-                          >
-                            {assignment.category_name || "No assessment pathway"}
-                          </div>
-                          <div style={spreadsheetAssignmentMetaStyle}>
-                            <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not assigned"}
-                          </div>
-                          <div
-                            style={{ marginTop: "10px" }}
+                            style={{ marginTop: "8px", marginBottom: "10px", padding: "10px", border: "1px solid #93c5fd", borderRadius: "8px", background: "#eff6ff", color: "#172033" }}
                             onDragStart={event => event.stopPropagation()}
                             onKeyDown={event => {
                               if (event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -1311,7 +1297,8 @@ export default function GradebookPage() {
                                   setColumnFillPercentages(current => ({ ...current, [assignment.id]: event.target.value }));
                                   setColumnFillMessages(current => ({ ...current, [assignment.id]: "" }));
                                 }}
-                                style={{ width: "65px", padding: "5px", border: "1px solid #94a3b8", borderRadius: "5px" }}
+                                placeholder="%"
+                                style={{ width: "65px", padding: "7px", background: "#ffffff", color: "#111827", border: "1px solid #64748b", borderRadius: "5px" }}
                               />
                               %
                             </label>
@@ -1327,6 +1314,21 @@ export default function GradebookPage() {
                               <div role="status" style={spreadsheetMarkStatusStyle}>{columnFillMessages[assignment.id]}</div>
                             ) : null}
                           </div>
+                          <div style={spreadsheetAssignmentMetaStyle}>
+                            {assignment.due_date
+                              ? `Due ${displayAssignmentTime(assignment.due_date)}`
+                              : "No due date"}
+                          </div>
+                          <div
+                            style={spreadsheetAssignmentPathwayStyle}
+                            title={assignment.category_name || "No assessment pathway"}
+                          >
+                            {assignment.category_name || "No assessment pathway"}
+                          </div>
+                          <div style={spreadsheetAssignmentMetaStyle}>
+                            <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not assigned"}
+                          </div>
+
                         </th>
                       ))}
                       <th style={spreadsheetSummaryHeaderStyle}>Current Grade</th>
