@@ -117,6 +117,31 @@ function DetailCard({ title, children }) {
   )
 }
 
+function AssignmentCard({ title, compact, children }) {
+  if (!compact) return <DetailCard title={title}>{children}</DetailCard>
+
+  return (
+    <details style={{
+      gridColumn: "1 / -1",
+      border: "1px solid #d7dce5",
+      borderRadius: "12px",
+      padding: "12px 14px",
+      background: "#ffffff",
+    }}>
+      <summary
+        title="Expand or collapse assignment details"
+        style={{ cursor: "pointer", lineHeight: 1.6, overflowWrap: "anywhere" }}
+      >
+        <strong>{title}</strong>
+        <span style={{ marginLeft: "12px", color: "#166534", fontSize: "0.85rem", fontWeight: 700 }}>
+          All submissions marked
+        </span>
+      </summary>
+      <div style={{ marginTop: "12px" }}>{children}</div>
+    </details>
+  )
+}
+
 function FieldLabel({ children }) {
   return (
     <label style={{ display: "block", fontSize: "0.92rem", fontWeight: 700, marginBottom: "6px" }}>
@@ -2194,7 +2219,11 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                           const statusLabel = getAssignmentStatusLabel(assignment, classStudentCount)
 
                           return (
-                            <DetailCard key={assignment.id} title={assignment.title}>
+                            <AssignmentCard
+                              key={`${selectedClassId}:${assignment.id}`}
+                              title={assignment.title}
+                              compact={Boolean(sectionCounts) && statusLabel === "Completed" && !isEditing}
+                            >
                               <div style={{ display: "grid", gap: "8px" }}>
                                 <StatusPill label={statusLabel} />
                                 <div
@@ -2294,7 +2323,7 @@ Quiz 1,Writing,Major Assessments,2026-04-01,First imported assignment`}
                                   </div>
                                 ) : null}
                               </div>
-                            </DetailCard>
+                            </AssignmentCard>
                           )
                         })}
                       </div>
