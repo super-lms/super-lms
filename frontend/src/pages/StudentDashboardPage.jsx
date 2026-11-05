@@ -1,3 +1,4 @@
+import FeedbackFiles from "../components/FeedbackFiles.jsx";
 import {PdfFeedbackFiles} from "../components/PdfMarkup.jsx";
 import StudentAssignmentRubric from '../components/rubrics/StudentAssignmentRubric.jsx';
 import SubmissionDecisionMessages from "../components/SubmissionDecisionMessages.jsx"
@@ -249,6 +250,7 @@ function ResultCard({ assignment, submissionState, onOpen }) {
       <SavedTeacherRubric rubric={submission?.rubric_selection?.teacherRubric} overallPercent={submission?.rubric_selection?.overallScore} />
       <DetailCard title="Teacher Feedback">
         <PdfFeedbackFiles assignmentId={assignment?.id}/>
+        <FeedbackFiles key={`feedback-${assignment?.id}`} assignmentId={assignment?.id} />
         <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
           {submission?.feedback || "No feedback yet."}
         </div>
@@ -394,7 +396,7 @@ export function SubmissionEditor({
       {assignment?.submission_required !== false && <ReadAloudAssignment key={assignment?.id} assignmentId={assignment?.id} onModeChange={setReadAloudMode} />}
       {assignment?.submission_required === false ? <>
         <NoticeBox>No submission required. {existingScore === null || existingScore === undefined ? 'Awaiting teacher mark.' : `Published mark: ${existingScore}%.`}</NoticeBox>
-        <DetailCard title="Teacher Feedback"><div style={{whiteSpace: 'pre-wrap'}}>{existingFeedback || 'No feedback yet.'}</div></DetailCard>
+        <DetailCard title="Teacher Feedback"><div style={{whiteSpace: 'pre-wrap'}}>{existingFeedback || 'No feedback yet.'}</div><FeedbackFiles key={`feedback-${assignment?.id}`} assignmentId={assignment?.id} /></DetailCard>
       </> : readAloudMode === null ? <NoticeBox>Checking assignment type...</NoticeBox> : readAloudMode ? null : submissionLoading ? (
         <NoticeBox>Loading submission details...</NoticeBox>
       ) : (
@@ -513,6 +515,7 @@ export function SubmissionEditor({
 
             <DetailCard title="Teacher Feedback">
         <PdfFeedbackFiles assignmentId={assignment?.id}/>
+        <FeedbackFiles key={`feedback-${assignment?.id}`} assignmentId={assignment?.id} />
               <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5, color: "#374151" }}>
                 {existingFeedback || "No feedback yet."}
               </div>
@@ -1912,6 +1915,7 @@ export default function StudentDashboardPage() {
                           <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
                             {submission?.feedback || "No feedback yet."}
                           </div>
+                          <FeedbackFiles key={`feedback-${assignment.id}`} assignmentId={assignment.id} />
                         </td>
                       )
                     })}

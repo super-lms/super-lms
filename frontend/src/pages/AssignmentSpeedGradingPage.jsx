@@ -1,3 +1,4 @@
+import FeedbackFiles from "../components/FeedbackFiles.jsx";
 import ClassLateSubmissionApproval from '../components/ClassLateSubmissionApproval';
 import PdfMarkup from "../components/PdfMarkup.jsx";
 import "./AssignmentSpeedGradingPage.css";
@@ -2001,6 +2002,14 @@ export default function AssignmentSpeedGradingPage() {
                         {feedbackSaveMessage || `${teacherFeedback.length}/5000 characters`}
                       </span>
                     </div>
+
+                    <FeedbackFiles
+                      key={`${assignmentId}:${selectedRow.student_email}`}
+                      assignmentId={assignmentId}
+                      studentEmail={selectedRow.student_email}
+                      studentName={selectedRow.student_name}
+                      editable
+                    />
 
                     <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
                       <strong>Audio Feedback</strong>
