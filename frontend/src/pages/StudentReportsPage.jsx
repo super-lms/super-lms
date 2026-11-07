@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
-import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
+import { loadStudentCourses } from "../services/studentPortalData.js"
+import { loadStudentReport } from "../services/studentReport.js"
 
 function ActionButton({ children, onClick, quiet = false, type = "button" }) {
   return (
@@ -75,6 +77,8 @@ export default function StudentReportsPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
+  const reportRequest = useRef(0)
+  const [courseError, setCourseError] = useState(false)
   const [courses, setCourses] = useState([])
   const [selectedCourseId, setSelectedCourseId] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All Categories")
@@ -100,43 +104,9 @@ export default function StudentReportsPage() {
       }
 
       try {
-        const [coursesResponse, enrolledStudentsResponse] = await Promise.all([
-          fetch(`${API_BASE}/api/courses`),
-          fetch(`${API_BASE}/api/enrolled-students`),
-        ])
-
-        if (!coursesResponse.ok || !enrolledStudentsResponse.ok) {
-          throw new Error("Could not load courses.")
-        }
-
-        const [coursesData, enrolledStudentsData] = await Promise.all([
-          coursesResponse.json(),
-          enrolledStudentsResponse.json(),
-        ])
-
+        const visibleCourses = await loadStudentCourses(authFetch, studentEmail)
         if (!isMounted) return
-
-        const safeCourses = Array.isArray(coursesData) ? coursesData : []
-        const safeEnrolledStudents = Array.isArray(enrolledStudentsData)
-          ? enrolledStudentsData
-          : []
-
-        const visibleCourseIds = new Set(
-          safeEnrolledStudents
-            .filter((student) => {
-              const enrolledStudentEmail = String(student.student_email || "")
-                .trim()
-                .toLowerCase()
-              return enrolledStudentEmail === studentEmail
-            })
-            .map((student) => String(student.class_id || ""))
-            .filter((classId) => classId !== "")
-        )
-
-        const visibleCourses = safeCourses.filter((course) =>
-          visibleCourseIds.has(String(course.id))
-        )
-
+        setCourseError(false)
         setCourses(visibleCourses)
 
         if (visibleCourses.length > 0) {
@@ -162,7 +132,8 @@ export default function StudentReportsPage() {
 
         setCourses([])
         setSelectedCourseId("")
-        setMessage("Could not load courses.")
+        setCourseError(true)
+        setMessage("Could not load courses. Please try again.")
       } finally {
         if (!isMounted) return
         setLoadingCourses(false)
@@ -176,59 +147,32 @@ export default function StudentReportsPage() {
     }
   }, [user?.email])
 
-  const generateReport = () => {
-    const studentEmail = String(user?.email || "").trim().toLowerCase()
-    const studentName = String(user?.name || "").trim().toLowerCase()
+  useEffect(() => {
+    reportRequest.current += 1
+    setReports([])
+    setSelectedCategory("All Categories")
+    setSelectedLevel("All Levels")
+    setLoadingReports(false)
+    return () => { reportRequest.current += 1 }
+  }, [selectedCourseId, user?.email])
 
-    if (!selectedCourseId) {
-      setMessage("Please select a course first.")
-      setReports([])
-      return
-    }
-
+  const generateReport = async () => {
+    if (!selectedCourseId || loadingReports) return
+    const requestId = ++reportRequest.current
     setLoadingReports(true)
+    setReports([])
     setMessage("Loading report...")
-
-    fetch(`${API_BASE}/api/reports/${selectedCourseId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const reportRows = Array.isArray(data) ? data : []
-
-        const visibleRows = reportRows.filter((row) => {
-          const rowStudentEmail = String(row.student_email || "")
-            .trim()
-            .toLowerCase()
-          const rowStudentName = String(row.student_name || row.student || "")
-            .trim()
-            .toLowerCase()
-
-          if (studentEmail && rowStudentEmail) {
-            return rowStudentEmail === studentEmail
-          }
-
-          if (studentName && rowStudentName) {
-            return rowStudentName === studentName
-          }
-
-          return false
-        })
-
-        setReports(visibleRows)
-
-        if (visibleRows.length === 0) {
-          setMessage("No report data found for this course.")
-        } else {
-          setMessage("Report loaded.")
-        }
-
-        setLoadingReports(false)
-      })
-      .catch((err) => {
-        console.error("Error loading report:", err)
-        setReports([])
-        setMessage("Could not load report.")
-        setLoadingReports(false)
-      })
+    try {
+      const rows = await loadStudentReport(authFetch, user?.email, selectedCourseId)
+      if (requestId !== reportRequest.current) return
+      setReports(rows)
+      setMessage(rows.length ? "Report loaded." : "No report data found for this course.")
+    } catch (error) {
+      if (requestId !== reportRequest.current) return
+      setMessage(error.message || "Could not load report.")
+    } finally {
+      if (requestId === reportRequest.current) setLoadingReports(false)
+    }
   }
 
   const filteredReports = useMemo(() => {
@@ -331,7 +275,7 @@ export default function StudentReportsPage() {
         </p>
       </div>
 
-      <div className="content-area">
+      <div className="content-area student-portal">
         <section className="panel">
           <SectionHeader
             title="Student Report Tools"
@@ -352,7 +296,7 @@ export default function StudentReportsPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
               gap: "14px",
             }}
           >
@@ -381,16 +325,20 @@ export default function StudentReportsPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
               gap: "16px",
               marginBottom: "18px",
             }}
           >
             <div>
-              <label style={labelStyle}>Course</label>
+              <label htmlFor="student-report-course" style={labelStyle}>Course</label>
               <select
+                id="student-report-course"
                 value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedCourseId(e.target.value)
+                  setMessage("Select a course and generate your report.")
+                }}
                 style={inputStyle}
                 disabled={loadingCourses}
               >
@@ -406,8 +354,9 @@ export default function StudentReportsPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>Category</label>
+              <label htmlFor="student-report-category" style={labelStyle}>Category</label>
               <select
+                id="student-report-category"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 style={inputStyle}
@@ -421,8 +370,9 @@ export default function StudentReportsPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>Level</label>
+              <label htmlFor="student-report-level" style={labelStyle}>Level</label>
               <select
+                id="student-report-level"
                 value={selectedLevel}
                 onChange={(e) => setSelectedLevel(e.target.value)}
                 style={inputStyle}
@@ -437,20 +387,21 @@ export default function StudentReportsPage() {
           </div>
 
           <div style={{ display: "flex", gap: "12px", marginBottom: "14px", flexWrap: "wrap" }}>
-            <button onClick={generateReport} style={primaryButtonStyle}>
+            <button disabled={loadingCourses || loadingReports || !selectedCourseId || courseError} onClick={generateReport} style={primaryButtonStyle}>
               {loadingReports ? "Loading..." : "Generate My Report"}
             </button>
 
-            <button onClick={exportPdf} style={secondaryButtonStyle}>
+            <button disabled={loadingReports || filteredReports.length === 0} onClick={exportPdf} style={secondaryButtonStyle}>
               Export PDF
             </button>
 
-            <button onClick={exportCsv} style={secondaryButtonStyle}>
+            <button disabled={loadingReports || filteredReports.length === 0} onClick={exportCsv} style={secondaryButtonStyle}>
               Export CSV
             </button>
           </div>
 
-          <div style={{ fontSize: "16px", color: "#555" }}>{message}</div>
+          <div role="status" style={{ fontSize: "16px", color: "#555" }}>{message}</div>
+          {courseError ? <ActionButton quiet onClick={() => window.location.reload()}>Retry loading courses</ActionButton> : null}
         </section>
 
         <section className="panel">

@@ -17,7 +17,7 @@ test('late work storage and approval against a disposable PostgreSQL database',{
   await pool.query(`CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT,email TEXT,first_name TEXT,last_name TEXT);
    CREATE TABLE courses(id INTEGER PRIMARY KEY,teacher_id INTEGER,master_course_id INTEGER,title TEXT);
    CREATE TABLE class_enrollments(class_id INTEGER,student_user_id INTEGER);CREATE TABLE course_teachers(course_id INTEGER,teacher_id INTEGER);
-   CREATE TABLE assignments(id INTEGER PRIMARY KEY,teacher_id INTEGER,class_id INTEGER,title TEXT,due_date TIMESTAMPTZ,cohort_id INTEGER);
+   CREATE TABLE assignments(id INTEGER PRIMARY KEY,teacher_id INTEGER,class_id INTEGER,title TEXT,due_date TIMESTAMPTZ,cohort_id INTEGER,submission_required BOOLEAN DEFAULT TRUE);
    CREATE TABLE submissions(id SERIAL PRIMARY KEY,assignment_id INTEGER,student_id INTEGER,teacher_id INTEGER,course_id INTEGER,
     assignment_title TEXT,student_name TEXT,student_email TEXT,original_file_name TEXT,stored_file_name TEXT,file_path TEXT,content TEXT,feedback TEXT,score NUMERIC);
    CREATE TABLE submission_attachments(id SERIAL PRIMARY KEY,submission_id INTEGER,assignment_id INTEGER,student_email TEXT,original_name TEXT,

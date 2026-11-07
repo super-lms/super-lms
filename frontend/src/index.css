@@ -478,6 +478,10 @@ tbody > tr > td { background-color: inherit; }
 .student-portal button[aria-current="page"] {
   border-left: 4px solid #1d4ed8 !important;
 }
+.student-portal button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .student-portal .student-coach > div {
   max-height: calc(100dvh - 120px);
   overflow-y: auto;

@@ -13065,7 +13065,7 @@ app.post("/api/classes/:classId/seed-rubric-demo", authenticateJWT, requireRole(
 /* REPORTS API - CURRENT KDU STRUCTURE */
 app.use('/api/classes', require('./routes/reportCardRoutes')({pool,authenticateJWT,requireRole,ensureStudentInfoColumns,ensureStudentReportCommentsTable}));
 
-app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+async function generateCourseReport(req, res) {
   try {
     const courseId = Number(req.params.courseId);
     const {
@@ -13074,7 +13074,7 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
       categoryName = "",
       levelName = "",
       reportScope = "student",
-    } = req.query;
+    } = req.studentReportFilters || req.query;
 
     if (!courseId) {
       return res.status(400).json({ error: "Valid courseId is required" });
@@ -13112,9 +13112,10 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
       JOIN users u
         ON u.id = ce.student_user_id
       WHERE ce.class_id = $1
+        ${req.studentReportUserId ? "AND u.id = $2" : ""}
       ORDER BY u.first_name ASC, u.last_name ASC, u.email ASC
       `,
-      [courseId]
+      req.studentReportUserId ? [courseId, req.studentReportUserId] : [courseId]
     );
 
     const assignmentsResult = await pool.query(
@@ -13161,9 +13162,10 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
       JOIN assignments a
         ON a.id = s.assignment_id
       WHERE a.class_id = $1
+        ${req.studentReportUserId ? "AND (s.student_id = $2 OR LOWER(s.student_email) = $3)" : ""}
       ORDER BY s.id ASC
       `,
-      [contentCourseId]
+      req.studentReportUserId ? [contentCourseId, req.studentReportUserId, req.studentReportFilters.studentEmail] : [contentCourseId]
     );
 
     const submissionsByStudentAssignment = new Map();
@@ -13359,7 +13361,11 @@ app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher
     console.error("GET /api/reports/:courseId failed:", error);
     return res.status(500).json({ error: "Failed to generate report data" });
   }
-});
+}
+
+app.get("/api/reports/:courseId", authenticateJWT, requireRole("admin", "teacher"), generateCourseReport);
+app.get("/api/students/:studentEmail/courses/:courseId/report", authenticateJWT, requireRole("student"),
+  require("./studentCourseReport").createStudentReportHandler({ pool, generateReport: generateCourseReport }));
 
 
 /* GET KDU ASSESSMENT GROUP GRADEBOOK */
