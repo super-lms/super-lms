@@ -510,3 +510,25 @@ tbody > tr > td { background-color: inherit; }
   .student-portal .student-session-actions button { padding: 10px 6px; font-size: 14px; }
   .student-portal .student-section-menu { max-height: 240px; overflow-y: auto; }
 }
+
+/* Personal report printing affects only the student report page. */
+.student-report-print-heading { display: none; }
+@media print {
+  .student-report-page .student-report-screen-only { display: none !important; }
+  .student-report-page .content-area { padding: 0 !important; margin: 0 !important; }
+  .student-report-page .student-report-results {
+    border: 0 !important; box-shadow: none !important; padding: 0 !important;
+    margin: 0 !important; border-radius: 0 !important; background: white !important;
+  }
+  .student-report-page .student-report-print-heading { display: block; margin-bottom: 16px; }
+  .student-report-page .student-report-print-heading h1 { font-size: 20pt; margin: 0 0 10px; }
+  .student-report-page .student-report-print-heading p { margin: 4px 0; font-size: 10pt; }
+  .student-report-page .student-report-results > h2 { font-size: 13pt !important; margin-bottom: 10px !important; }
+  .student-report-page .student-report-table-wrap { overflow: visible !important; }
+  .student-report-page table { font-size: 9pt !important; table-layout: fixed; }
+  .student-report-page th, .student-report-page td {
+    padding: 6px !important; overflow-wrap: anywhere; color: black !important;
+  }
+  .student-report-page thead { display: table-header-group; }
+  .student-report-page tr { break-inside: avoid; }
+}

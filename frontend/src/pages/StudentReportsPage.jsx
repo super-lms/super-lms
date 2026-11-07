@@ -267,8 +267,8 @@ export default function StudentReportsPage() {
   }
 
   return (
-    <>
-      <div className="topbar">
+    <div className="student-report-page">
+      <div className="topbar student-report-screen-only">
         <h1>My Reports</h1>
         <p className="topbar-subtitle">
           Welcome{user?.name ? `, ${user.name}` : ""}. Generate your personal report and export it as PDF or CSV.
@@ -276,7 +276,7 @@ export default function StudentReportsPage() {
       </div>
 
       <div className="content-area student-portal">
-        <section className="panel">
+        <section className="panel student-report-screen-only">
           <SectionHeader
             title="Student Report Tools"
             subtitle="Move between the main student pages without relying on the browser back button."
@@ -317,7 +317,7 @@ export default function StudentReportsPage() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel student-report-screen-only">
           <h2 style={{ marginTop: 0, marginBottom: "20px", fontSize: "28px" }}>
             Generate My Report
           </h2>
@@ -404,7 +404,14 @@ export default function StudentReportsPage() {
           {courseError ? <ActionButton quiet onClick={() => window.location.reload()}>Retry loading courses</ActionButton> : null}
         </section>
 
-        <section className="panel">
+        <section className="panel student-report-results">
+          <header className="student-report-print-heading">
+            <h1>Student Report</h1>
+            <p><strong>Student:</strong> {user?.name || "Student"}</p>
+            <p><strong>Course:</strong> {courses.find((course) => String(course.id) === String(selectedCourseId))?.title || "—"}</p>
+            <p><strong>Category:</strong> {selectedCategory} · <strong>Level:</strong> {selectedLevel}</p>
+            <p>Ungraded scores are left blank.</p>
+          </header>
           <h2 style={{ marginTop: 0, marginBottom: "20px", fontSize: "28px" }}>
             Report Results
           </h2>
@@ -414,7 +421,7 @@ export default function StudentReportsPage() {
               No report data to display yet.
             </p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <div className="student-report-table-wrap" style={{ overflowX: "auto" }}>
               <table
                 style={{
                   width: "100%",
@@ -451,7 +458,7 @@ export default function StudentReportsPage() {
           )}
         </section>
       </div>
-    </>
+    </div>
   )
 }
 
