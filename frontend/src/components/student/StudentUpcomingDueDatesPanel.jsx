@@ -1,3 +1,5 @@
+import { useState } from "react"
+import { studentDeadlineLabel } from "../../services/studentDeadline.js"
 import { displayAssignmentTime } from "../../services/assignmentTime.js"
 function SectionHeader({ title, subtitle }) {
   return (
@@ -41,26 +43,37 @@ export default function StudentUpcomingDueDatesPanel({
   upcomingAssignments = [],
   onOpenAssignment,
 }) {
+  const [expandedCourse, setExpandedCourse] = useState(null)
+  const expanded = expandedCourse === String(selectedCourseId)
+  const visibleAssignments = expanded ? upcomingAssignments : upcomingAssignments.slice(0, 3)
   return (
     <section className="panel">
       <SectionHeader
         title="Assignment Due Dates"
-        subtitle="Assignment deadlines in your selected course, including past deadlines."
+        subtitle="Dates use Beijing time. Date labels do not indicate submission or late-approval status."
       />
 
       {!selectedCourseId ? (
-        <NoticeBox>Select a course above to view upcoming due dates.</NoticeBox>
+        <NoticeBox>Select a course above to view assignment due dates.</NoticeBox>
       ) : upcomingAssignments.length === 0 ? (
         <NoticeBox>No assignments found for this course.</NoticeBox>
       ) : (
+        <>
+        <p style={{ color: "#374151", marginTop: 0 }}>
+          Showing {visibleAssignments.length} of {upcomingAssignments.length} assignments, in deadline order.
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
-          {upcomingAssignments.slice(0, 3).map((assignment) => (
+          {visibleAssignments.map((assignment) => (
             <DetailCard key={assignment.id} title={assignment.title || "Untitled Assignment"}>
-              <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>
+              <div style={{ display: "inline-block", border: "1px solid #64748b", borderRadius: "6px", padding: "3px 8px", marginBottom: "10px", color: "#111827", background: "#f1f5f9", fontWeight: 700 }}>
+                {studentDeadlineLabel(assignment.due_date)}
+              </div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 800 }}>
                 Due: {formatDueDate(assignment.due_date)}
               </div>
               <button
                 type="button"
+                aria-label={`Open assignment ${assignment.title || "Untitled Assignment"}`}
                 onClick={() => onOpenAssignment?.(assignment)}
                 style={openButtonStyle}
               >
@@ -69,6 +82,12 @@ export default function StudentUpcomingDueDatesPanel({
             </DetailCard>
           ))}
         </div>
+        {upcomingAssignments.length > 3 ? (
+          <button type="button" aria-expanded={expanded} onClick={() => setExpandedCourse(expanded ? null : String(selectedCourseId))} style={openButtonStyle}>
+            {expanded ? "Show fewer assignments" : `Show all ${upcomingAssignments.length} assignments`}
+          </button>
+        ) : null}
+        </>
       )}
     </section>
   )
