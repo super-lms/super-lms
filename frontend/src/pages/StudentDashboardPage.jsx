@@ -1509,8 +1509,8 @@ export default function StudentDashboardPage() {
               <button type="button" onClick={() => navigate("/self-study")} style={portalMenuButtonStyle(false)}>Self-study iPads</button>
               {[
                 ["dashboard", "Dashboard"],
-                ["due", "Current Assignments Due"],
-                ["missing", "What Needs to Be Submitted"],
+                ["due", "Assignment Due Dates"],
+                ["missing", "Work Needing Attention"],
                 ["marks", "Marks to Date"],
                 ["feedback", "Teacher Feedback"],
                 ["courses", "My Courses"],
@@ -2039,6 +2039,7 @@ export default function StudentDashboardPage() {
       <FloatingTeacherCoach
         title="Student Coach"
         className="student-coach"
+        keyboardSupport
         defaultOpen={false}
         subtitle="Student Progress Coach"
         recommendationTitle={studentCoachRecommendation.title}

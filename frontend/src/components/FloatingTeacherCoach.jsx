@@ -1,7 +1,8 @@
-import { useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
 export default function FloatingTeacherCoach({
   className = "",
+  keyboardSupport = false,
   title = "Teacher Coach",
   defaultOpen = false,
   subtitle = "SUPER LMS Guide",
@@ -13,18 +14,37 @@ export default function FloatingTeacherCoach({
   children = null,
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const panelId = useId()
+  const triggerRef = useRef(null)
+  const closeRef = useRef(null)
+
+  useEffect(() => {
+    if (keyboardSupport && open) closeRef.current?.focus()
+  }, [keyboardSupport, open])
+
+  function closeCoach() {
+    setOpen(false)
+    if (keyboardSupport) triggerRef.current?.focus()
+  }
+
 
   return (
-    <div className={className} style={teacherCoachShellStyle}>
+    <div className={className} style={teacherCoachShellStyle} onKeyDown={keyboardSupport ? (event) => {
+      if (open && event.key === "Escape") {
+        event.preventDefault()
+        event.stopPropagation()
+        closeCoach()
+      }
+    } : undefined}>
       {open ? (
-        <div style={teacherCoachPanelStyle}>
+        <div id={panelId} role={keyboardSupport ? "region" : undefined} aria-label={keyboardSupport ? title : undefined} style={teacherCoachPanelStyle}>
           <div style={teacherCoachHeaderStyle}>
             <div>
               <div style={{ fontWeight: 900 }}>{title}</div>
               <div style={{ fontSize: "0.9rem", color: "#4b5563" }}>{subtitle}</div>
             </div>
 
-            <button type="button" onClick={() => setOpen(false)} style={teacherCoachSmallButtonStyle}>
+            <button ref={closeRef} type="button" aria-label={keyboardSupport ? `Close ${title}` : undefined} onClick={closeCoach} style={teacherCoachSmallButtonStyle}>
               Close
             </button>
           </div>
@@ -54,7 +74,7 @@ export default function FloatingTeacherCoach({
         </div>
       ) : null}
 
-      <button type="button" onClick={() => setOpen((value) => !value)} style={teacherCoachButtonStyle}>
+      <button ref={triggerRef} type="button" aria-expanded={keyboardSupport ? open : undefined} aria-controls={keyboardSupport && open ? panelId : undefined} onClick={() => setOpen((value) => !value)} style={teacherCoachButtonStyle}>
         {open ? "Hide Coach" : "Need Help?"}
       </button>
     </div>
