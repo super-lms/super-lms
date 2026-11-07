@@ -28,7 +28,7 @@ export default function StudentNextStepsPanel() {
         subtitle="A simple checklist to help you stay organized in this course."
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
         <DetailCard title="1. Check Your Standing">
           <div style={{ lineHeight: 1.5 }}>
             Review your current standing and proficiency so you know how you are doing right now.

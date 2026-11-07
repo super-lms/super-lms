@@ -17,7 +17,7 @@ export default function StudentSummaryCards({
   lessonsCount = 0,
 }) {
   return (
-    <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "16px" }}>
+    <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "16px" }}>
       <SummaryCard
         label="Due Soon"
         value={dueSoonCount}

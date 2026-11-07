@@ -1,3 +1,4 @@
+import { displayAssignmentTime } from "../../services/assignmentTime.js"
 function SectionHeader({ title, subtitle }) {
   return (
     <div style={{ marginBottom: "16px" }}>
@@ -21,27 +22,24 @@ function DetailCard({ title, children }) {
 }
 
 function formatDueDate(value) {
-  if (!value) return "No due date"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
-  return date.toLocaleDateString()
+  return value ? displayAssignmentTime(value) : "No due date"
 }
 
 export default function StudentMissingWorkPanel({ missingAssignments = [] }) {
   return (
     <section className="panel">
       <SectionHeader
-        title="Missing Work"
+        title="Work Needing Attention"
         subtitle="A quick check of assignments that still need attention."
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.6fr) minmax(0, 1.4fr)", gap: "14px" }}>
-        <DetailCard title="Assignments Missing">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
+        <DetailCard title="Assignments to Review">
           <div style={{ fontSize: "2.4rem", fontWeight: 800 }}>{missingAssignments.length}</div>
           <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>
             {missingAssignments.length === 0
               ? "Great job. You are currently caught up."
-              : "These assignments still need to be submitted."}
+              : "Review submission and approval status for these assignments."}
           </div>
         </DetailCard>
 

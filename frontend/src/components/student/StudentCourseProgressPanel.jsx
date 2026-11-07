@@ -54,7 +54,7 @@ export default function StudentCourseProgressPanel({
   return (
     <section className="panel">
       <SectionHeader
-        title={courseProgressLoading ? "Loading Course Progress..." : `You're Currently ${proficiencyLabel}`}
+        title={courseProgressLoading ? "Loading Course Progress..." : proficiencyLabel === "Not available yet" ? "No graded evidence yet" : `You're Currently ${proficiencyLabel}`}
         subtitle={
           courseProgressLoading
             ? "Checking submitted and graded work for the selected course."
@@ -66,7 +66,7 @@ export default function StudentCourseProgressPanel({
         <NoticeBox>⏳ Loading course progress...</NoticeBox>
       ) : null}
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.2fr)", gap: "14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
         <DetailCard title="Current Standing">
           <div style={{ fontSize: "2.4rem", fontWeight: 800 }}>{standing}</div>
           <div style={{ marginTop: "6px", color: "#4b5563", lineHeight: 1.5 }}>

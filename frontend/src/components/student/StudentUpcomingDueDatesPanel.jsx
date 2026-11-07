@@ -44,16 +44,16 @@ export default function StudentUpcomingDueDatesPanel({
   return (
     <section className="panel">
       <SectionHeader
-        title="Upcoming Due Dates"
-        subtitle="Assignments coming up soon in your selected course."
+        title="Assignment Due Dates"
+        subtitle="Assignment deadlines in your selected course, including past deadlines."
       />
 
       {!selectedCourseId ? (
         <NoticeBox>Select a course above to view upcoming due dates.</NoticeBox>
       ) : upcomingAssignments.length === 0 ? (
-        <NoticeBox>No upcoming assignments found for this course.</NoticeBox>
+        <NoticeBox>No assignments found for this course.</NoticeBox>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
           {upcomingAssignments.slice(0, 3).map((assignment) => (
             <DetailCard key={assignment.id} title={assignment.title || "Untitled Assignment"}>
               <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>

@@ -464,3 +464,45 @@ tbody > tr > td { background-color: inherit; }
     -webkit-print-color-adjust: exact;
   }
 }
+
+/* Student portal refinements are scoped to avoid changing other workspaces. */
+.student-portal button:focus-visible,
+.student-portal a:focus-visible,
+.student-portal input:focus-visible,
+.student-portal textarea:focus-visible,
+.student-portal select:focus-visible,
+.student-portal summary:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 3px;
+}
+.student-portal button[aria-current="page"] {
+  border-left: 4px solid #1d4ed8 !important;
+}
+.student-portal .student-coach > div {
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+}
+@media (max-width: 800px) {
+  .student-portal .student-menu-layout { grid-template-columns: minmax(0, 1fr) !important; }
+  .student-portal .student-section-menu { position: static !important; }
+  .student-portal .student-coach { right: 12px !important; bottom: 12px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .student-portal, .student-portal * { scroll-behavior: auto !important; }
+}
+
+.student-portal .student-account-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #374151;
+  padding: 8px 0;
+}
+@media (max-width: 800px) {
+  .student-portal .student-session-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .student-portal .student-session-actions button { padding: 10px 6px; font-size: 14px; }
+  .student-portal .student-section-menu { max-height: 240px; overflow-y: auto; }
+}

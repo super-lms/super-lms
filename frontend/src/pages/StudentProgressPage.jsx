@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
-import API_BASE from "../apiBase"
+import authFetch from "../services/authFetch"
+import { loadStudentProgressData } from "../services/studentPortalData.js"
 
 function SectionCard({ children }) {
   return (
@@ -196,7 +197,7 @@ function DetailCard({ title, children }) {
 }
 
 function getAssignmentCourseId(assignment) {
-  return assignment.class_id ?? assignment.course_id ?? assignment.courseId ?? ""
+  return assignment.progress_course_id ?? assignment.class_id ?? assignment.course_id ?? assignment.courseId ?? ""
 }
 
 function formatAverage(value) {
@@ -231,58 +232,11 @@ export default function StudentProgressPage() {
       }
 
       try {
-        const [coursesResponse, assignmentsResponse, enrolledStudentsResponse] =
-          await Promise.all([
-            fetch(`${API_BASE}/api/courses`),
-            fetch(`${API_BASE}/api/assignments`),
-            fetch(`${API_BASE}/api/enrolled-students`),
-          ])
-
-        if (
-          !coursesResponse.ok ||
-          !assignmentsResponse.ok ||
-          !enrolledStudentsResponse.ok
-        ) {
-          throw new Error("Could not load progress data.")
-        }
-
-        const [coursesData, assignmentsData, enrolledStudentsData] =
-          await Promise.all([
-            coursesResponse.json(),
-            assignmentsResponse.json(),
-            enrolledStudentsResponse.json(),
-          ])
-
+        const data = await loadStudentProgressData(authFetch, studentEmail)
         if (!isMounted) return
-
-        const safeCourses = Array.isArray(coursesData) ? coursesData : []
-        const safeAssignments = Array.isArray(assignmentsData) ? assignmentsData : []
-        const safeEnrolledStudents = Array.isArray(enrolledStudentsData)
-          ? enrolledStudentsData
-          : []
-
-        const visibleCourseIds = new Set(
-          safeEnrolledStudents
-            .filter((student) => {
-              const enrolledStudentEmail = String(student.student_email || "")
-                .trim()
-                .toLowerCase()
-              return enrolledStudentEmail === studentEmail
-            })
-            .map((student) => String(student.class_id || ""))
-            .filter((classId) => classId !== "")
-        )
-
-        const visibleCourses = safeCourses.filter((course) =>
-          visibleCourseIds.has(String(course.id))
-        )
-
-        const visibleAssignments = safeAssignments.filter((assignment) =>
-          visibleCourseIds.has(String(getAssignmentCourseId(assignment)))
-        )
-
-        setCourses(visibleCourses)
-        setAssignments(visibleAssignments)
+        setCourses(data.courses)
+        setAssignments(data.assignments)
+        setSubmissionStateByAssignmentId(data.submissionStates)
         setErrorText("")
       } catch (err) {
         console.error("Error loading student progress page:", err)
@@ -304,69 +258,6 @@ export default function StudentProgressPage() {
       isMounted = false
     }
   }, [user?.email])
-
-  useEffect(() => {
-    let isCancelled = false
-
-    async function loadSubmissionStatuses() {
-      const studentEmail = String(user?.email || "").trim().toLowerCase()
-
-      if (!studentEmail) {
-        return
-      }
-
-      if (!Array.isArray(assignments) || assignments.length === 0) {
-        return
-      }
-
-      try {
-        const results = await Promise.all(
-          assignments.map(async (assignment) => {
-            const assignmentId = String(assignment.id)
-            const response = await fetch(
-              `${API_BASE}/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
-            )
-            const data = await response.json()
-
-            if (!response.ok) {
-              return {
-                assignmentId,
-                failed: true,
-              }
-            }
-
-            return {
-              assignmentId,
-              data,
-              failed: false,
-            }
-          })
-        )
-
-        if (isCancelled) {
-          return
-        }
-
-        const next = {}
-
-        results.forEach((result) => {
-          if (!result.failed && result.data) {
-            next[result.assignmentId] = result.data
-          }
-        })
-
-        setSubmissionStateByAssignmentId(next)
-      } catch (err) {
-        console.error("Error loading student submission progress:", err)
-      }
-    }
-
-    loadSubmissionStatuses()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [assignments, user?.email])
 
   const courseProgressCards = useMemo(() => {
     return courses.map((course) => {
@@ -461,7 +352,7 @@ export default function StudentProgressPage() {
 
   if (loading) {
     return (
-      <div className="content-area">
+      <div className="content-area student-portal">
         <section className="panel">
           <p>Loading progress...</p>
         </section>
@@ -478,7 +369,7 @@ export default function StudentProgressPage() {
         </p>
       </div>
 
-      <div className="content-area">
+      <div className="content-area student-portal">
         <section className="panel">
           <SectionHeader
             title="Student Progress Tools"
@@ -499,7 +390,7 @@ export default function StudentProgressPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
               gap: "14px",
             }}
           >
@@ -512,52 +403,52 @@ export default function StudentProgressPage() {
             </DetailCard>
 
             <DetailCard title="Courses Visible">
-              <div>{courses.length}</div>
+              <div>{errorText ? "Unavailable" : courses.length}</div>
             </DetailCard>
           </div>
         </section>
 
         {errorText ? (
           <section className="panel">
-            <NoticeBox type="error">{errorText}</NoticeBox>
+            <NoticeBox type="error">{errorText} <ActionButton quiet onClick={() => window.location.reload()}>Retry</ActionButton></NoticeBox>
           </section>
         ) : null}
 
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
             gap: "16px",
           }}
         >
           <StatCard
             label="Courses"
-            value={overallStats.totalCourses}
+            value={errorText ? "—" : overallStats.totalCourses}
             helper="Courses currently visible on your progress page."
           />
           <StatCard
             label="Assignments"
-            value={overallStats.totalAssignments}
+            value={errorText ? "—" : overallStats.totalAssignments}
             helper="Assignments counted across your visible courses."
           />
           <StatCard
             label="Submitted"
-            value={overallStats.submittedCount}
+            value={errorText ? "—" : overallStats.submittedCount}
             helper="Assignments you have submitted so far."
           />
           <StatCard
             label="Missing"
-            value={overallStats.missingCount}
+            value={errorText ? "—" : overallStats.missingCount}
             helper="Assignments still not submitted."
           />
           <StatCard
             label="Graded"
-            value={overallStats.gradedCount}
+            value={errorText ? "—" : overallStats.gradedCount}
             helper="Assignments that already have a score."
           />
           <StatCard
             label="Average"
-            value={formatAverage(overallStats.overallAverage)}
+            value={errorText ? "—" : formatAverage(overallStats.overallAverage)}
             helper="Average across graded work currently shown."
           />
         </section>
@@ -565,7 +456,7 @@ export default function StudentProgressPage() {
         {courseProgressCards.length === 0 ? (
           <section className="panel">
             <SectionCard>
-              <p style={{ margin: 0, color: "#666" }}>No courses available.</p>
+              <p style={{ margin: 0, color: "#666" }}>{errorText ? "Course information is unavailable until progress loads successfully." : "No courses available."}</p>
             </SectionCard>
           </section>
         ) : (
@@ -623,7 +514,7 @@ export default function StudentProgressPage() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
                     gap: "12px",
                   }}
                 >

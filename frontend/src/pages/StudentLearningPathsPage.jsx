@@ -2,7 +2,7 @@ import authFetch from "../services/authFetch";
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../AuthContext.jsx"
-import API_BASE from "../apiBase"
+import { loadStudentCourses } from "../services/studentPortalData.js"
 
 
 function getItemLabel(type) {
@@ -49,46 +49,17 @@ export default function StudentLearningPathsPage() {
           throw new Error("Student email is missing from the current session.")
         }
 
-        const coursesRes = await fetch(`${API_BASE}/api/classes`)
-
-        if (!coursesRes.ok) {
-          throw new Error("Could not load courses.")
-        }
-
-        const coursesData = await coursesRes.json()
-        const safeCourses = Array.isArray(coursesData) ? coursesData : []
-
-        const visibleCourses = []
-
-        for (const course of safeCourses) {
-          const rosterRes = await fetch(`${API_BASE}/api/class-roster/${course.id}`)
-
-          if (!rosterRes.ok) {
-            continue
-          }
-
-          const rosterData = await rosterRes.json()
-          const students = Array.isArray(rosterData.students) ? rosterData.students : []
-
-          const studentIsEnrolled = students.some((student) => {
-            return String(student.email || "").trim().toLowerCase() === studentEmail
-          })
-
-          if (studentIsEnrolled) {
-            visibleCourses.push(course)
-          }
-        }
+        const visibleCourses = await loadStudentCourses(authFetch, studentEmail)
 
         const nextLearningPathsByCourseId = {}
         const nextItemsByPathId = {}
         const linkedAssignmentIds = new Set()
 
         for (const course of visibleCourses) {
-          const pathsRes = await fetch(`${API_BASE}/api/courses/${course.id}/learning-paths`)
+          const pathsRes = await authFetch(`/api/courses/${course.id}/learning-paths`)
 
           if (!pathsRes.ok) {
-            nextLearningPathsByCourseId[course.id] = []
-            continue
+            throw new Error("Could not load Learning Paths. Please try again.")
           }
 
           const pathsData = await pathsRes.json()
@@ -97,11 +68,10 @@ export default function StudentLearningPathsPage() {
           nextLearningPathsByCourseId[course.id] = paths
 
           for (const path of paths) {
-            const itemsRes = await fetch(`${API_BASE}/api/learning-paths/${path.id}/items`)
+            const itemsRes = await authFetch(`/api/learning-paths/${path.id}/items`)
 
             if (!itemsRes.ok) {
-              nextItemsByPathId[path.id] = []
-              continue
+              throw new Error("Could not load Learning Path items. Please try again.")
             }
 
             const itemsData = await itemsRes.json()
@@ -166,7 +136,7 @@ export default function StudentLearningPathsPage() {
 
   if (loading) {
     return (
-      <main style={pageStyle}>
+      <main className="student-portal" style={pageStyle}>
         <section style={panelStyle}>
           <h1 style={{ marginTop: 0 }}>Learning Paths</h1>
           <p>Loading your Learning Paths...</p>
@@ -176,7 +146,7 @@ export default function StudentLearningPathsPage() {
   }
 
   return (
-    <main style={pageStyle}>
+    <main className="student-portal" style={pageStyle}>
       <section style={panelStyle}>
         <div style={headerStyle}>
           <div>
@@ -191,11 +161,12 @@ export default function StudentLearningPathsPage() {
           </button>
         </div>
 
-        {errorText ? <div style={noticeStyle}>{errorText}</div> : null}
+        {errorText ? <div role="alert" style={noticeStyle}>{errorText} <button type="button" style={buttonStyle} onClick={() => window.location.reload()}>Retry</button></div> : null}
 
         <div style={{ marginTop: "18px", maxWidth: "460px" }}>
-          <label style={labelStyle}>Course</label>
+          <label htmlFor="learning-path-course" style={labelStyle}>Course</label>
           <select
+            id="learning-path-course"
             value={selectedCourseId}
             onChange={(event) => setSelectedCourseId(event.target.value)}
             style={inputStyle}
@@ -218,7 +189,7 @@ export default function StudentLearningPathsPage() {
 
       <section style={panelStyle}>
         <h2 style={{ marginTop: 0 }}>
-          {selectedPaths.length} Learning Path{selectedPaths.length === 1 ? "" : "s"}
+          {errorText ? "Learning Paths unavailable" : `${selectedPaths.length} Learning Path${selectedPaths.length === 1 ? "" : "s"}`}
         </h2>
 
         {!selectedCourseId ? (

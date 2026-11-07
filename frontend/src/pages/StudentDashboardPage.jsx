@@ -410,11 +410,12 @@ export function SubmissionEditor({
           ) : null}
 
           <div style={{ marginBottom: "16px" }}>
-            <label style={labelStyle}>Your Response</label>
+            <label htmlFor="student-assignment-response" style={labelStyle}>Your Response</label>
             <p style={{ marginTop: "4px", marginBottom: "8px", color: "#4b5563", lineHeight: 1.5 }}>
               Write your answer, reflection, notes, or draft below. You can update it and save again.
             </p>
             <textarea
+              id="student-assignment-response"
               rows="10"
               value={draftText}
               onChange={(e) => onDraftChange(e.target.value)}
@@ -424,13 +425,14 @@ export function SubmissionEditor({
           </div>
 
           <div style={{ marginBottom: "16px" }}>
-            <label style={labelStyle}>Attach Files</label>
+            <label htmlFor="student-assignment-file" style={labelStyle}>Attach Files</label>
             <p style={{ marginTop: "4px", marginBottom: "8px", color: "#4b5563", lineHeight: 1.5 }}>
               Add a document, presentation, image, or other file that supports your submission. PowerPoint (.pptx) files are supported.
             </p>
 
             <input
               type="file"
+              id="student-assignment-file"
               accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.jpg,.jpeg,.png,.gif,.webp,.heic,audio/*,video/*"
               onChange={onAttachmentFileChange}
               disabled={attachmentUploading}
@@ -451,7 +453,7 @@ export function SubmissionEditor({
 
             {attachmentSuccessText ? (
               <div style={{ marginTop: "10px" }}>
-                <NoticeBox>{attachmentSuccessText}<br />Submission saved and completed.</NoticeBox>
+                <NoticeBox>{attachmentSuccessText}</NoticeBox>
               </div>
             ) : null}
 
@@ -501,7 +503,7 @@ export function SubmissionEditor({
 
           {attachmentSuccessText ? (
             <div style={{ marginTop: "-4px", marginBottom: "16px" }}>
-              <NoticeBox>{attachmentSuccessText}<br />Submission saved and completed.</NoticeBox>
+              <NoticeBox>{attachmentSuccessText}</NoticeBox>
             </div>
           ) : null}
 
@@ -1427,7 +1429,7 @@ export default function StudentDashboardPage() {
   }
 
   return (
-    <>
+    <div className="student-portal">
       <SubmissionDecisionMessages />
       <div className="topbar">
         <h1>Student Portal</h1>
@@ -1442,7 +1444,7 @@ export default function StudentDashboardPage() {
             title="Student Session"
             subtitle="Use these actions to move through the student experience."
             action={
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <div className="student-session-actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <ActionButton quiet onClick={() => navigate("/student-stock-game")}>
                   Stock Market Game
                 </ActionButton>
@@ -1469,7 +1471,9 @@ export default function StudentDashboardPage() {
             }
           />
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "14px" }}>
+          <details className="student-account-details">
+            <summary>Account details</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
             <DetailCard title="Student Name">
               <div>{user?.name || "Student"}</div>
             </DetailCard>
@@ -1482,6 +1486,7 @@ export default function StudentDashboardPage() {
               <div>{user?.role || "student"}</div>
             </DetailCard>
           </div>
+          </details>
         </section>
 
         <section className="panel" style={viewChooserStyle}>
@@ -1490,14 +1495,14 @@ export default function StudentDashboardPage() {
             <div style={{ marginTop: "4px", color: "#4b5563" }}>Choose a focused menu or the complete page.</div>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button type="button" onClick={() => changePortalViewMode("menu")} style={viewChoiceButtonStyle(portalViewMode === "menu")}>Menu View</button>
-            <button type="button" onClick={() => changePortalViewMode("complete")} style={viewChoiceButtonStyle(portalViewMode === "complete")}>Complete Page</button>
+            <button type="button" aria-pressed={portalViewMode === "menu"} onClick={() => changePortalViewMode("menu")} style={viewChoiceButtonStyle(portalViewMode === "menu")}>Menu View</button>
+            <button type="button" aria-pressed={portalViewMode === "complete"} onClick={() => changePortalViewMode("complete")} style={viewChoiceButtonStyle(portalViewMode === "complete")}>Complete Page</button>
           </div>
         </section>
 
-        <div style={portalViewMode === "menu" ? portalMenuLayoutStyle : undefined}>
+        <div className={portalViewMode === "menu" ? "student-menu-layout" : undefined} style={portalViewMode === "menu" ? portalMenuLayoutStyle : undefined}>
           {portalViewMode === "menu" ? (
-            <aside style={portalSidebarStyle} aria-label="Student portal menu">
+            <aside className="student-section-menu" style={portalSidebarStyle} aria-label="Student portal menu">
               <div style={{ fontSize: "0.8rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", color: "#6b7280", marginBottom: "8px" }}>Portal Menu</div>
               <button type="button" onClick={() => navigate("/announcements")} style={portalMenuButtonStyle(false)}>Announcements</button>
               <button type="button" onClick={() => navigate("/calendar")} style={portalMenuButtonStyle(false)}>Calendar</button>
@@ -1517,7 +1522,7 @@ export default function StudentDashboardPage() {
                 ["help", "Help"],
                 ["safe", "Safe Report"],
               ].map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setActivePortalSection(key)} style={portalMenuButtonStyle(activePortalSection === key)}>{label}</button>
+                <button key={key} type="button" aria-current={activePortalSection === key ? "page" : undefined} onClick={() => setActivePortalSection(key)} style={portalMenuButtonStyle(activePortalSection === key)}>{label}</button>
               ))}
             </aside>
           ) : null}
@@ -2033,7 +2038,8 @@ export default function StudentDashboardPage() {
       </div>
       <FloatingTeacherCoach
         title="Student Coach"
-        defaultOpen
+        className="student-coach"
+        defaultOpen={false}
         subtitle="Student Progress Coach"
         recommendationTitle={studentCoachRecommendation.title}
         recommendationReason={studentCoachRecommendation.reason}
@@ -2048,7 +2054,7 @@ export default function StudentDashboardPage() {
           <div>□ Look for one thing to improve next</div>
         </div>
       </FloatingTeacherCoach>
-    </>
+    </div>
   )
 }
 
@@ -2275,7 +2281,7 @@ const resultHeaderStyle = {
 
 const resultGridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
   gap: "12px",
   marginBottom: "14px",
 }
@@ -2289,7 +2295,7 @@ const submissionEditorStyle = {
 
 const submissionStatsGridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
   gap: "12px",
   marginBottom: "16px",
 }

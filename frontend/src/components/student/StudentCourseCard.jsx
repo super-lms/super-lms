@@ -19,14 +19,6 @@ export default function StudentCourseCard({ course, isSelected, onOpen, onOpenRe
 
   return (
     <div style={cardStyle(isSelected)}>
-      <button
-        type="button"
-        onClick={() => onOpenResources(String(course.id))}
-        style={repositoryButtonStyle}
-      >
-        File Repository
-      </button>
-
       <div style={titleStyle}>{title}</div>
 
       <div style={metaGridStyle}>
@@ -46,8 +38,16 @@ export default function StudentCourseCard({ course, isSelected, onOpen, onOpenRe
         </div>
       </div>
 
-      <button type="button" onClick={() => onOpen(String(course.id))} style={buttonStyle}>
+      <button type="button" onClick={() => onOpen(String(course.id))} aria-label={`View course ${title}`} style={buttonStyle}>
         View Course →
+      </button>
+      <button
+        type="button"
+        onClick={() => onOpenResources(String(course.id))}
+        aria-label={`File repository for ${title}`}
+        style={repositoryButtonStyle}
+      >
+        File Repository
       </button>
     </div>
   )
@@ -96,7 +96,8 @@ const buttonStyle = {
   padding: "10px 14px",
   borderRadius: "10px",
   border: "1px solid #d7dce5",
-  background: "#f3f4f6",
+  background: "#1d4ed8",
+  color: "#ffffff",
   font: "inherit",
   fontWeight: 800,
   cursor: "pointer",
@@ -107,5 +108,5 @@ const repositoryButtonStyle = {
   background: "#e8f1ff",
   border: "1px solid #93b4e8",
   color: "#1d4ed8",
-  marginBottom: "14px",
+  marginTop: "10px",
 }
