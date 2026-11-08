@@ -744,12 +744,7 @@ export default function DashboardPage() {
             {courses.length === 0 ? (
               <DashboardActionCard title="My Courses" description="No courses assigned yet." meta="0 courses" onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
             ) : (
-              [
-                ...courses,
-                ...(courses.length === 1
-                  ? [{ ...courses[0], id: "preview-elsl", title: "English Language Support 11" }]
-                  : []),
-              ].map((course) => (
+              courses.map((course) => (
                 <DashboardActionCard
                   key={course.id || getCourseTitle(course)}
                   title={getCourseTitle(course)}
