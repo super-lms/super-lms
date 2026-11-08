@@ -1,3 +1,4 @@
+import { getKduCellLabel, getKduCellDescriptor } from "../services/teacherHeatmapDisplay.js"
 import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
 import { useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
@@ -303,24 +304,6 @@ function SnapshotItem({ title, lines }) {
       </div>
     </div>
   )
-}
-
-function getKduCellLabel(value) {
-  const numeric = Number(value)
-
-  if (Number.isNaN(numeric)) return "—"
-
-  return numeric.toFixed(1)
-}
-
-function getKduCellDescriptor(value) {
-  const numeric = Number(value)
-
-  if (Number.isNaN(numeric)) return "No evidence"
-  if (numeric >= 5.5) return "Extending"
-  if (numeric >= 4) return "Proficient"
-  if (numeric >= 2.5) return "Developing"
-  return "Emerging"
 }
 
 export function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStudent, onOpenCompetency }) {
