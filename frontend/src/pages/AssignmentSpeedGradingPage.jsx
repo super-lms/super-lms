@@ -804,9 +804,14 @@ export default function AssignmentSpeedGradingPage() {
         : String(earnedPoints)
     );
     setTeacherFeedback(String(row?.feedback || ""));
-    setFeedbackSaveMessage("");
     setKduSaveMessage("");
   }
+
+  // Keep feedback confirmation through refreshes of the same student.
+  // Editing feedback already clears it; a different grading context must too.
+  useEffect(() => {
+    setFeedbackSaveMessage("");
+  }, [assignmentId, selectedRow?.student_email]);
 
   async function saveTeacherFeedback(options = {}) {
     if (!selectedRow?.student_email) {
@@ -2165,8 +2170,11 @@ export default function AssignmentSpeedGradingPage() {
                       >
                         {savingFeedback ? "Saving Feedback..." : "Save Feedback"}
                       </ActionButton>
-                      <span style={{ color: "#4b5563", fontWeight: 700 }}>
-                        {feedbackSaveMessage || `${teacherFeedback.length}/5000 characters`}
+                      {!feedbackSaveMessage ? <span style={{ color: "#4b5563", fontWeight: 700 }}>
+                        {teacherFeedback.length}/5000 characters
+                      </span> : null}
+                      <span role="status" aria-atomic="true" style={{ color: "#4b5563", fontWeight: 700 }}>
+                        {feedbackSaveMessage}
                       </span>
                     </div>
 
