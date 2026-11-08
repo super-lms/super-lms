@@ -267,7 +267,7 @@ export default function StudentReportsPage() {
   }
 
   return (
-    <div className="student-report-page">
+    <div className="student-report-page student-portal">
       <div className="topbar student-report-screen-only">
         <h1>My Reports</h1>
         <p className="topbar-subtitle">
@@ -421,7 +421,7 @@ export default function StudentReportsPage() {
               No report data to display yet.
             </p>
           ) : (
-            <div className="student-report-table-wrap" style={{ overflowX: "auto" }}>
+            <div className="student-report-table-wrap student-table-region" role="region" aria-label="Personal report results. Scroll horizontally for more columns." tabIndex={0} style={{ overflowX: "auto" }}>
               <table
                 style={{
                   width: "100%",
@@ -431,13 +431,13 @@ export default function StudentReportsPage() {
               >
                 <thead>
                   <tr>
-                    <th style={thStyle}>Student</th>
-                    <th style={thStyle}>Assignment</th>
-                    <th style={thStyle}>Category</th>
-                    <th style={thStyle}>Level</th>
-                    <th style={thStyle}>Score</th>
-                    <th style={thStyle}>Weight</th>
-                    <th style={thStyle}>Contribution</th>
+                    <th scope="col" style={thStyle}>Student</th>
+                    <th scope="col" style={thStyle}>Assignment</th>
+                    <th scope="col" style={thStyle}>Category</th>
+                    <th scope="col" style={thStyle}>Level</th>
+                    <th scope="col" style={thStyle}>Score</th>
+                    <th scope="col" style={thStyle}>Weight</th>
+                    <th scope="col" style={thStyle}>Contribution</th>
                   </tr>
                 </thead>
                 <tbody>

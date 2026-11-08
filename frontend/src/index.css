@@ -532,3 +532,33 @@ tbody > tr > td { background-color: inherit; }
   .student-report-page thead { display: table-header-group; }
   .student-report-page tr { break-inside: avoid; }
 }
+
+/* Final student usability pass: scoped layout, keyboard and high-contrast support. */
+.student-portal { min-width: 0; overflow-wrap: anywhere; }
+.student-portal :where(main, section, article), .student-learning-paths > section { min-width: 0; }
+.student-portal .student-table-region { max-width: 100%; }
+.student-portal .student-table-region:focus-visible,
+.student-portal #student-portal-content:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 3px;
+}
+.student-skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 1100;
+  padding: 12px 16px; background: #111827; color: #fff;
+  border: 2px solid #fff; border-radius: 8px;
+  transform: translateY(-200%);
+}
+.student-skip-link:focus { transform: translateY(0); }
+@media (max-width: 600px) {
+  .student-portal .content-area, .content-area.student-portal, .student-learning-paths { padding: 12px !important; }
+  .student-portal .panel, .student-learning-paths > section { padding: 14px !important; }
+  .student-portal .topbar { padding: 18px 14px; }
+  .student-portal button, .student-portal select, .student-portal input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+}
+@media (forced-colors: active) {
+  .student-portal button[aria-current="page"], .student-portal button[aria-pressed="true"] {
+    outline: 2px solid Highlight; outline-offset: -4px;
+  }
+  .student-portal :focus-visible { outline-color: Highlight; }
+}
+@media print { .student-skip-link { display: none; } }

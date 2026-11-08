@@ -96,7 +96,11 @@ function ProgressTrack({ value }) {
         borderRadius: "999px",
         overflow: "hidden",
       }}
-      aria-label={`Progress ${safeValue.toFixed(1)} percent`}
+      role="progressbar"
+      aria-label="Submission completion"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Number(safeValue.toFixed(1))}
     >
       <div
         style={{
@@ -354,7 +358,7 @@ export default function StudentProgressPage() {
     return (
       <div className="content-area student-portal">
         <section className="panel">
-          <p>Loading progress...</p>
+          <p role="status">Loading progress...</p>
         </section>
       </div>
     )

@@ -65,7 +65,7 @@ function NoticeBox({ children, type = "info" }) {
   const background = type === "error" ? "#fff8f8" : "#f8fafc"
 
   return (
-    <div style={{ border: `1px solid ${borderColor}`, borderRadius: "12px", padding: "14px 16px", background, lineHeight: 1.5 }}>
+    <div role={type === "error" ? "alert" : undefined} style={{ border: `1px solid ${borderColor}`, borderRadius: "12px", padding: "14px 16px", background, lineHeight: 1.5 }}>
       {children}
     </div>
   )
@@ -404,7 +404,7 @@ export function SubmissionEditor({
           {submissionErrorText ? <NoticeBox type="error">{submissionErrorText}</NoticeBox> : null}
 
           {submissionSaveMessage ? (
-            <div style={{ marginTop: submissionErrorText ? "12px" : 0, marginBottom: "12px" }}>
+            <div role="status" style={{ marginTop: submissionErrorText ? "12px" : 0, marginBottom: "12px" }}>
               <NoticeBox>{submissionSaveMessage}</NoticeBox>
             </div>
           ) : null}
@@ -1430,6 +1430,7 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="student-portal">
+      <a className="student-skip-link" href="#student-portal-content">Skip to course content</a>
       <SubmissionDecisionMessages />
       <div className="topbar">
         <h1>Student Portal</h1>
@@ -1526,7 +1527,7 @@ export default function StudentDashboardPage() {
               ))}
             </aside>
           ) : null}
-          <main style={{ minWidth: 0 }}>
+          <main id="student-portal-content" tabIndex={-1} style={{ minWidth: 0 }}>
             {showPortalSection("help") ? <StudentHelpPanel /> : null}
 
         <section
@@ -1558,7 +1559,7 @@ export default function StudentDashboardPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
                   gap: "14px",
                   marginBottom: "14px",
                 }}
@@ -1835,20 +1836,20 @@ export default function StudentDashboardPage() {
         ) : null}
 
         <section className="panel" style={{ display: showPortalSection("dashboard", "marks", "feedback") ? undefined : "none" }}>
-          <SectionHeader title="My Results" subtitle="See returned scores and teacher feedback for your visible assignments." />
+          <SectionHeader title="My Results" subtitle="See returned scores and teacher feedback. Scroll the table sideways to view more assignments; keyboard users can focus it and use the arrow keys." />
 
           {!selectedCourseId ? (
             <NoticeBox>Select a course above to view results.</NoticeBox>
           ) : resultAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
           ) : (
-            <div style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
+            <div className="student-table-region" role="region" aria-label="My results table. Scroll horizontally for more assignments." tabIndex={0} style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
               <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f8fafc", textAlign: "left" }}>
-                    <th style={assignmentSheetLabelStyle}>My Results</th>
+                    <th scope="col" style={assignmentSheetLabelStyle}>My Results</th>
                     {resultAssignments.map((assignment) => (
-                      <th key={assignment.id} style={assignmentSheetHeadingStyle}>
+                      <th scope="col" key={assignment.id} style={assignmentSheetHeadingStyle}>
                         {assignment.title || "Untitled Assignment"}
                       </th>
                     ))}
@@ -1856,7 +1857,7 @@ export default function StudentDashboardPage() {
                 </thead>
                 <tbody>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Due Date</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Due Date</th>
                     {resultAssignments.map((assignment) => (
                       <td key={assignment.id} style={assignmentSheetCellStyle}>
                         {formatDueDate(assignment.due_date)}
@@ -1864,7 +1865,7 @@ export default function StudentDashboardPage() {
                     ))}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Submission</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Submission</th>
                     {resultAssignments.map((assignment) => {
                       const submissionState =
                         submissionStateByAssignmentId[String(assignment.id)] || null
@@ -1879,7 +1880,7 @@ export default function StudentDashboardPage() {
                     })}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Score</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Score</th>
                     {resultAssignments.map((assignment) => {
                       const submission =
                         submissionStateByAssignmentId[String(assignment.id)]?.submission || null
@@ -1894,7 +1895,7 @@ export default function StudentDashboardPage() {
                     })}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>KDU Evidence</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>KDU Evidence</th>
                     {resultAssignments.map((assignment) => {
                       const submission =
                         submissionStateByAssignmentId[String(assignment.id)]?.submission || null
@@ -1911,7 +1912,7 @@ export default function StudentDashboardPage() {
                     })}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Teacher Feedback</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Teacher Feedback</th>
                     {resultAssignments.map((assignment) => {
                       const submission =
                         submissionStateByAssignmentId[String(assignment.id)]?.submission || null
@@ -1927,7 +1928,7 @@ export default function StudentDashboardPage() {
                     })}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Access</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Access</th>
                     {resultAssignments.map((assignment) => (
                       <td key={assignment.id} style={assignmentSheetCellStyle}>
                         <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>
@@ -1959,20 +1960,20 @@ export default function StudentDashboardPage() {
         </section>
 
         <section className="panel" style={{ display: showPortalSection("assignments") ? undefined : "none" }}>
-          <SectionHeader title="All Course Assignments" subtitle="A complete list of assignments for the currently selected course." />
+          <SectionHeader title="All Course Assignments" subtitle="All assignments for the selected course. Scroll the table sideways to view more assignments; keyboard users can focus it and use the arrow keys." />
 
           {!selectedCourseId ? (
             <NoticeBox>Select a course above to view assignments.</NoticeBox>
           ) : filteredAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
           ) : (
-            <div style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
+            <div className="student-table-region" role="region" aria-label="Course assignments table. Scroll horizontally for more assignments." tabIndex={0} style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
               <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f8fafc", textAlign: "left" }}>
-                    <th style={assignmentSheetLabelStyle}>Course Assignments</th>
+                    <th scope="col" style={assignmentSheetLabelStyle}>Course Assignments</th>
                     {filteredAssignments.map((assignment) => (
-                      <th key={assignment.id} style={assignmentSheetHeadingStyle}>
+                      <th scope="col" key={assignment.id} style={assignmentSheetHeadingStyle}>
                         {assignment.title || "Untitled Assignment"}
                       </th>
                     ))}
@@ -1980,7 +1981,7 @@ export default function StudentDashboardPage() {
                 </thead>
                 <tbody>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Due Date</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Due Date</th>
                     {filteredAssignments.map((assignment) => (
                       <td key={assignment.id} style={assignmentSheetCellStyle}>
                         {formatDueDate(assignment.due_date)}
@@ -1988,7 +1989,7 @@ export default function StudentDashboardPage() {
                     ))}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Status</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Status</th>
                     {filteredAssignments.map((assignment) => {
                       const cachedSubmissionState =
                         submissionStateByAssignmentId[String(assignment.id)] || null
@@ -2007,7 +2008,7 @@ export default function StudentDashboardPage() {
                     })}
                   </tr>
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
-                    <th style={assignmentSheetLabelStyle}>Access</th>
+                    <th scope="row" style={assignmentSheetLabelStyle}>Access</th>
                     {filteredAssignments.map((assignment) => (
                       <td key={assignment.id} style={assignmentSheetCellStyle}>
                           <ActionButton quiet onClick={() => openSubmissionEditor(assignment)}>

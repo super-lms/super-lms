@@ -136,17 +136,17 @@ export default function StudentLearningPathsPage() {
 
   if (loading) {
     return (
-      <main className="student-portal" style={pageStyle}>
+      <main className="student-portal student-learning-paths" style={pageStyle}>
         <section style={panelStyle}>
           <h1 style={{ marginTop: 0 }}>Learning Paths</h1>
-          <p>Loading your Learning Paths...</p>
+          <p role="status">Loading your Learning Paths...</p>
         </section>
       </main>
     )
   }
 
   return (
-    <main className="student-portal" style={pageStyle}>
+    <main className="student-portal student-learning-paths" style={pageStyle}>
       <section style={panelStyle}>
         <div style={headerStyle}>
           <div>
@@ -267,6 +267,7 @@ export default function StudentLearningPathsPage() {
                               {assignmentId ? (
                                 <button
                                   type="button"
+                                  aria-label={`Open assignment ${title}`}
                                   onClick={() => navigate(`/student?assignmentId=${encodeURIComponent(assignmentId)}`)}
                                   style={buttonStyle}
                                 >
@@ -276,12 +277,13 @@ export default function StudentLearningPathsPage() {
 
                               {item.resource_url ? (
                                 <a
+                                  aria-label={`Open resource ${title} (opens in a new tab)`}
                                   href={item.resource_url}
                                   target="_blank"
                                   rel="noreferrer"
                                   style={linkButtonStyle}
                                 >
-                                  Open Resource
+                                  Open Resource (new tab)
                                 </a>
                               ) : null}
                             </div>
