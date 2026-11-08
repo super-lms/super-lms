@@ -1,3 +1,4 @@
+import SectionAccessButton from "../components/SectionAccessButton.jsx"
 import { updateWorkspaceUrl } from "../services/workspaceLocation.js"
 import CourseDescriptionPreview from "../components/CourseDescriptionPreview.jsx"
 import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
@@ -3056,22 +3057,16 @@ export default function CoursesPage() {
                                   </div>
                                 ) : null}
                               </div>
-                              <button
-                                type="button"
+                              <SectionAccessButton
+                                section={section}
                                 onClick={() => updateSectionLiveStatus(section, !sectionIsLive)}
-                                disabled={Number(updatingLiveSectionId) === Number(section.id)}
+                                busy={Number(updatingLiveSectionId) === Number(section.id)}
                                 style={{
                                   ...buttonStyle,
                                   background: sectionIsLive ? "#ffffff" : "#166534",
                                   color: sectionIsLive ? "#111827" : "#ffffff",
                                 }}
-                              >
-                                {Number(updatingLiveSectionId) === Number(section.id)
-                                  ? "Updating..."
-                                  : sectionIsLive
-                                    ? "Turn Off"
-                                    : "Make Live"}
-                              </button>
+                              />
                             </div>
                           )
                         })}
