@@ -323,7 +323,7 @@ function getKduCellDescriptor(value) {
   return "Emerging"
 }
 
-function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStudent, onOpenCompetency }) {
+export function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStudent, onOpenCompetency }) {
   const safeRows = toArray(rows).slice(0, 10)
 
   return (
@@ -379,16 +379,17 @@ function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStudent, on
                     <div style={{ fontSize: "0.85rem", color: "#4b5563", marginTop: "4px" }}>
                       {row.course_title || "Course"}
                     </div>
-                    <div
-                      style={{
-                        marginTop: "8px",
-                        fontSize: "0.8rem",
-                        fontWeight: 800,
-                        color: "#4b5563",
+                    <button
+                      type="button"
+                      aria-label={`Open student gradebook for ${row.student_name || "student"} in ${row.course_title || "course"}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpenStudent(row)
                       }}
+                      style={{ marginTop: "8px", padding: "8px 10px", border: "1px solid #64748b", borderRadius: "8px", background: "#fff", color: "#1e40af", font: "inherit", fontWeight: 800, cursor: "pointer" }}
                     >
-                      Click to open gradebook →
-                    </div>
+                      Open student gradebook →
+                    </button>
                   </td>
 
                   {["KNOW", "DO", "UNDERSTAND"].map((bucket) => (
