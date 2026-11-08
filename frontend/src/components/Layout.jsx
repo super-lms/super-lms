@@ -2,7 +2,7 @@ import { WORKSPACE_LOCATION_EVENT, readWorkspaceLocation } from "../services/wor
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
-import authFetch from "../services/authFetch"
+import { loadTeacherDashboard } from "../services/teacherDashboard.js"
 import { openRtiStudentSupport } from "../services/openRti.js"
 import { setWorkspaceMode } from "../services/workspaceMode"
 import {
@@ -87,13 +87,7 @@ export default function Layout() {
 
     async function loadTeacherCourses() {
       try {
-        const response = await authFetch(`/api/teachers/${teacherId}/dashboard`)
-
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`)
-        }
-
-        const data = await response.json()
+        const data = await loadTeacherDashboard(teacherId)
         const safeCourses = Array.isArray(data?.courses) ? data.courses : []
 
         if (!isCancelled) {

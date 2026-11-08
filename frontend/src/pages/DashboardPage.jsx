@@ -1,7 +1,7 @@
 import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
-import API_BASE from "../apiBase"
+import { loadTeacherDashboard } from "../services/teacherDashboard.js"
 import authFetch from "../services/authFetch"
 
 function toArray(value) {
@@ -512,9 +512,6 @@ function AtRiskAlertsPanel({ alerts, students, studentCount, onOpenGradebook, ac
 export default function DashboardPage() {
   const { user } = useAuth()
   const teacherId = user?.id
-  const apiUrl = teacherId
-    ? `${API_BASE}/api/teachers/${teacherId}/dashboard`
-    : ""
 
   const [dashboardData, setDashboardData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -538,13 +535,7 @@ export default function DashboardPage() {
 
       setErrorText("")
 
-      const response = await authFetch(apiUrl)
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await loadTeacherDashboard(teacherId)
       setDashboardData(data)
     } catch (error) {
       setErrorText(error.message || "Could not load dashboard data.")
@@ -557,7 +548,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboard(true)
-  }, [teacherId, apiUrl])
+  }, [teacherId])
 
   const teacher = dashboardData?.teacher || {}
   const courses = useMemo(() => toArray(dashboardData?.courses), [dashboardData])
