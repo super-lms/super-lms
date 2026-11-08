@@ -1412,6 +1412,7 @@ export default function StudentDashboardPage() {
           <ActionButton quiet onClick={() => navigate("/student-learning-paths")}>Learning Paths</ActionButton>
           <ActionButton quiet onClick={() => navigate("/student-reports")}>Reports</ActionButton>
           <ActionButton quiet onClick={() => navigate("/student-assessments")}>Tests &amp; Assessments</ActionButton>
+          <ActionButton onClick={handleLogout}>Logout</ActionButton>
         </nav>
         <p role="status">Loading student dashboard…</p>
       </section>
@@ -1436,6 +1437,7 @@ export default function StudentDashboardPage() {
             <ActionButton quiet onClick={() => navigate("/student-progress")}>Progress</ActionButton>
             <ActionButton quiet onClick={() => navigate("/student-learning-paths")}>Learning Paths</ActionButton>
             <ActionButton quiet onClick={() => navigate("/student-reports")}>Reports</ActionButton>
+            <ActionButton onClick={handleLogout}>Logout</ActionButton>
           </nav>
           <details className="student-account-details">
             <summary>More tools &amp; account</summary>
@@ -1447,7 +1449,6 @@ export default function StudentDashboardPage() {
                 <ActionButton quiet onClick={() => navigate("/calendar")}>Calendar</ActionButton>
                 <ActionButton quiet onClick={() => navigate("/self-study")}>Self-study iPads</ActionButton>
               </> : null}
-              <ActionButton onClick={handleLogout}>Logout</ActionButton>
             </div>
             <p>{user?.name || "Student"} · {user?.email || "—"} · {user?.role || "student"}</p>
           </details>
