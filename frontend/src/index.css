@@ -613,3 +613,13 @@ tbody > tr > td { background-color: inherit; }
   .teacher-dashboard-table > table { min-width: 0; }
   .teacher-dashboard-table-hint { display: none; }
 }
+
+/* Teacher keyboard focus is a visible outline, independent of colour meaning. */
+.teacher-workspace :where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .teacher-workspace :where(button, a, input, select, textarea, summary):focus-visible { outline-color: Highlight; }
+  .teacher-workspace nav a[aria-current="page"] { border: 2px solid Highlight !important; }
+}

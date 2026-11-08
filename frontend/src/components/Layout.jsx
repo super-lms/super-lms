@@ -148,7 +148,7 @@ export default function Layout() {
         : location.pathname === path || location.pathname.startsWith(`${path}/`)
 
     return {
-      color: "#111",
+      color: isActive && !isStudentRoute ? "#1e40af" : "#111",
       textDecoration: "none",
       fontSize: "16px",
       display: "flex",
@@ -156,8 +156,9 @@ export default function Layout() {
       gap: "10px",
       padding: "10px 12px",
       borderRadius: "10px",
-      border: isActive ? "1px solid #d7d7d7" : "1px solid transparent",
-      background: isActive ? "#f3f4f6" : "#ffffff",
+      border: isActive ? `1px solid ${isStudentRoute ? "#d7d7d7" : "#1d4ed8"}` : "1px solid transparent",
+      boxShadow: isActive && !isStudentRoute ? "inset 4px 0 0 #1d4ed8" : "none",
+      background: isActive ? (isStudentRoute ? "#f3f4f6" : "#eff6ff") : "#ffffff",
       fontWeight: isActive ? 700 : 400,
       transition: "background 0.15s ease, border-color 0.15s ease",
     }
@@ -238,7 +239,7 @@ export default function Layout() {
   const roleDisplayName = getRoleDisplayName()
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", fontFamily: "Arial, sans-serif" }}>
+    <div className={isStudentRoute ? undefined : "teacher-workspace"} style={{ display: "flex", minHeight: "100vh", fontFamily: "Arial, sans-serif" }}>
       <div
         style={{
           width: "260px",
@@ -508,8 +509,11 @@ export default function Layout() {
 }
 
 function NavItem({ to, style, icon: Icon, children, onClick }) {
+  const { pathname } = useLocation()
+  const targetPath = String(to).split("?")[0]
+  const isCurrent = pathname === targetPath || pathname.startsWith(`${targetPath}/`)
   return (
-    <Link to={to} onClick={onClick} title={typeof children === "string" ? children : ""} style={style}>
+    <Link to={to} aria-current={isCurrent ? "page" : undefined} onClick={onClick} title={typeof children === "string" ? children : ""} style={style}>
       <Icon size={18} />
       <span>{children}</span>
     </Link>
