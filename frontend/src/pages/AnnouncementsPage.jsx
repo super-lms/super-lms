@@ -7,6 +7,27 @@ import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch.js';
 import './AnnouncementsPage.css';
 import AnnouncementGroupLookup from '../components/AnnouncementGroupLookup.jsx';
+const isImage = file => /\.(png|jpe?g)$/i.test(file.filename || file.name || '');
+function AnnouncementImage({file}) {
+  const [url,setUrl]=useState(''),[failed,setFailed]=useState(false);
+  useEffect(()=>{
+    let active=true,objectUrl;
+    setUrl('');setFailed(false);
+    async function read(){
+      try {
+        const blob=file instanceof Blob ? file : await (async()=>{
+          const response=await authFetch(`/api/announcements/files/${file.id}?preview=true`);
+          if(!response.ok)throw Error('Image unavailable');
+          return response.blob();
+        })();
+        if(!['image/png','image/jpeg'].includes(blob.type))throw Error('Unsupported image');
+        if(active){objectUrl=URL.createObjectURL(blob);setUrl(objectUrl);}
+      }catch{if(active)setFailed(true);}
+    }
+    read();return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
+  },[file]);
+  return <figure className="announcement-inline-image">{url?<img src={url} alt={file.filename || file.name || 'Announcement screenshot'} onError={()=>setFailed(true)}/>:!failed&&<p role="status">Loading image…</p>}{failed&&<p role="status">Image could not be displayed. Use Open / Read or Download below.</p>}<figcaption>{file.filename || file.name}</figcaption></figure>;
+}
 const blank = () => ({title:'',body:'',event_date:'',pinned:false,files:[],course_id:'',course_scope:'section',audiences:[],publish_at:'',expires_at:'',is_published:true});
 export default function AnnouncementsPage() {
   const {user}=useAuth();
@@ -24,10 +45,23 @@ export default function AnnouncementsPage() {
   useEffect(()=>{load();if(canPublish)authFetch('/api/courses').then(r=>r.json()).then(data=>setCourses(Array.isArray(data)?data:[])).catch(()=>setError('Could not load your classes.'));},[]);
   useEffect(()=>{ if(preview)previewRef.current?.showModal(); return ()=>{if(preview?.url)URL.revokeObjectURL(preview.url);}; },[preview]);
   function edit(item=blank()) {setDraft({...item,audiences:item.audiences || (item.course_id ? [{course_id:Number(item.course_id),scope:item.course_scope || 'section'}] : []),event_date:item.event_date?.slice(0,10)||'',publish_at:beijingDateTime(item.publish_at),expires_at:beijingDateTime(item.expires_at)});setFiles([]);setRemove([]);setError('');}
+  function addFiles(incoming) {
+    const next=Array.from(incoming || []);
+    if(files.length+draft.files.filter(f=>!remove.includes(f.id)).length+next.length>5){setError('Keep no more than five attachments per announcement.');return;}
+    if(next.some(file=>file.size>15*1024*1024)){setError('Each attachment must be 15 MB or smaller.');return;}
+    setError('');setFiles(current=>[...current,...next]);
+  }
+  function pasteScreenshot(event) {
+    const images=Array.from(event.clipboardData.files || []).filter(file=>file.type.startsWith('image/'));
+    if(!images.length)return;
+    event.preventDefault();
+    if(images.some(file=>!['image/png','image/jpeg'].includes(file.type))){setError('Paste a PNG or JPEG screenshot.');return;}
+    addFiles(images.map((file,index)=>new File([file],`Screenshot-${Date.now()}-${index+1}.${file.type==='image/png'?'png':'jpg'}`,{type:file.type})));
+  }
   async function save(event) {
     event.preventDefault();setBusy(true);setError('');setNotice('');
     try {
-      const data=new FormData(); for(const key of ['title','body','event_date','pinned','course_id','course_scope','is_published'])data.append(key,String(draft[key]??''));
+      const data=new FormData(); for(const key of ['title','body','event_date','pinned','course_id','course_scope','is_published'])data.append(key,String(key==='body' ? (draft.body.trim() || 'Screenshot attached.') : (draft[key]??'')));
       data.append('audiences',JSON.stringify(draft.audiences || []));
       data.append('publish_at',assignmentInstant(draft.publish_at)||'');data.append('expires_at',assignmentInstant(draft.expires_at)||'');
       data.append('remove_files',JSON.stringify(remove));for(const file of files)data.append('files',file);
@@ -67,13 +101,15 @@ export default function AnnouncementsPage() {
       <label>End time (optional)<AssignmentDateTime value={draft.expires_at} min={draft.publish_at} onChange={value=>setDraft({...draft,expires_at:value})}/></label>
       <label className="announcement-check"><input type="checkbox" checked={draft.is_published!==false} onChange={e=>setDraft({...draft,is_published:e.target.checked})}/>Publish to students or schedule for the time above (uncheck to save a draft)</label>
       <label>Title<input required maxLength={200} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
-      <label>Message<textarea required rows={6} maxLength={20000} value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="What do students need to know?"/></label>
+      <label>Message<textarea required={!files.some(isImage)&&!draft.files.some(f=>!remove.includes(f.id)&&isImage(f))} onPaste={pasteScreenshot} rows={6} maxLength={20000} value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="What do students need to know? You can paste a screenshot here."/></label>
       <label>Event date (optional)<input type="date" value={draft.event_date} onChange={e=>setDraft({...draft,event_date:e.target.value})}/></label>
       <label className="announcement-check"><input type="checkbox" checked={draft.pinned} onChange={e=>setDraft({...draft,pinned:e.target.checked})}/>Pin to the top</label>
-      <label>Attach documents<input type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg" onChange={e=>setFiles(Array.from(e.target.files||[]))}/></label>
+      <label>Attach documents<input type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg" onChange={e=>{addFiles(e.target.files);e.target.value="";}}/></label>
       <small>PDF, Word (.docx), Excel (.xlsx), CSV, text, or images. Up to 5 files, 15 MB each.</small>
       {draft.files.filter(f=>!remove.includes(f.id)).map(f=><div key={f.id}>{f.filename} <button type="button" onClick={()=>setRemove([...remove,f.id])}>Remove attachment</button></div>)}
-      {files.map((f,i)=><div key={i}>{f.name}</div>)}
+      <small>Paste a screenshot into Message using Ctrl/Cmd+V. Images appear below the message after saving. Add a brief text description for readers who cannot see the image.</small>
+      {draft.files.filter(f=>!remove.includes(f.id)&&isImage(f)).map(f=><AnnouncementImage key={f.id} file={f}/>)}
+      {files.map((f,i)=><div key={`${f.name}-${i}`}>{isImage(f)?<AnnouncementImage file={f}/>:f.name} <button type="button" onClick={()=>setFiles(current=>current.filter((_,index)=>index!==i))}>Remove {f.name}</button></div>)}
       <div className="announcement-actions"><button className="btn" disabled={busy}>{busy?'Saving…':'Save announcement'}</button><button type="button" className="btn secondary" disabled={busy} onClick={()=>setDraft(null)}>Cancel</button></div>
     </form>}
     <label className="announcement-search">Search announcements<input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search titles, messages, or document names"/></label>
@@ -82,6 +118,7 @@ export default function AnnouncementsPage() {
       <p><strong>{item.class_name||'Whole school'}</strong>{canPublish&&<> · {!item.is_published?'Draft':item.expires_at&&Date.parse(item.expires_at)<=Date.now()?'Ended':item.publish_at&&Date.parse(item.publish_at)>Date.now()?'Scheduled':'Published'}</>}{item.publish_at&&<> · From {displayAssignmentTime(item.publish_at)}</>}{item.expires_at&&<> · Until {displayAssignmentTime(item.expires_at)}</>}</p>
       <h2>{item.title}</h2>{item.event_date&&<p><strong>Event:</strong> {new Date(`${item.event_date.slice(0,10)}T12:00:00`).toLocaleDateString()}</p>}
       <p className="announcement-message">{item.body}</p>
+      {item.files.filter(isImage).map(file=><AnnouncementImage key={file.id} file={file}/>)}
       {!!item.files.length&&<section aria-label="Documents"><h3>Documents</h3>{item.files.map(file=><div className="announcement-file" key={file.id}><span>{file.filename}</span><div className="announcement-actions"><button disabled={busy} onClick={()=>openFile(file)}>Open / Read</button><button disabled={busy} onClick={()=>openFile(file,true)}>Download</button></div></div>)}</section>}
       {canPublish&&(user.role==='admin'||Number(item.author_id)===Number(user.id))&&<div className="announcement-actions"><button disabled={busy} onClick={()=>edit(item)}>Edit</button><button disabled={busy} onClick={()=>deleteItem(item)}>Delete</button></div>}
     </article>)}
