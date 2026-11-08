@@ -1,4 +1,5 @@
 import { updateWorkspaceUrl } from "../services/workspaceLocation.js"
+import CourseDescriptionPreview from "../components/CourseDescriptionPreview.jsx"
 import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -2892,19 +2893,7 @@ export default function CoursesPage() {
                         </div>
                       </>
                     ) : null}
-                    <div
-                      style={{
-                        margin: 0,
-                        color: "#4b5563",
-                        lineHeight: 1.45,
-                        overflowWrap: "anywhere",
-                        maxHeight: "132px",
-                        overflowY: "auto",
-                        paddingRight: "8px",
-                      }}
-                    >
-                      <FormattedText value={course.description} fallback="Open this course workspace to manage assignments, students, learning paths, and grading." />
-                    </div>
+                    <CourseDescriptionPreview value={course.description} />
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "18px" }}>
