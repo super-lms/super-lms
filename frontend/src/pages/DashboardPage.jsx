@@ -332,8 +332,8 @@ export function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStud
           No KDU heatmap evidence available yet.
         </div>
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <DashboardTable label="KDU Class Heatmap">
+          <table aria-label="KDU Class Heatmap" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={heatmapThStyle}>Student</th>
@@ -399,7 +399,7 @@ export function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStud
               ))}
             </tbody>
           </table>
-        </div>
+        </DashboardTable>
       )}
 
       {rows.length > safeRows.length ? (
