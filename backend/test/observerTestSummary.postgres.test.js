@@ -7,6 +7,22 @@ test('observer test counts use completed tests once, isolate course/student, and
  try{
   pg('initdb',['-D',path.join(dir,'data'),'-A','trust','-U','test','--no-locale']);pg('pg_ctl',['-D',path.join(dir,'data'),'-l',path.join(dir,'server.log'),'-o',`-k ${dir} -h '' -p 58483`,'-w','start']);started=true;
   pool=new Pool({host:dir,port:58483,user:'test',database:'postgres'});
+  // Exercise the dashboard's actual role query: older generic links must not mask a homeroom account.
+  const source=fs.readFileSync(path.join(__dirname,'../server/app.js'),'utf8');
+  const route=source.slice(source.indexOf('app.get("/api/observers/:email/dashboard"'));
+  const roleSql=route.match(/const observerResult = await pool\.query\(\s*`([\s\S]*?)`/)[1];
+  await pool.query(`CREATE TABLE users(id INT PRIMARY KEY,first_name TEXT,last_name TEXT,email TEXT,role TEXT,observer_relationship TEXT);
+    CREATE TABLE observer_student_links(observer_user_id INT,relationship TEXT);
+    INSERT INTO users VALUES(1,'Home','Teacher','home@example.invalid','observer','chinese_homeroom_teacher'),
+      (2,'Staff','Observer','staff@example.invalid','observer','observer'),
+      (3,'Legacy','Teacher','legacy@example.invalid','observer',NULL),
+      (4,'New','Teacher','new@example.invalid','observer','chinese_homeroom_teacher'),
+      (5,'A','Parent','parent@example.invalid','parent','parent');
+    INSERT INTO observer_student_links VALUES(1,'observer'),(2,'observer'),(3,'chinese_homeroom_teacher'),(5,'parent');`);
+  for(const [email,expected] of [['home','chinese_homeroom_teacher'],['staff','observer'],['legacy','chinese_homeroom_teacher'],['new','chinese_homeroom_teacher'],['parent','parent']]) {
+    assert.equal((await pool.query(roleSql,[email+'@example.invalid'])).rows[0].relationship,expected);
+  }
+  await pool.query('DROP TABLE observer_student_links; DROP TABLE users');
   const args={studentEmail:' ME@example.invalid ',courseId:12,contentCourseId:1,assignmentIds:[101,103,105]};
   assert.deepEqual(await loadObserverTestSummary(pool,args),{completed_tests:0,test_assignment_ids:[],completed_test_assignment_ids:[]});
   await pool.query(`CREATE TABLE users(id INT PRIMARY KEY,email TEXT);

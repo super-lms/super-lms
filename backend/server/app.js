@@ -5364,6 +5364,8 @@ app.get("/api/observers/:email/dashboard", authenticateJWT, requireRole("admin",
         u.email,
         u.role,
         COALESCE(
+          CASE WHEN LOWER(TRIM(u.observer_relationship)) = 'chinese_homeroom_teacher'
+            THEN 'chinese_homeroom_teacher' END,
           MAX(CASE WHEN osl.relationship = 'chinese_homeroom_teacher' THEN 'chinese_homeroom_teacher' END),
           MAX(osl.relationship),
           NULLIF(LOWER(TRIM(u.observer_relationship)), ''),
