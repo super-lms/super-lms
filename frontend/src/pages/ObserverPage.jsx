@@ -1,3 +1,5 @@
+import HomeroomCourseSummary from "../components/HomeroomCourseSummary.jsx"
+import {loadHomeroomCourseSummaries} from "../services/homeroomCourseSummary.js"
 import ParentQuestionAssistant from "../components/ParentQuestionAssistant.jsx"
 import {observerCourseText, observerAttentionItems, observerWorkStatus, observerCourseLabel} from '../services/observerCourseView.js'
 import {beijingDateTime} from '../services/assignmentTime.js'
@@ -189,6 +191,8 @@ export default function ObserverPage() {
   const [courseDashboardLoading, setCourseDashboardLoading] = useState(false)
   const [courseDashboardError, setCourseDashboardError] = useState("")
 
+  const [homeroomSummary, setHomeroomSummary] = useState({studentEmail:"",rows:[],loading:false})
+  const [summaryRevision, setSummaryRevision] = useState(0)
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("")
   const [viewMode, setViewMode] = useState("dashboard")
@@ -390,6 +394,27 @@ export default function ObserverPage() {
     : isParent
       ? t.parentDashboard
       : t.observerDashboard
+
+  useEffect(() => {
+    let active = true
+    if (!isChineseHomeroomTeacher || !selectedStudentEmail || !user?.email) return
+    setHomeroomSummary({studentEmail:selectedStudentEmail,rows:coursesForSelectedStudent.map(course=>({course})),loading:true})
+    loadHomeroomCourseSummaries(coursesForSelectedStudent, async course => {
+      if (!active) throw new Error("Selection changed")
+      const response = await authFetch(`/api/observers/${encodeURIComponent(user.email)}/students/${encodeURIComponent(selectedStudentEmail)}/courses/${encodeURIComponent(course.class_id)}/dashboard`)
+      if (!response.ok) throw new Error("Course summary unavailable")
+      return response.json()
+    }).then(rows => {if(active)setHomeroomSummary({studentEmail:selectedStudentEmail,rows,loading:false})})
+    return () => {active=false}
+  }, [isChineseHomeroomTeacher, selectedStudentEmail, user?.email, coursesForSelectedStudent, summaryRevision])
+
+  const homeroomSummaryMatches = homeroomSummary.studentEmail === selectedStudentEmail
+  const studentCourseSummary = isChineseHomeroomTeacher && selectedStudent ? <HomeroomCourseSummary
+    studentName={selectedStudent.student_name} language={language}
+    rows={homeroomSummaryMatches?homeroomSummary.rows:coursesForSelectedStudent.map(course=>({course}))}
+    loading={!homeroomSummaryMatches||homeroomSummary.loading}
+    onRefresh={()=>setSummaryRevision(value=>value+1)} onOpenCourse={openCourse}
+  /> : null
 
   const courseSubmissions = useMemo(() => {
     return observerData.submissions.filter((submission) => {
@@ -1183,6 +1208,7 @@ export default function ObserverPage() {
 
           <div style={contextLabelStyle}>{t.student}</div>
           <h2 style={sectionTitleStyle}>{selectedStudent.student_name}</h2>
+          {studentCourseSummary}
           <p style={{ marginTop: 0, color: "#4b5563" }}>
             {t.chooseCourse}
           </p>
@@ -1226,6 +1252,7 @@ export default function ObserverPage() {
               <div style={contextLabelStyle}>{t.student}</div>
               <div style={{ fontSize: "1.05rem", fontWeight: 900 }}>{selectedStudent.student_name}</div>
             </div>
+            {studentCourseSummary}
             <p style={{ marginTop: 0, color: "#4b5563" }}>
               {t.courseIntro}
             </p>

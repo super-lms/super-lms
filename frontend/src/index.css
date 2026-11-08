@@ -630,3 +630,10 @@ tbody > tr > td { background-color: inherit; }
 @container teacher-risk (max-width: 640px) {
   .teacher-risk-layout { grid-template-columns: minmax(0, 1fr); }
 }
+
+.homeroom-summary-table:focus-visible, .homeroom-summary-table button:focus-visible { outline: 3px solid #1d4ed8; outline-offset: -3px; }
+@media (forced-colors: active) { .homeroom-summary-table:focus-visible, .homeroom-summary-table button:focus-visible { outline-color: Highlight; } }
+@media print { .homeroom-summary-table { overflow: visible !important; } .homeroom-summary-table table { min-width: 0 !important; } }
+
+.homeroom-course-summary :where(button, summary):focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+@media (forced-colors: active) { .homeroom-course-summary :where(button, summary):focus-visible { outline-color: Highlight; } }

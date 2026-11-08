@@ -1,3 +1,4 @@
+const {loadObserverTestSummary} = require("./observerTestSummary");
 const { calculateTeacherRubric } = require('./teacherRubricScoring');
 const {gradebookSubmissionIndex,latestSubmissionByAssignment} = require('./gradebookSubmissions');
 const {loadCourseRisk} = require('./dashboardRisk');
@@ -6520,8 +6521,20 @@ app.get(
               ? "Developing"
               : "Emerging";
 
+      let testSummary;
+      try {
+        testSummary = await loadObserverTestSummary(pool, {
+          studentEmail, courseId, contentCourseId,
+          assignmentIds: assignmentsResult.rows.map(assignment => assignment.id),
+        });
+      } catch (error) {
+        console.error("Observer completed-test counts unavailable:", error.message);
+        testSummary = {completed_tests: null, unavailable: true};
+      }
+
       return res.json({
         course: courseResult.rows[0],
+        test_summary: testSummary,
         assignments: assignmentsResult.rows,
         lessons: lessonsResult.rows,
         content_course_id: contentCourseId,
