@@ -1,3 +1,4 @@
+import { updateWorkspaceUrl } from "../services/workspaceLocation.js"
 import SurveyReflectionReports from "../components/SurveyReflectionReports.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -292,13 +293,13 @@ function ReportsPage() {
 
       const nextUrl = new URL(window.location.href);
       nextUrl.searchParams.set("courseId", courseId);
-      window.history.replaceState(null, "", nextUrl);
+      updateWorkspaceUrl(nextUrl, true);
     } else {
       window.localStorage.removeItem("super-lms-last-course-id");
 
       const nextUrl = new URL(window.location.href);
       nextUrl.searchParams.delete("courseId");
-      window.history.replaceState(null, "", nextUrl);
+      updateWorkspaceUrl(nextUrl, true);
     }
     setSelectedStudentKey("");
     setReportData(null);

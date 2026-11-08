@@ -42,3 +42,11 @@ test('master navigation preserves all sections without treating all as a class I
   assert.equal(gradebookPath('/assignments/100/grade', '?sectionId=all', '11'), '/gradebook?classId=11&sectionId=all');
   assert.equal(speedGradingPath(100, 'all'), '/assignments/100/grade?sectionId=all');
 });
+
+
+test('course assignment links use the open course and selected cohort, never a stale remembered class', () => {
+  assert.equal(gradebookPath('/course-assignments/168', '?sectionId=168', '110'), '/gradebook?classId=168');
+  assert.equal(gradebookPath('/course-assignments/168', '', '110'), '/gradebook?classId=168');
+  assert.equal(gradebookPath('/course-assignments/168', '?sectionId=170', '110'), '/gradebook?classId=170');
+  assert.equal(gradebookPath('/course-assignments/168', '?sectionId=all', '110'), '/gradebook?classId=168&sectionId=all');
+});

@@ -1,3 +1,4 @@
+import { WORKSPACE_LOCATION_EVENT, readWorkspaceLocation } from "../services/workspaceLocation.js"
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
@@ -30,6 +31,18 @@ export default function Layout() {
   const { user, logout } = useAuth()
 
   const [teacherCourses, setTeacherCourses] = useState([])
+  const [workspaceLocation, setWorkspaceLocation] = useState(() => readWorkspaceLocation())
+
+  useEffect(() => {
+    const syncLocation = () => setWorkspaceLocation(readWorkspaceLocation())
+    syncLocation()
+    window.addEventListener(WORKSPACE_LOCATION_EVENT, syncLocation)
+    window.addEventListener("popstate", syncLocation)
+    return () => {
+      window.removeEventListener(WORKSPACE_LOCATION_EVENT, syncLocation)
+      window.removeEventListener("popstate", syncLocation)
+    }
+  }, [location.pathname, location.search])
 
   const normalizedRole = String(user?.role || "").trim().toLowerCase()
   const dashboardPath = "/dashboard"
@@ -108,7 +121,11 @@ export default function Layout() {
     )
   }
 
-  const primaryGradebookPath = getGradebookPath()
+  const primaryGradebookPath = gradebookPath(
+    workspaceLocation.pathname,
+    workspaceLocation.search,
+    window.localStorage.getItem("super-lms-last-course-id") || ""
+  )
 
   function getAssignmentsPath() {
     // Course workspaces update browser history directly, so read the live URL

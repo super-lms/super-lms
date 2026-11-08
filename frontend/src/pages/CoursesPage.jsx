@@ -1,3 +1,4 @@
+import { updateWorkspaceUrl } from "../services/workspaceLocation.js"
 import ClassResourceWindow from "../components/ClassResourceWindow.jsx"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -344,7 +345,7 @@ export default function CoursesPage() {
 
     const masterView = Boolean(options.master)
     window.localStorage.setItem("super-lms-last-course-id", String(courseId))
-    window.history.pushState(null, "", `/courses?courseId=${courseId}${masterView ? "&view=master" : ""}`)
+    updateWorkspaceUrl(`/courses?courseId=${courseId}${masterView ? "&view=master" : ""}`)
     setSelectedCourseId(courseId)
     setIsMasterWorkspace(masterView)
     const courseGroup = findCourseGroup(courses, courseId)
@@ -352,7 +353,7 @@ export default function CoursesPage() {
   }
 
   function returnToCourseCards() {
-    window.history.pushState(null, "", "/courses")
+    updateWorkspaceUrl("/courses")
     setSelectedCourseId(null)
     setIsMasterWorkspace(false)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -1466,7 +1467,7 @@ export default function CoursesPage() {
 
       if (data.course?.id) {
         window.localStorage.setItem("super-lms-last-course-id", String(data.course.id))
-        window.history.replaceState(null, "", `/courses?courseId=${data.course.id}`)
+        updateWorkspaceUrl(`/courses?courseId=${data.course.id}`, true)
       }
     } catch (err) {
       setError(err.message || "Failed to duplicate course")
@@ -3452,7 +3453,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        updateWorkspaceUrl(`/courses?courseId=${course.id}`, true)
                         loadCompetencies(contentCourseId)
                       }}
                       disabled={competencyLoadingCourseId === contentCourseId}
@@ -3547,7 +3548,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        updateWorkspaceUrl(`/courses?courseId=${course.id}`, true)
                         loadLearningPaths(contentCourseId)
                       }}
                       disabled={learningPathLoadingCourseId === contentCourseId}
@@ -3564,7 +3565,7 @@ export default function CoursesPage() {
                       type="button"
                       onClick={() => {
                         window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        updateWorkspaceUrl(`/courses?courseId=${course.id}`, true)
                         loadCompetencies(contentCourseId, { forceOpen: true })
                       }}
                       disabled={competencyLoadingCourseId === contentCourseId}
@@ -3579,7 +3580,7 @@ export default function CoursesPage() {
 
                     <button type="button" onClick={() => {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        updateWorkspaceUrl(`/courses?courseId=${course.id}`, true)
                       loadRoster(course.id)
                     }} disabled={rosterLoadingCourseId === course.id} title={isMasterWorkspace ? "View all students from every linked section." : ""} style={buttonStyle}>
                       {rosterLoadingCourseId === course.id ? "Loading Roster..." : isRosterOpen ? "Hide Roster" : "View Roster"}
@@ -3603,7 +3604,7 @@ export default function CoursesPage() {
 
                     <button type="button" onClick={() => {
                       window.localStorage.setItem("super-lms-last-course-id", String(course.id))
-                        window.history.replaceState(null, "", `/courses?courseId=${course.id}`)
+                        updateWorkspaceUrl(`/courses?courseId=${course.id}`, true)
                       openCourseImport(course)
                     }} disabled={isMasterWorkspace || courseImportingCourseId === course.id} title={isMasterWorkspace ? "Choose a lettered section before importing students." : ""} style={buttonStyle}>
                       {isImportOpen ? "Close Import" : "Import Students"}
@@ -4870,7 +4871,7 @@ export default function CoursesPage() {
           }
 
           window.localStorage.setItem("super-lms-last-course-id", String(targetCourseId))
-          window.history.replaceState(null, "", `/courses?courseId=${targetCourseId}`)
+          updateWorkspaceUrl(`/courses?courseId=${targetCourseId}`, true)
 
           const scrollToTargetCourse = () => {
             window.setTimeout(() => {
