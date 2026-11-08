@@ -51,12 +51,30 @@ export default function AnnouncementsPage() {
     if(next.some(file=>file.size>15*1024*1024)){setError('Each attachment must be 15 MB or smaller.');return;}
     setError('');setFiles(current=>[...current,...next]);
   }
+  function transferImages(transfer) {
+    const transferred=Array.from(transfer.files || []);
+    if(!transferred.length)for(const item of Array.from(transfer.items || [])) {
+      if(item.kind==='file'){const file=item.getAsFile();if(file)transferred.push(file);}
+    }
+    return transferred;
+  }
+  function addScreenshots(images) {
+    if(images.some(file=>!['image/png','image/jpeg'].includes(file.type)&&!(file.type===''&&isImage(file)))){setError('Use a PNG or JPEG screenshot. Other documents can be added with Attach documents.');return;}
+    addFiles(images.map((file,index)=>{
+      const type=file.type || (/\.png$/i.test(file.name)?'image/png':'image/jpeg');
+      return new File([file],file.name&&isImage(file)?file.name:`Screenshot-${Date.now()}-${index+1}.${type==='image/png'?'png':'jpg'}`,{type});
+    }));
+  }
   function pasteScreenshot(event) {
-    const images=Array.from(event.clipboardData.files || []).filter(file=>file.type.startsWith('image/'));
+    const images=transferImages(event.clipboardData);
     if(!images.length)return;
+    event.preventDefault();addScreenshots(images);
+  }
+  function dropScreenshot(event) {
     event.preventDefault();
-    if(images.some(file=>!['image/png','image/jpeg'].includes(file.type))){setError('Paste a PNG or JPEG screenshot.');return;}
-    addFiles(images.map((file,index)=>new File([file],`Screenshot-${Date.now()}-${index+1}.${file.type==='image/png'?'png':'jpg'}`,{type:file.type})));
+    const images=transferImages(event.dataTransfer);
+    if(images.length)addScreenshots(images);
+    else setError('Drop a PNG or JPEG screenshot file here, or use Attach documents.');
   }
   async function save(event) {
     event.preventDefault();setBusy(true);setError('');setNotice('');
@@ -101,13 +119,13 @@ export default function AnnouncementsPage() {
       <label>End time (optional)<AssignmentDateTime value={draft.expires_at} min={draft.publish_at} onChange={value=>setDraft({...draft,expires_at:value})}/></label>
       <label className="announcement-check"><input type="checkbox" checked={draft.is_published!==false} onChange={e=>setDraft({...draft,is_published:e.target.checked})}/>Publish to students or schedule for the time above (uncheck to save a draft)</label>
       <label>Title<input required maxLength={200} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
-      <label>Message<textarea required={!files.some(isImage)&&!draft.files.some(f=>!remove.includes(f.id)&&isImage(f))} onPaste={pasteScreenshot} rows={6} maxLength={20000} value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="What do students need to know? You can paste a screenshot here."/></label>
+      <label>Message<textarea required={!files.some(isImage)&&!draft.files.some(f=>!remove.includes(f.id)&&isImage(f))} onPaste={pasteScreenshot} onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect="copy";}} onDrop={dropScreenshot} rows={6} maxLength={20000} value={draft.body} onChange={e=>setDraft({...draft,body:e.target.value})} placeholder="What do students need to know? Paste or drop a screenshot here."/></label>
       <label>Event date (optional)<input type="date" value={draft.event_date} onChange={e=>setDraft({...draft,event_date:e.target.value})}/></label>
       <label className="announcement-check"><input type="checkbox" checked={draft.pinned} onChange={e=>setDraft({...draft,pinned:e.target.checked})}/>Pin to the top</label>
       <label>Attach documents<input type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg" onChange={e=>{addFiles(e.target.files);e.target.value="";}}/></label>
       <small>PDF, Word (.docx), Excel (.xlsx), CSV, text, or images. Up to 5 files, 15 MB each.</small>
       {draft.files.filter(f=>!remove.includes(f.id)).map(f=><div key={f.id}>{f.filename} <button type="button" onClick={()=>setRemove([...remove,f.id])}>Remove attachment</button></div>)}
-      <small>Paste a screenshot into Message using Ctrl/Cmd+V. Images appear below the message after saving. Add a brief text description for readers who cannot see the image.</small>
+      <small>Paste a screenshot into Message using Ctrl/Cmd+V, or drag a PNG/JPEG file onto the Message box. Images appear below the message after saving. Add a brief text description for readers who cannot see the image.</small>
       {draft.files.filter(f=>!remove.includes(f.id)&&isImage(f)).map(f=><AnnouncementImage key={f.id} file={f}/>)}
       {files.map((f,i)=><div key={`${f.name}-${i}`}>{isImage(f)?<AnnouncementImage file={f}/>:f.name} <button type="button" onClick={()=>setFiles(current=>current.filter((_,index)=>index!==i))}>Remove {f.name}</button></div>)}
       <div className="announcement-actions"><button className="btn" disabled={busy}>{busy?'Saving…':'Save announcement'}</button><button type="button" className="btn secondary" disabled={busy} onClick={()=>setDraft(null)}>Cancel</button></div>
