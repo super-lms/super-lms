@@ -3,6 +3,8 @@ import { useEffect, useId, useRef, useState } from "react"
 export default function FloatingTeacherCoach({
   className = "",
   keyboardSupport = false,
+  docked = false,
+  onOpenChange = null,
   title = "Teacher Coach",
   defaultOpen = false,
   subtitle = "SUPER LMS Guide",
@@ -22,6 +24,8 @@ export default function FloatingTeacherCoach({
     if (keyboardSupport && open) closeRef.current?.focus()
   }, [keyboardSupport, open])
 
+  useEffect(() => { onOpenChange?.(open) }, [open, onOpenChange])
+
   function closeCoach() {
     setOpen(false)
     if (keyboardSupport) triggerRef.current?.focus()
@@ -29,7 +33,7 @@ export default function FloatingTeacherCoach({
 
 
   return (
-    <div className={className} style={teacherCoachShellStyle} onKeyDown={keyboardSupport ? (event) => {
+    <div className={className} style={docked && open ? {...teacherCoachShellStyle, position: "sticky", top: "16px", right: "auto", bottom: "auto", alignSelf: "start", justifyItems: "stretch", zIndex: "auto"} : teacherCoachShellStyle} onKeyDown={keyboardSupport ? (event) => {
       if (open && event.key === "Escape") {
         event.preventDefault()
         event.stopPropagation()
@@ -37,7 +41,7 @@ export default function FloatingTeacherCoach({
       }
     } : undefined}>
       {open ? (
-        <div id={panelId} role={keyboardSupport ? "region" : undefined} aria-label={keyboardSupport ? title : undefined} style={teacherCoachPanelStyle}>
+        <div id={panelId} role={keyboardSupport ? "region" : undefined} aria-label={keyboardSupport ? title : undefined} style={docked ? {...teacherCoachPanelStyle, width: "100%"} : teacherCoachPanelStyle}>
           <div style={teacherCoachHeaderStyle}>
             <div>
               <div style={{ fontWeight: 900 }}>{title}</div>

@@ -1,3 +1,4 @@
+import StudentStatusBadge from "../components/student/StudentStatusBadge.jsx"
 import authFetch from "../services/authFetch";
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -255,7 +256,7 @@ export default function StudentLearningPathsPage() {
 
                             {assignmentId ? (
                               <div style={statusStyle}>
-                                {submissionStatus === "Submitted" ? "✓ Complete" : submissionStatus === "Teacher enters mark" ? "No submission required — teacher enters mark" : submissionStatus === "Unavailable" ? "Open assignment to check status" : "○ Not Submitted"}
+                                <StudentStatusBadge status={submissionStatus === "Submitted" ? "submitted" : "not_submitted"} label={submissionStatus === "Submitted" ? "Complete" : submissionStatus === "Teacher enters mark" ? "No submission required — teacher enters mark" : submissionStatus === "Unavailable" ? "Open assignment to check status" : "Not Submitted"} />
                               </div>
                             ) : null}
 

@@ -1,3 +1,6 @@
+import { mapStudentReads } from "../services/studentPortalData.js"
+import StudentStatusBadge from "../components/student/StudentStatusBadge.jsx"
+import StudentAssignmentList, { AssignmentViewToggle } from "../components/student/StudentAssignmentList.jsx"
 import FeedbackFiles from "../components/FeedbackFiles.jsx";
 import {PdfFeedbackFiles} from "../components/PdfMarkup.jsx";
 import StudentAssignmentRubric from '../components/rubrics/StudentAssignmentRubric.jsx';
@@ -231,7 +234,7 @@ function ResultCard({ assignment, submissionState, onOpen }) {
         </DetailCard>
 
         <DetailCard title="Submission">
-          <div>{submissionStatusLabel}</div>
+          <StudentStatusBadge status={submissionState?.submission_status || "not_submitted"} label={submissionStatusLabel} />
         </DetailCard>
 
         <DetailCard title="Score">
@@ -655,6 +658,8 @@ export default function StudentDashboardPage() {
   const [portalViewMode, setPortalViewMode] = useState(() => {
     return window.localStorage.getItem("super-lms-student-portal-view") || "menu"
   })
+  const [coachOpen, setCoachOpen] = useState(false)
+  const [assignmentLayout, setAssignmentLayout] = useState("table")
   const [activePortalSection, setActivePortalSection] = useState("courses")
 
   const selectedContentCourseId = selectedCourse?.content_course_id || selectedCourseId
@@ -847,8 +852,7 @@ export default function StudentDashboardPage() {
 
       try {
         setCourseProgressLoading(true)
-        const results = await Promise.all(
-          assignmentsNeedingStatus.map(async (assignment) => {
+        const results = await mapStudentReads(assignmentsNeedingStatus, async (assignment) => {
             const assignmentId = String(assignment.id)
             const response = await authFetch(
               `/api/assignments/${assignmentId}/student-submission?student_email=${encodeURIComponent(studentEmail)}`
@@ -861,7 +865,6 @@ export default function StudentDashboardPage() {
 
             return { assignmentId, data, failed: false }
           })
-        )
 
         if (isCancelled) return
 
@@ -1401,31 +1404,18 @@ export default function StudentDashboardPage() {
   }, [errorText, courses, selectedCourseId, assignments])
 
   if (loading) {
-    return (
-      <div className="content-area">
-        <section
-          className="panel"
-          style={{
-            border: "2px solid #2563eb",
-            background: "#eff6ff",
-          }}
-        >
-          <SectionHeader
-            title="Tests & Assessments"
-            subtitle="Open available tests, continue saved work, and review submitted assessments."
-            action={
-              <ActionButton onClick={() => navigate("/student-assessments")}>
-                Open Tests & Assessments
-              </ActionButton>
-            }
-          />
-        </section>
-
-        <section className="panel">
-          <p>Loading student dashboard...</p>
-        </section>
-      </div>
-    )
+    return <div className="student-portal content-area">
+      <section className="panel">
+        <h1>Student Portal</h1>
+        <nav aria-label="Student tools" className="student-primary-tools">
+          <ActionButton quiet onClick={() => navigate("/student-progress")}>Progress</ActionButton>
+          <ActionButton quiet onClick={() => navigate("/student-learning-paths")}>Learning Paths</ActionButton>
+          <ActionButton quiet onClick={() => navigate("/student-reports")}>Reports</ActionButton>
+          <ActionButton quiet onClick={() => navigate("/student-assessments")}>Tests &amp; Assessments</ActionButton>
+        </nav>
+        <p role="status">Loading student dashboard…</p>
+      </section>
+    </div>
   }
 
   return (
@@ -1439,63 +1429,30 @@ export default function StudentDashboardPage() {
         </p>
       </div>
 
+      <div className={`student-workspace-shell${coachOpen ? " coach-open" : ""}`}>
       <div className="content-area">
-        <section className="panel">
-          <SectionHeader
-            title="Student Session"
-            subtitle="Use these actions to move through the student experience."
-            action={
-              <div className="student-session-actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <ActionButton quiet onClick={() => navigate("/student-stock-game")}>
-                  Stock Market Game
-                </ActionButton>
-                <ActionButton quiet onClick={() => navigate("/student-fitness")}>
-                  Fitness Workout Card
-                </ActionButton>
-                <ActionButton quiet onClick={() => navigate("/student-progress")}>
-                  Progress
-                </ActionButton>
-                <ActionButton quiet onClick={() => navigate("/student-learning-paths")}>
-                  Learning Paths
-                </ActionButton>
-                <ActionButton quiet onClick={() => navigate("/student-reports")}>
-                  Reports
-                </ActionButton>
-                <ActionButton quiet onClick={() => navigate("/announcements")}>
-                  Announcements
-                </ActionButton>
-                <ActionButton quiet onClick={() => navigate("/calendar")}>
-                  Calendar
-                </ActionButton>
-                <ActionButton onClick={handleLogout}>Logout</ActionButton>
-              </div>
-            }
-          />
-
+        <section className="panel student-compact-tools">
+          <nav aria-label="Student tools" className="student-primary-tools">
+            <ActionButton quiet onClick={() => navigate("/student-progress")}>Progress</ActionButton>
+            <ActionButton quiet onClick={() => navigate("/student-learning-paths")}>Learning Paths</ActionButton>
+            <ActionButton quiet onClick={() => navigate("/student-reports")}>Reports</ActionButton>
+          </nav>
           <details className="student-account-details">
-            <summary>Account details</summary>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "14px" }}>
-            <DetailCard title="Student Name">
-              <div>{user?.name || "Student"}</div>
-            </DetailCard>
-
-            <DetailCard title="Email">
-              <div>{user?.email || "—"}</div>
-            </DetailCard>
-
-            <DetailCard title="Role">
-              <div>{user?.role || "student"}</div>
-            </DetailCard>
-          </div>
+            <summary>More tools &amp; account</summary>
+            <div className="student-secondary-tools">
+              <ActionButton quiet onClick={() => navigate("/student-stock-game")}>Stock Market Game</ActionButton>
+              <ActionButton quiet onClick={() => navigate("/student-fitness")}>Fitness Workout Card</ActionButton>
+              {portalViewMode === "complete" ? <>
+                <ActionButton quiet onClick={() => navigate("/announcements")}>Announcements</ActionButton>
+                <ActionButton quiet onClick={() => navigate("/calendar")}>Calendar</ActionButton>
+                <ActionButton quiet onClick={() => navigate("/self-study")}>Self-study iPads</ActionButton>
+              </> : null}
+              <ActionButton onClick={handleLogout}>Logout</ActionButton>
+            </div>
+            <p>{user?.name || "Student"} · {user?.email || "—"} · {user?.role || "student"}</p>
           </details>
-        </section>
-
-        <section className="panel" style={viewChooserStyle}>
-          <div>
-            <strong>Student Portal View</strong>
-            <div style={{ marginTop: "4px", color: "#4b5563" }}>Choose a focused menu or the complete page.</div>
-          </div>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <div className="student-view-controls" role="group" aria-label="Student portal view">
+            <strong>View</strong>
             <button type="button" aria-pressed={portalViewMode === "menu"} onClick={() => changePortalViewMode("menu")} style={viewChoiceButtonStyle(portalViewMode === "menu")}>Menu View</button>
             <button type="button" aria-pressed={portalViewMode === "complete"} onClick={() => changePortalViewMode("complete")} style={viewChoiceButtonStyle(portalViewMode === "complete")}>Complete Page</button>
           </div>
@@ -1523,7 +1480,7 @@ export default function StudentDashboardPage() {
                 ["help", "Help"],
                 ["safe", "Safe Report"],
               ].map(([key, label]) => (
-                <button key={key} type="button" aria-current={activePortalSection === key ? "page" : undefined} onClick={() => setActivePortalSection(key)} style={portalMenuButtonStyle(activePortalSection === key)}>{label}</button>
+                <button key={key} type="button" aria-current={activePortalSection === key ? "page" : undefined} onClick={() => key === "assessments" ? navigate("/student-assessments") : setActivePortalSection(key)} style={portalMenuButtonStyle(activePortalSection === key)}>{label}</button>
               ))}
             </aside>
           ) : null}
@@ -1836,12 +1793,14 @@ export default function StudentDashboardPage() {
         ) : null}
 
         <section className="panel" style={{ display: showPortalSection("dashboard", "marks", "feedback") ? undefined : "none" }}>
-          <SectionHeader title="My Results" subtitle="See returned scores and teacher feedback. Scroll the table sideways to view more assignments; keyboard users can focus it and use the arrow keys." />
+          <SectionHeader action={<AssignmentViewToggle value={assignmentLayout} onChange={setAssignmentLayout} />} title="My Results" subtitle="See returned scores and teacher feedback. Scroll the table sideways to view more assignments; keyboard users can focus it and use the arrow keys." />
 
           {!selectedCourseId ? (
             <NoticeBox>Select a course above to view results.</NoticeBox>
           ) : resultAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
+          ) : assignmentLayout === "list" ? (
+            <StudentAssignmentList visible={showPortalSection("dashboard", "marks", "feedback")} assignments={resultAssignments} states={submissionStateByAssignmentId} showResults showFeedbackFiles={showPortalSection("dashboard", "marks", "feedback")} formatDate={formatDueDate} formatStatus={formatSubmissionStatus} onOpen={openSubmissionEditor} />
           ) : (
             <div className="student-table-region" role="region" aria-label="My results table. Scroll horizontally for more assignments." tabIndex={0} style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
               <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
@@ -1872,9 +1831,7 @@ export default function StudentDashboardPage() {
 
                       return (
                         <td key={assignment.id} style={assignmentSheetCellStyle}>
-                          {formatSubmissionStatus(
-                            submissionState?.submission_status || "not_submitted"
-                          )}
+                          <StudentStatusBadge status={submissionState?.submission_status || "not_submitted"} label={formatSubmissionStatus(submissionState?.submission_status || "not_submitted")} />
                         </td>
                       )
                     })}
@@ -1922,7 +1879,7 @@ export default function StudentDashboardPage() {
                           <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
                             {submission?.feedback || "No feedback yet."}
                           </div>
-                          <FeedbackFiles key={`feedback-${assignment.id}`} assignmentId={assignment.id} />
+                          {showPortalSection("dashboard", "marks", "feedback") ? <FeedbackFiles key={`feedback-${assignment.id}`} assignmentId={assignment.id} /> : null}
                         </td>
                       )
                     })}
@@ -1960,12 +1917,14 @@ export default function StudentDashboardPage() {
         </section>
 
         <section className="panel" style={{ display: showPortalSection("assignments") ? undefined : "none" }}>
-          <SectionHeader title="All Course Assignments" subtitle="All assignments for the selected course. Scroll the table sideways to view more assignments; keyboard users can focus it and use the arrow keys." />
+          <SectionHeader action={<AssignmentViewToggle value={assignmentLayout} onChange={setAssignmentLayout} />} title="All Course Assignments" subtitle="All assignments for the selected course. Scroll the table sideways to view more assignments; keyboard users can focus it and use the arrow keys." />
 
           {!selectedCourseId ? (
             <NoticeBox>Select a course above to view assignments.</NoticeBox>
           ) : filteredAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
+          ) : assignmentLayout === "list" ? (
+            <StudentAssignmentList visible={showPortalSection("assignments")} assignments={filteredAssignments} states={submissionStateByAssignmentId} attachmentMessages={attachmentSuccessByAssignmentId} formatDate={formatDueDate} formatStatus={formatSubmissionStatus} onOpen={openSubmissionEditor} />
           ) : (
             <div className="student-table-region" role="region" aria-label="Course assignments table. Scroll horizontally for more assignments." tabIndex={0} style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
               <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
@@ -1998,11 +1957,7 @@ export default function StudentDashboardPage() {
 
                       return (
                         <td key={assignment.id} style={assignmentSheetCellStyle}>
-                          {cardAttachmentSuccessText
-                            ? "Draft Saved"
-                            : formatSubmissionStatus(
-                                cachedSubmissionState?.submission_status || "not_submitted"
-                              )}
+                          <StudentStatusBadge status={cachedSubmissionState?.submission_status || "not_submitted"} label={cardAttachmentSuccessText ? "Draft Saved" : formatSubmissionStatus(cachedSubmissionState?.submission_status || "not_submitted")} />
                         </td>
                       )
                     })}
@@ -2041,6 +1996,8 @@ export default function StudentDashboardPage() {
         title="Student Coach"
         className="student-coach"
         keyboardSupport
+        docked
+        onOpenChange={setCoachOpen}
         defaultOpen={false}
         subtitle="Student Progress Coach"
         recommendationTitle={studentCoachRecommendation.title}
@@ -2056,6 +2013,7 @@ export default function StudentDashboardPage() {
           <div>□ Look for one thing to improve next</div>
         </div>
       </FloatingTeacherCoach>
+      </div>
     </div>
   )
 }

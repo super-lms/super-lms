@@ -54,3 +54,20 @@ test("dashboard concurrency stays bounded for a full timetable", async () => {
   }, "s@example.invalid")
   assert.ok(maximum <= 4)
 })
+
+
+test("full-term fallback reads are bounded, ordered and preserve zero/blank marks", async () => {
+  const { mapStudentReads } = await import("./studentPortalData.js")
+  let active = 0, maximum = 0, calls = 0
+  const source = Array.from({ length: 120 }, (_, id) => ({ id, score: id % 2 ? null : 0 }))
+  const before = JSON.stringify(source)
+  const results = await mapStudentReads(source, async item => {
+    calls++; maximum = Math.max(maximum, ++active)
+    await new Promise(resolve => setTimeout(resolve, item.id % 3))
+    active--; return item
+  })
+  assert.equal(calls, 120)
+  assert.ok(maximum <= 4)
+  assert.deepEqual(results, source)
+  assert.equal(JSON.stringify(source), before)
+})

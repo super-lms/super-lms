@@ -32,3 +32,13 @@ export async function loadStudentProgressData(request, email) {
   }
   return { courses, assignments, submissionStates }
 }
+
+// Fallback reads only; preserve order and values while limiting server load.
+export async function mapStudentReads(items, read) {
+  const limit = 4
+  const results = []
+  for (let index = 0; index < items.length; index += limit) {
+    results.push(...await Promise.all(items.slice(index, index + limit).map(read)))
+  }
+  return results
+}
