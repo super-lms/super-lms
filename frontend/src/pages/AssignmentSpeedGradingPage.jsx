@@ -1912,9 +1912,6 @@ export default function AssignmentSpeedGradingPage() {
                     </div>
                   </div>
 
-                  <div style={graderLayout === "side-by-side" ? sideBySideGraderStyle : undefined}>
-                    <div style={{ minWidth: 0 }}>
-
                   <div
                     style={{
                       display: "flex",
@@ -1951,116 +1948,25 @@ export default function AssignmentSpeedGradingPage() {
                     ) : null}
                   </div>
 
-                    <LateSubmissionApproval key={`${assignmentId}:${selectedRow.student_email}:${approvalRevision}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow.student_email); await loadStudentAttachments(selectedRow.student_email); }} />
-
                   <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
                     <strong>Submission:</strong>{" "}
                     {selectedRow.submission_status || "None"}
                   </div>
 
-                  <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
-                    <strong>Existing Score:</strong> {selectedRow.score ?? "—"}
-                  </div>
+                    <LateSubmissionApproval workAfterActions key={`${assignmentId}:${selectedRow.student_email}:${approvalRevision}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow.student_email); await loadStudentAttachments(selectedRow.student_email); }} />
 
-                  <div style={{ marginBottom: "20px", fontSize: "1rem" }}>
-                    <strong>Existing Feedback:</strong>
-                    <div>{selectedRow.feedback || "No feedback yet."}</div>
-                  </div>
-
-                  <div style={teacherFeedbackPanelStyle}>
-                    <div>
-                      <h3 style={{ margin: "0 0 6px" }}>Teacher Feedback</h3>
-                      <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
-                        Add a note the student can review—for example, explain that the uploaded document is incomplete or contains no completed work.
-                      </div>
-                    </div>
-
-                    <div style={{display:'grid',gap:8,marginBottom:12}}>
-                      {studentAttachments.filter(file=>file.mime_type==='application/pdf'||String(file.original_name||'').toLowerCase().endsWith('.pdf')).map(file=><div key={file.id}><strong>{file.original_name}</strong>{' '}<PdfMarkup key={file.id} attachmentId={file.id} fileName={file.original_name}/></div>)}
-                    </div>
-                    <textarea
-                      value={teacherFeedback}
-                      onChange={(event) => {
-                        setTeacherFeedback(event.target.value);
-                        setFeedbackSaveMessage("");
-                      }}
-                      maxLength={5000}
-                      rows={5}
-                      placeholder="Example: The uploaded file appears to be the original document and does not contain completed work. Please finish the assignment and resubmit it."
-                      aria-label="Teacher feedback for this student"
-                      style={teacherFeedbackTextareaStyle}
-                    />
-
-                    <div style={teacherFeedbackActionsStyle}>
-                      <ActionButton
-                        onClick={() => saveTeacherFeedback()}
-                        disabled={savingFeedback}
-                      >
-                        {savingFeedback ? "Saving Feedback..." : "Save Feedback"}
-                      </ActionButton>
-                      <span style={{ color: "#4b5563", fontWeight: 700 }}>
-                        {feedbackSaveMessage || `${teacherFeedback.length}/5000 characters`}
-                      </span>
-                    </div>
-
-                    <FeedbackFiles
-                      key={`${assignmentId}:${selectedRow.student_email}`}
-                      assignmentId={assignmentId}
-                      studentEmail={selectedRow.student_email}
-                      studentName={selectedRow.student_name}
-                      editable
-                    />
-
-                    <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
-                      <strong>Audio Feedback</strong>
-                      <div style={{ color: "#4b5563", lineHeight: 1.45 }}>
-                        Record a short message. The student can play it beside this written feedback.
-                      </div>
-                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                        {!isRecordingFeedback ? (
-                          <ActionButton quiet onClick={startAudioFeedbackRecording} disabled={savingFeedbackAudio}>
-                            Record Audio
-                          </ActionButton>
-                        ) : (
-                          <ActionButton onClick={stopAudioFeedbackRecording}>Stop Recording</ActionButton>
-                        )}
-                        {recordedFeedbackAudio ? (
-                          <ActionButton onClick={saveAudioFeedback} disabled={savingFeedbackAudio}>
-                            {savingFeedbackAudio ? "Saving Audio..." : "Save Audio for Student"}
-                          </ActionButton>
-                        ) : null}
-                      </div>
-                      {recordedFeedbackAudioUrl ? <audio controls src={recordedFeedbackAudioUrl} style={{ width: "100%" }} /> : null}
-                      {selectedRow.audio_feedback_url ? <audio controls src={`${API_BASE}${selectedRow.audio_feedback_url}`} style={{ width: "100%" }} /> : null}
-                      {feedbackAudioMessage ? <div style={{ color: "#4b5563", fontWeight: 700 }}>{feedbackAudioMessage}</div> : null}
-                    </div>
-                  </div>
-
-                  {graderLayout === "detailed" ? <div
-                    style={{
-                      marginBottom: "20px",
-                      padding: "16px",
-                      border: "1px solid #d7dce5",
-                      borderRadius: "12px",
-                      background: "#ffffff",
-                    }}
-                  >
-                    <h3 style={{ marginTop: 0, marginBottom: "8px" }}>
-                      Student Written Response
-                    </h3>
-                    <WrittenWorkActions assignment={assignment} student={selectedRow} />
-                    <div
-                      style={{
-                        color: selectedRow.content ? "#111827" : "#6b7280",
-                        lineHeight: 1.6,
-                        whiteSpace: "pre-wrap",
-                        overflowWrap: "anywhere",
-                      }}
-                    >
-                      {selectedRow.content || "No written response was submitted."}
-                    </div>
-                  </div> : null}
-
+                  <div style={graderLayout === "side-by-side" ? sideBySideGraderStyle : undefined}>
+                    {graderLayout === "side-by-side" ? (
+                      <SubmissionPreviewPanel
+                        assignment={assignment}
+                        selectedRow={selectedRow}
+                        studentAttachments={studentAttachments}
+                        studentAttachmentsLoading={studentAttachmentsLoading}
+                        studentAttachmentsMessage={studentAttachmentsMessage}
+                        onRefresh={() => loadStudentAttachments(selectedRow.student_email)}
+                      />
+                    ) : null}
+                    <div style={{ minWidth: 0 }}>
                   {graderLayout === "detailed" ? <div style={teacherAttachmentViewerStyle}>
                     <div
                       style={{
@@ -2196,6 +2102,110 @@ export default function AssignmentSpeedGradingPage() {
                       </div>
                     ) : null}
                   </div> : null}
+
+                  {graderLayout === "detailed" ? <div
+                    style={{
+                      marginBottom: "20px",
+                      padding: "16px",
+                      border: "1px solid #d7dce5",
+                      borderRadius: "12px",
+                      background: "#ffffff",
+                    }}
+                  >
+                    <h3 style={{ marginTop: 0, marginBottom: "8px" }}>
+                      Student Written Response
+                    </h3>
+                    <WrittenWorkActions assignment={assignment} student={selectedRow} />
+                    <div
+                      style={{
+                        color: selectedRow.content ? "#111827" : "#6b7280",
+                        lineHeight: 1.6,
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {selectedRow.content || "No written response was submitted."}
+                    </div>
+                  </div> : null}
+
+
+                  <div style={{ marginBottom: "20px", fontSize: "1rem" }}>
+                    <strong>Existing Feedback:</strong>
+                    <div>{selectedRow.feedback || "No feedback yet."}</div>
+                  </div>
+
+                  <div style={teacherFeedbackPanelStyle}>
+                    <div>
+                      <h3 style={{ margin: "0 0 6px" }}>Teacher Feedback</h3>
+                      <div style={{ color: "#4b5563", lineHeight: 1.5 }}>
+                        Add a note the student can review—for example, explain that the uploaded document is incomplete or contains no completed work.
+                      </div>
+                    </div>
+
+                    <div style={{display:'grid',gap:8,marginBottom:12}}>
+                      {studentAttachments.filter(file=>file.mime_type==='application/pdf'||String(file.original_name||'').toLowerCase().endsWith('.pdf')).map(file=><div key={file.id}><strong>{file.original_name}</strong>{' '}<PdfMarkup key={file.id} attachmentId={file.id} fileName={file.original_name}/></div>)}
+                    </div>
+                    <textarea
+                      value={teacherFeedback}
+                      onChange={(event) => {
+                        setTeacherFeedback(event.target.value);
+                        setFeedbackSaveMessage("");
+                      }}
+                      maxLength={5000}
+                      rows={5}
+                      placeholder="Example: The uploaded file appears to be the original document and does not contain completed work. Please finish the assignment and resubmit it."
+                      aria-label="Teacher feedback for this student"
+                      style={teacherFeedbackTextareaStyle}
+                    />
+
+                    <div style={teacherFeedbackActionsStyle}>
+                      <ActionButton
+                        onClick={() => saveTeacherFeedback()}
+                        disabled={savingFeedback}
+                      >
+                        {savingFeedback ? "Saving Feedback..." : "Save Feedback"}
+                      </ActionButton>
+                      <span style={{ color: "#4b5563", fontWeight: 700 }}>
+                        {feedbackSaveMessage || `${teacherFeedback.length}/5000 characters`}
+                      </span>
+                    </div>
+
+                    <FeedbackFiles
+                      key={`${assignmentId}:${selectedRow.student_email}`}
+                      assignmentId={assignmentId}
+                      studentEmail={selectedRow.student_email}
+                      studentName={selectedRow.student_name}
+                      editable
+                    />
+
+                    <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #e2e8f0", display: "grid", gap: "10px" }}>
+                      <strong>Audio Feedback</strong>
+                      <div style={{ color: "#4b5563", lineHeight: 1.45 }}>
+                        Record a short message. The student can play it beside this written feedback.
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        {!isRecordingFeedback ? (
+                          <ActionButton quiet onClick={startAudioFeedbackRecording} disabled={savingFeedbackAudio}>
+                            Record Audio
+                          </ActionButton>
+                        ) : (
+                          <ActionButton onClick={stopAudioFeedbackRecording}>Stop Recording</ActionButton>
+                        )}
+                        {recordedFeedbackAudio ? (
+                          <ActionButton onClick={saveAudioFeedback} disabled={savingFeedbackAudio}>
+                            {savingFeedbackAudio ? "Saving Audio..." : "Save Audio for Student"}
+                          </ActionButton>
+                        ) : null}
+                      </div>
+                      {recordedFeedbackAudioUrl ? <audio controls src={recordedFeedbackAudioUrl} style={{ width: "100%" }} /> : null}
+                      {selectedRow.audio_feedback_url ? <audio controls src={`${API_BASE}${selectedRow.audio_feedback_url}`} style={{ width: "100%" }} /> : null}
+                      {feedbackAudioMessage ? <div style={{ color: "#4b5563", fontWeight: 700 }}>{feedbackAudioMessage}</div> : null}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
+                    <strong>Existing Score:</strong> {selectedRow.score ?? "—"}
+                  </div>
 
                   {!isOneScoreAssignment && !isTeacherRubric ? (
                     <>
@@ -2664,16 +2674,7 @@ export default function AssignmentSpeedGradingPage() {
                   </ActionButton>
                     </div>
 
-                    {graderLayout === "side-by-side" ? (
-                      <SubmissionPreviewPanel
-                        assignment={assignment}
-                        selectedRow={selectedRow}
-                        studentAttachments={studentAttachments}
-                        studentAttachmentsLoading={studentAttachmentsLoading}
-                        studentAttachmentsMessage={studentAttachmentsMessage}
-                        onRefresh={() => loadStudentAttachments(selectedRow.student_email)}
-                      />
-                    ) : null}
+
                   </div>
                 </>
               )}
@@ -2775,23 +2776,6 @@ function SubmissionPreviewPanel({
       </div>
 
       <section style={submissionPreviewSectionStyle}>
-        <h3 style={{ margin: "0 0 8px" }}>Assignment Instructions</h3>
-        <FormattedText
-          value={assignment?.description || assignment?.instructions}
-          fallback="No assignment instructions were provided."
-          style={submissionTextStyle}
-        />
-      </section>
-
-      <section style={submissionPreviewSectionStyle}>
-        <h3 style={{ margin: "0 0 8px" }}>Written Response</h3>
-        <WrittenWorkActions assignment={assignment} student={selectedRow} />
-        <div style={submissionTextStyle}>
-          {selectedRow?.content || "No written response was submitted."}
-        </div>
-      </section>
-
-      <section style={submissionPreviewSectionStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
           <h3 style={{ margin: 0 }}>Uploaded Work</h3>
           {studentAttachments.length > 1 ? (
@@ -2862,6 +2846,23 @@ function SubmissionPreviewPanel({
           </div>
         ) : null}
       </section>
+      <section style={submissionPreviewSectionStyle}>
+        <h3 style={{ margin: "0 0 8px" }}>Assignment Instructions</h3>
+        <FormattedText
+          value={assignment?.description || assignment?.instructions}
+          fallback="No assignment instructions were provided."
+          style={submissionTextStyle}
+        />
+      </section>
+
+      <section style={submissionPreviewSectionStyle}>
+        <h3 style={{ margin: "0 0 8px" }}>Written Response</h3>
+        <WrittenWorkActions assignment={assignment} student={selectedRow} />
+        <div style={submissionTextStyle}>
+          {selectedRow?.content || "No written response was submitted."}
+        </div>
+      </section>
+
     </aside>
   );
 }
