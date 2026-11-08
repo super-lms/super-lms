@@ -413,7 +413,7 @@ export function KduClassHeatmapPanel({ rows, onOpenGradebook, active, onOpenStud
 
 function AtRiskAlertsPanel({ alerts, students, studentCount, onOpenGradebook, active }) {
   return (
-    <section className="panel" style={shellCardStyle}>
+    <section className="panel teacher-risk-panel" style={shellCardStyle}>
       <SectionHeading
         title="Student Risk Alerts"
         subtitle="Alerts based on current weighted course marks."
@@ -423,9 +423,9 @@ function AtRiskAlertsPanel({ alerts, students, studentCount, onOpenGradebook, ac
       />
 
       <div
+        className="teacher-risk-layout"
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 2fr)",
           gap: "16px",
           alignItems: "start",
         }}

@@ -623,3 +623,10 @@ tbody > tr > td { background-color: inherit; }
   .teacher-workspace :where(button, a, input, select, textarea, summary):focus-visible { outline-color: Highlight; }
   .teacher-workspace nav a[aria-current="page"] { border: 2px solid Highlight !important; }
 }
+
+/* Risk details respond to their panel width, including beside the sidebar. */
+.teacher-risk-panel { container-type: inline-size; container-name: teacher-risk; }
+.teacher-risk-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+@container teacher-risk (max-width: 640px) {
+  .teacher-risk-layout { grid-template-columns: minmax(0, 1fr); }
+}
