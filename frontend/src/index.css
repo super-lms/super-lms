@@ -599,3 +599,17 @@ tbody > tr > td { background-color: inherit; }
 .student-portal :is(button, select, textarea, input:not([type="checkbox"]):not([type="radio"])) { border-color: #64748b !important; }
 .student-portal button[aria-current="page"], .student-portal button[aria-pressed="true"] { border-color: #1d4ed8 !important; }
 .student-portal input::placeholder, .student-portal textarea::placeholder { color: #475569; opacity: 1; }
+
+/* Keyboard access to the Teacher Dashboard's horizontal table scrollers. */
+.teacher-dashboard-table { max-width: 100%; }
+.teacher-dashboard-table > table { min-width: 640px; }
+.teacher-dashboard-table:focus-visible { outline: 3px solid #1d4ed8; outline-offset: -3px; }
+.teacher-dashboard-table-hint { margin: 0 0 10px; color: #475569; font-size: .9rem; line-height: 1.5; }
+@media (forced-colors: active) {
+  .teacher-dashboard-table:focus-visible { outline-color: Highlight; }
+}
+@media print {
+  .teacher-dashboard-table { overflow: visible; }
+  .teacher-dashboard-table > table { min-width: 0; }
+  .teacher-dashboard-table-hint { display: none; }
+}

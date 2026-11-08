@@ -1,5 +1,5 @@
 import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
 import { loadTeacherDashboard } from "../services/teacherDashboard.js"
 import authFetch from "../services/authFetch"
@@ -266,6 +266,20 @@ function ChecklistItem({ title, detail }) {
       <div style={{ fontWeight: 700, marginBottom: "4px" }}>{title}</div>
       <div style={{ fontSize: "0.95rem", color: "#4b5563", lineHeight: 1.4 }}>{detail}</div>
     </div>
+  )
+}
+
+function DashboardTable({ label, children }) {
+  const hintId = useId()
+  return (
+    <>
+      <p id={hintId} className="teacher-dashboard-table-hint">
+        More columns may be available to the right. Scroll sideways, or press Tab to focus the table and use the Left and Right arrow keys.
+      </p>
+      <div className="table-wrap teacher-dashboard-table" role="region" aria-label={`${label} table`} aria-describedby={hintId} tabIndex={0}>
+        {children}
+      </div>
+    </>
   )
 }
 
@@ -911,8 +925,8 @@ export default function DashboardPage() {
           {courses.length === 0 ? (
             <p>No courses found.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
+            <DashboardTable label="All Courses">
+              <table aria-label="All Courses">
                 <thead>
                   <tr>
                     <th>Course ID</th>
@@ -932,7 +946,7 @@ export default function DashboardPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </DashboardTable>
           )}
         </section>
 
@@ -948,8 +962,8 @@ export default function DashboardPage() {
           {students.length === 0 ? (
             <p>No enrolled students found.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
+            <DashboardTable label="Class Roster">
+              <table aria-label="Class Roster">
                 <thead>
                   <tr>
                     <th>Student ID</th>
@@ -969,7 +983,7 @@ export default function DashboardPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </DashboardTable>
           )}
         </section>
 
@@ -985,8 +999,8 @@ export default function DashboardPage() {
           {grades.length === 0 ? (
             <p>No grades found.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
+            <DashboardTable label="All Grade Records">
+              <table aria-label="All Grade Records">
                 <thead>
                   <tr>
                     <th>Grade ID</th>
@@ -1010,7 +1024,7 @@ export default function DashboardPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </DashboardTable>
           )}
         </section>
       </div>
