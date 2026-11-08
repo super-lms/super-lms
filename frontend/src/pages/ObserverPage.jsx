@@ -72,7 +72,7 @@ const translations = {
   en: {
     observerPortal: "Observer Portal",
     parentPortal: "Parent Portal",
-    homeroomTeacherPortal: "Homeroom Teacher Portal",
+    homeroomTeacherPortal: "Chinese Homeroom Teacher Portal",
     observerSubtitle: "Review linked students, course progress, teacher feedback, assignments, and learning evidence.",
     parentSubtitle: "Review your linked student's course progress, teacher feedback, assignments, and learning evidence.",
     homeroomTeacherSubtitle: "Monitor your homeroom students' course progress, teacher feedback, assignments, and learning evidence.",
@@ -80,7 +80,7 @@ const translations = {
     loadingPortal: "Loading observer portal...",
     observerDashboard: "Observer Dashboard",
     parentDashboard: "Parent Dashboard",
-    homeroomTeacherDashboard: "Homeroom Teacher Dashboard",
+    homeroomTeacherDashboard: "Chinese Homeroom Teacher Dashboard",
     welcomeBack: "Welcome back",
     linkedStudents: "Linked Students",
     visibleAssignments: "Visible Assignments",
