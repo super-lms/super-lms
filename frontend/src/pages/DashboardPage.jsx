@@ -693,7 +693,7 @@ export default function DashboardPage() {
 
         <div className="content-area">
           <div className="panel">
-            <p>Loading dashboard...</p>
+            <p role="status">Loading dashboard…</p>
           </div>
         </div>
       </>
@@ -709,8 +709,12 @@ export default function DashboardPage() {
 
         <div className="content-area">
           <div className="panel">
-            <h2>Connection Error</h2>
+            <h2>Dashboard unavailable</h2>
+            <p role="alert">We couldn’t load your dashboard. Please try again.</p>
             <p>{errorText}</p>
+            <button type="button" onClick={() => loadDashboard(true)}>
+              Retry loading dashboard
+            </button>
           </div>
         </div>
       </>
