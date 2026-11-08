@@ -814,7 +814,8 @@ export default function DashboardPage() {
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+            overflowWrap: "anywhere",
             gap: "24px",
           }}
         >
