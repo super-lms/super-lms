@@ -1,25 +1,26 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { normalizePastedRichText, sanitizeRichText } from "../services/richText"
 
-export function FormattedText({ value, fallback = "", style }) {
+export function FormattedText({ value, fallback = "", style, calendarImages = false }) {
   const content = String(value || fallback || "")
   return (
     <div
       style={{ lineHeight: 1.55, overflowWrap: "anywhere", ...style }}
-      dangerouslySetInnerHTML={{ __html: sanitizeRichText(content) }}
+      dangerouslySetInnerHTML={{ __html: sanitizeRichText(content, { calendarImages }) }}
     />
   )
 }
 
-export function RichTextEditor({ value, onChange, placeholder = "Enter a description." }) {
+export function RichTextEditor({ value, onChange, placeholder = "Enter a description.", calendarImages = false, ariaLabel = "Description" }) {
   const editorRef = useRef(null)
+  const [imageError, setImageError] = useState("")
 
   useEffect(() => {
     const editor = editorRef.current
     if (!editor || document.activeElement === editor) return
-    const safeValue = sanitizeRichText(value)
+    const safeValue = sanitizeRichText(value, { calendarImages })
     if (editor.innerHTML !== safeValue) editor.innerHTML = safeValue
-  }, [value])
+  }, [value, calendarImages])
 
   function runCommand(command, commandValue = null) {
     editorRef.current?.focus()
@@ -33,10 +34,38 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
     runCommand("createLink", url)
   }
 
+  function insertChart(file) {
+    if (!file) return
+    if (!["image/png", "image/jpeg"].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setImageError("Choose a PNG or JPEG image no larger than 2 MB.")
+      return
+    }
+    setImageError("")
+    const reader = new FileReader()
+    reader.onerror = () => setImageError("The image could not be read. Please try again.")
+    reader.onload = () => {
+      if (!editorRef.current?.isConnected) return
+      // Append without moving or replacing existing event details.
+      const image = document.createElement("img")
+      image.src = reader.result
+      image.alt = file.name || "Event chart"
+      const paragraph = document.createElement("p")
+      paragraph.appendChild(image)
+      const html = sanitizeRichText(paragraph.outerHTML, { calendarImages: true })
+      editorRef.current.insertAdjacentHTML("beforeend", html)
+      onChange(editorRef.current.innerHTML)
+    }
+    reader.readAsDataURL(file)
+  }
+
   function pasteFormattedText(event) {
     event.preventDefault()
     const html = event.clipboardData.getData("text/html")
     const plainText = event.clipboardData.getData("text/plain")
+    if (calendarImages) {
+      const chart = Array.from(event.clipboardData.files || []).find(file => file.type.startsWith("image/"))
+      if (chart) { insertChart(chart); return }
+    }
     const image = Array.from(event.clipboardData.files || []).find(file => file.type === "image/png")
     if (!html && image && image.size <= 290000) {
       const selection = window.getSelection()
@@ -54,7 +83,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
       reader.readAsDataURL(image)
       return
     }
-    const normalized = normalizePastedRichText(html, plainText)
+    const normalized = normalizePastedRichText(html, plainText, { calendarImages })
     document.execCommand("insertHTML", false, normalized)
     onChange(editorRef.current?.innerHTML || "")
   }
@@ -84,13 +113,24 @@ export function RichTextEditor({ value, onChange, placeholder = "Enter a descrip
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={addLink} style={toolbarButtonStyle}>Link</button>
         {toolbarButton("Clear formatting", "removeFormat")}
       </div>
-      <div style={{padding:"6px 9px",fontSize:"0.85rem",color:"#4b5563"}}>Paste text or a copied quiz QR code here using Paste or Ctrl/Cmd+V.</div>
+      {calendarImages ? <div style={{ padding: "9px" }}>
+        <label style={{ display: "grid", gap: "6px" }}>Add chart image (PNG or JPEG, up to 2 MB)
+          <input type="file" accept="image/png,image/jpeg" onChange={event => { insertChart(event.target.files?.[0]); event.target.value = "" }} />
+        </label>
+        <p style={{ margin: "6px 0", fontSize: "0.85rem" }}>Or paste a screenshot here. Include a text summary so everyone can understand the chart. Use Remove chart images to replace an attached chart.</p>
+        <button type="button" style={toolbarButtonStyle} onClick={() => {
+          editorRef.current?.querySelectorAll("img").forEach(image => image.remove())
+          onChange(editorRef.current?.innerHTML || "")
+        }}>Remove chart images</button>
+        {imageError ? <p role="alert" style={{ color: "#991b1b" }}>{imageError}</p> : null}
+      </div> : <div style={{padding:"6px 9px",fontSize:"0.85rem",color:"#4b5563"}}>Paste text or a copied quiz QR code here using Paste or Ctrl/Cmd+V.</div>}
       <div
         ref={editorRef}
         contentEditable
         suppressContentEditableWarning
         role="textbox"
         aria-multiline="true"
+        aria-label={ariaLabel}
         data-placeholder={placeholder}
         onInput={(event) => onChange(event.currentTarget.innerHTML)}
         onPaste={pasteFormattedText}

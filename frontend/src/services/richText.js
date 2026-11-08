@@ -13,7 +13,7 @@ function hasRichTextMarkup(value) {
   return /<\/?(?:p|br|strong|b|em|i|u|h2|h3|ul|ol|li|a|img)\b/i.test(String(value || ""))
 }
 
-export function sanitizeRichText(value) {
+export function sanitizeRichText(value, { calendarImages = false } = {}) {
   const source = String(value || "").trim()
   if (!source) return ""
   if (typeof window === "undefined" || typeof window.DOMParser === "undefined") {
@@ -41,11 +41,11 @@ export function sanitizeRichText(value) {
       const originalHref = child.tagName === "A" ? child.getAttribute("href") || "" : ""
       Array.from(child.attributes).forEach((attribute) => child.removeAttribute(attribute.name))
       if (child.tagName === "IMG") {
-        if (!/^data:image\/png;base64,[a-z0-9+/]+=*$/i.test(originalSrc) || originalSrc.length > 400000) { child.remove(); return }
+        if (!(calendarImages ? /^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+=*$/i : /^data:image\/png;base64,[a-z0-9+/]+=*$/i).test(originalSrc) || originalSrc.length > (calendarImages ? 2800000 : 400000)) { child.remove(); return }
         child.setAttribute("src", originalSrc)
         child.setAttribute("alt", originalAlt.slice(0, 300))
-        child.setAttribute("width", "240")
-        child.setAttribute("height", "240")
+        child.setAttribute("width", calendarImages ? "900" : "240")
+        if (!calendarImages) child.setAttribute("height", "240")
         child.setAttribute("style", "max-width:100%;height:auto")
       }
       if (child.tagName === "A") {
@@ -64,10 +64,10 @@ export function sanitizeRichText(value) {
   return root.innerHTML
 }
 
-export function normalizePastedRichText(html, plainText = "") {
+export function normalizePastedRichText(html, plainText = "", options = {}) {
   const source = String(html || "").trim()
   if (!source || typeof window === "undefined" || typeof window.DOMParser === "undefined") {
-    return sanitizeRichText(plainText)
+    return sanitizeRichText(plainText, options)
   }
 
   const documentNode = new window.DOMParser().parseFromString(`<div>${source}</div>`, "text/html")
@@ -123,5 +123,5 @@ export function normalizePastedRichText(html, plainText = "") {
     element.remove()
   })
 
-  return sanitizeRichText(root.innerHTML)
+  return sanitizeRichText(root.innerHTML, options)
 }
