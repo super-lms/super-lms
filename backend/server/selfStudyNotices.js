@@ -1,13 +1,14 @@
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const dateValid = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
 function validateNotice(body) {
-  if (!dateValid(body.study_date)) throw fail(400, 'Choose a valid self-study date.');
+  const studyDate=body.start_date || body.study_date;
+  if (!dateValid(studyDate)) throw fail(400, 'Choose a valid self-study date.');
   const courseId = Number(body.course_id);
   if (!Number.isSafeInteger(courseId) || courseId < 1) throw fail(400, 'Choose a course.');
   if (!['needed', 'not_needed'].includes(body.ipad_status)) throw fail(400, 'Choose whether students need an iPad.');
   const notes = String(body.notes || '').trim();
   if (notes.length > 1000) throw fail(400, 'Keep the note to 1,000 characters.');
-  return { study_date: body.study_date, course_id: courseId, ipad_status: body.ipad_status, notes };
+  return { study_date: studyDate, course_id: courseId, ipad_status: body.ipad_status, notes };
 }
 function validateRange(from, to) {
   if (!dateValid(from) || !dateValid(to) || from > to || (Date.parse(to)-Date.parse(from))/86400000 > 6) throw fail(400, 'Choose a day or a week of up to seven days.');
@@ -49,7 +50,11 @@ function createSelfStudyNotices(pool) {
       ORDER BY n.study_date,c.title,teacher_name,n.id`, [school,from,to,user.role,user.id])).rows;
   }
   async function save(user, body, id = null) {
-    staff(user); const notice = validateNotice(body), school = await scope(user); await ensure();
+    staff(user); const notice = validateNotice(body);
+    const from=notice.study_date,to=body.end_date || from;
+    if(!dateValid(to) || from>to || (Date.parse(to)-Date.parse(from))/86400000>30)throw fail(400,'Choose a valid start and end date covering up to 31 days.');
+    if(id !== null && from !== to)throw fail(400,'Edit one existing notice at a time. Post a new date range to update several days.');
+    const school = await scope(user); await ensure();
     if (id !== null && (!Number.isSafeInteger(id) || id < 1)) throw fail(400, 'Choose a valid notice.');
     await authorizeCourse(user,notice.course_id,school);
     if (id !== null) {
@@ -58,6 +63,14 @@ function createSelfStudyNotices(pool) {
         [notice.course_id,notice.study_date,notice.ipad_status,notice.notes,id,school,user.role,user.id]);
       if (!result.rows.length) throw fail(403, 'This notice is not available to edit.');
       return result.rows[0];
+    }
+    if(from !== to) {
+      const result=await pool.query(`INSERT INTO self_study_ipad_notices(school_id,course_id,teacher_id,study_date,ipad_status,notes)
+        SELECT $1,$2,$3,day::date,$5,$6 FROM generate_series($4::date,$7::date,INTERVAL '1 day') AS day
+        ON CONFLICT(course_id,teacher_id,study_date) DO UPDATE
+        SET ipad_status=EXCLUDED.ipad_status,notes=EXCLUDED.notes,cancelled_at=NULL,updated_at=NOW() RETURNING id`,
+        [school,notice.course_id,user.id,from,notice.ipad_status,notice.notes,to]);
+      return {ids:result.rows.map(row=>row.id),count:result.rows.length};
     }
     return (await pool.query(`INSERT INTO self_study_ipad_notices(school_id,course_id,teacher_id,study_date,ipad_status,notes)
       VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(course_id,teacher_id,study_date) DO UPDATE

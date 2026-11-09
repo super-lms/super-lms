@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch';
 import { addStudyDays, beijingToday, ipadStatusLabel, studyDays, studyDateRange, loadStudyDateRange } from '../services/selfStudyCalendar.js';
 import './SelfStudyPage.css';
-const emptyDraft = date => ({ study_date: date, course_id: '', ipad_status: '', notes: '' });
+const emptyDraft = date => ({ study_date: date, start_date: date, end_date: date, course_id: '', ipad_status: '', notes: '' });
 const dayLabel = date => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
 export default function SelfStudyPage() {
   const { user } = useAuth(), navigate = useNavigate();
@@ -42,7 +42,7 @@ export default function SelfStudyPage() {
     window.addEventListener('focus', reload); return () => window.removeEventListener('focus', reload);
   }, []);
   function openEditor(notice = null) {
-    setEditing(notice?.id || null); setDraft(notice ? { study_date: notice.study_date, course_id: String(notice.course_id), ipad_status: notice.ipad_status, notes: notice.notes || '' } : emptyDraft(date));
+    setEditing(notice?.id || null); setDraft(notice ? { study_date: notice.study_date, start_date: notice.study_date, end_date: notice.study_date, course_id: String(notice.course_id), ipad_status: notice.ipad_status, notes: notice.notes || '' } : emptyDraft(date));
     setFormError(''); setMessage(''); setEditorOpen(true);
     requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   }
@@ -51,7 +51,7 @@ export default function SelfStudyPage() {
     try {
       const response = await authFetch(`/api/self-study/notices${editing ? `/${editing}` : ''}`, { method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft) });
       const data = await response.json(); if (!response.ok) throw Error(data.error || 'Could not post notice.');
-      setDate(draft.study_date); setEditorOpen(false); setMessage('Notice posted to the shared self-study calendar.'); setRefresh(current => current + 1);
+      setDate(draft.start_date); setEndDate(draft.end_date); setView('range'); setEditorOpen(false); setMessage(draft.start_date === draft.end_date ? 'Notice posted to the shared self-study calendar.' : 'Notices posted for every day in the selected date range.'); setRefresh(current => current + 1);
     } catch (error) { setFormError(error.message); } finally { setSaving(false); }
   }
   async function cancel(notice) {
@@ -74,12 +74,13 @@ export default function SelfStudyPage() {
       <h2>{editing ? 'Edit self-study notice' : 'Post self-study notice'}</h2>
       <p>Teacher: <strong>{editing ? notices.find(notice => notice.id === editing)?.teacher_name || user?.name || 'Teacher' : user?.name || 'You'}</strong></p>
       <div className="self-study-form-grid">
-        <label>Date (Beijing time)<input type="date" required value={draft.study_date} onChange={event => setDraft(current => ({ ...current, study_date: event.target.value }))} /></label>
+        <label>Start date (Beijing time)<input type="date" required value={draft.start_date} onChange={event=>{const value=event.target.value;setDraft(current=>({...current,study_date:value,start_date:value,end_date:editing||current.end_date<value?value:current.end_date}));}} /></label>
+        <label>End date (Beijing time)<input type="date" required min={draft.start_date} max={editing?draft.start_date:undefined} value={draft.end_date} onChange={event=>setDraft(current=>({...current,end_date:event.target.value}))}/></label>
         <label>Course / class<select required value={draft.course_id} onChange={event => setDraft(current => ({ ...current, course_id: event.target.value }))}><option value="">Choose a course / class</option>{courses.map(course => <option key={course.id} value={course.id}>{course.title}</option>)}</select></label>
         <label>iPad requirement<select required value={draft.ipad_status} onChange={event => setDraft(current => ({ ...current, ipad_status: event.target.value }))}><option value="">Choose requirement</option><option value="needed">Need iPad for Self Study · 自习需要 iPad</option><option value="not_needed">Do Not Need iPad for Self Study · 自习不需要 iPad</option></select></label>
       </div>
       <label>Optional note<textarea maxLength={1000} rows={3} value={draft.notes} onChange={event => setDraft(current => ({ ...current, notes: event.target.value }))} placeholder="For example: Complete the online practice quiz." /></label>
-      <p>Posting again for the same date and course updates your existing notice.</p>
+      <p>{editing ? "Editing this day only. To apply a requirement across several days, post a new date range." : "Posts one notice for every day from Start date through End date, including weekends (up to 31 days). Posting again for the same dates and course updates your own existing notices."}</p>
       {formError && <p role="alert" className="self-study-error">{formError}</p>}
       <div className="self-study-actions"><button className="self-study-primary" disabled={saving || !courses.length}>{saving ? 'Saving…' : 'Post notice for everyone'}</button><button type="button" disabled={saving} onClick={() => setEditorOpen(false)}>Close</button></div>
       {!courses.length && <p>No teaching courses are available. Ask an administrator to check your course assignments.</p>}
