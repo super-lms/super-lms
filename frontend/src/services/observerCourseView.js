@@ -23,7 +23,7 @@ export const observerCourseText = {
   noWork:'No assignments or submissions found for this course.',noWorkHelp:'Work will appear here after the teacher publishes assignments.',waitingWork:'Assignments, submissions, grades, and feedback will appear after course data finishes loading.',
   lessonMaterials:'Lessons and Learning Materials',waitingLessons:'Waiting for lessons and learning materials…',waitingLessonsHelp:'Learning materials will appear after course data finishes loading.',noLessons:'No lessons are currently visible for this course.',noLessonsHelp:'Teacher-published lessons and learning materials will appear here.',noLessonDescription:'No lesson description provided.',
   courseSummary:'Read-only Course Summary',courseSummaryHelp:'Review assignments, deadlines, submission status, results, teacher feedback, and lessons. This view does not allow submission or changes to student records.',
-  contactTeacher:'Contact BC Course Teacher',courseTeacher:'Course Teacher',emailTeacher:'Email Course Teacher',copyTeacherEmail:'Copy Teacher Email',copyWechat:'Copy WeChat Message',noTeacherContact:'No BC course teacher contact is assigned to this course.',copySnapshot:'Copy Student Snapshot',copyOutlook:'Copy Email for Outlook',printSnapshot:'Print Student Snapshot',
+  contactTeacher:'Contact BC Course Teacher',courseTeacher:'Course Teacher',copyTeacherEmail:'Copy Teacher Email',copyWechat:'Copy WeChat Message',noTeacherContact:'No BC course teacher contact is assigned to this course.',copySnapshot:'Copy Student Snapshot',copyOutlook:'Copy Email for Outlook',printSnapshot:'Print Student Snapshot',
   noStudents:'No linked students found.',noStudentsHelp:'Ask the school office to link students to this observer account.',noCourses:'No courses found for this student.',noCoursesHelp:'No course records are currently visible for this linked student.',
   Extending:'Extending',Emerging:'Emerging',Superior:'Superior',Proficient:'Proficient',Satisfactory:'Satisfactory',Developing:'Developing',Beginning:'Beginning',Insufficient:'Insufficient',
  },
@@ -40,7 +40,7 @@ export const observerCourseText = {
   noWork:'本课程暂无作业或提交记录。',noWorkHelp:'教师发布作业后将在此显示。',waitingWork:'课程数据加载完成后将显示作业、提交记录、成绩和教师反馈。',
   lessonMaterials:'课时与学习资料',waitingLessons:'正在加载课时和学习资料…',waitingLessonsHelp:'课程数据加载完成后将显示学习资料。',noLessons:'本课程目前暂无可查看的课时。',noLessonsHelp:'教师发布的课时与学习资料将在此显示。',noLessonDescription:'暂无课时说明。',
   courseSummary:'课程信息概览（只读）',courseSummaryHelp:'可查看作业、截止时间、提交情况、成绩、教师反馈和课时。本页面仅供查看，不能提交作业或修改学生记录。',
-  contactTeacher:'联系 BC 课程教师',courseTeacher:'课程教师',emailTeacher:'发送邮件给课程教师',copyTeacherEmail:'复制教师邮箱',copyWechat:'复制微信消息',noTeacherContact:'本课程尚未设置 BC 课程教师联系方式。',copySnapshot:'复制学生学习概况',copyOutlook:'复制 Outlook 邮件内容',printSnapshot:'打印学生学习概况',
+  contactTeacher:'联系 BC 课程教师',courseTeacher:'课程教师',copyTeacherEmail:'复制教师邮箱',copyWechat:'复制微信消息',noTeacherContact:'本课程尚未设置 BC 课程教师联系方式。',copySnapshot:'复制学生学习概况',copyOutlook:'复制 Outlook 邮件内容',printSnapshot:'打印学生学习概况',
   noStudents:'暂无关联学生。',noStudentsHelp:'请联系学校，将学生与此观察者账号关联。',noCourses:'该学生暂无课程记录。',noCoursesHelp:'目前没有可供此账号查看的学生课程记录。',
   Extending:'拓展水平',Emerging:'起步水平',Superior:'优秀',Proficient:'熟练',Satisfactory:'达标',Developing:'发展中',Beginning:'起步阶段',Insufficient:'表现证据不足',
  }

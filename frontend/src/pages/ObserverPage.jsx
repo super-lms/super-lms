@@ -689,19 +689,6 @@ export default function ObserverPage() {
     ].join("\n")
   }
 
-  function emailCourseTeacher() {
-    const teacherEmail = String(selectedCourse?.teacher_email || "").trim()
-
-    if (!teacherEmail) {
-      setSnapshotMessage("No course teacher email is assigned to this course.")
-      return
-    }
-
-    const subject = `Student Progress Follow-up - ${selectedStudent?.student_name || "Student"} - ${selectedCourse?.class_name || "Course"}`
-    const body = buildCourseTeacherMessage()
-    window.location.href = `mailto:${encodeURIComponent(teacherEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-  }
-
   async function copyTeacherEmail() {
     const teacherEmail = String(selectedCourse?.teacher_email || "").trim()
 
@@ -1397,9 +1384,6 @@ export default function ObserverPage() {
                     </div>
 
                     <div style={buttonRowStyle}>
-                      <button type="button" onClick={emailCourseTeacher} style={actionButtonStyle}>
-                        {t.emailTeacher}
-                      </button>
                       <button type="button" onClick={copyTeacherEmail} style={actionButtonStyle}>
                         {t.copyTeacherEmail}
                       </button>
