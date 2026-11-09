@@ -43,22 +43,24 @@ export default function LateSubmissionApproval({assignmentId,studentEmail,onAppr
     <p>{item.method==='attachment'?item.original_name:'Written response'} · Received {displayAssignmentTime(item.received_at)}</p>
     {item.method==='text'?<div style={{whiteSpace:'pre-wrap'}}>{item.content}</div>:<button type="button" onClick={()=>download(item)}>Download held file</button>}
    </div>)}</div>;
- return <section style={{border:'1px solid #d7dce5',borderRadius:12,padding:16,margin:'12px 0',background:'#fff'}}>
-  <h3>{visibility==='previous_work'?'Previously held submission':'Past-due submission approval'}</h3>
+ const permissionOnly=visibility==='permission_only';
+ const Container=permissionOnly?'details':'section';
+ return <Container style={{border:'1px solid #d7dce5',borderRadius:12,padding:16,margin:'12px 0',background:'#fff'}}>
+  {permissionOnly?<summary style={{cursor:'pointer',fontWeight:700}}>Late-submission settings — no work awaiting approval</summary>:<h3>{visibility==='previous_work'?'Previously held submission':'Past-due submission approval'}</h3>}
   {visibility==='previous_work'&&<p>The current deadline has not passed or has been removed. New submissions do not need late approval. The saved work below was held or declined earlier and still needs review.</p>}
-  <p>Late work is saved and held until approved. Approval releases the saved work for marking; the student does not need to submit it again. The student can also resubmit after approval until you revoke it.</p>
+  {permissionOnly?<p>No saved work is awaiting late approval. Existing submitted work can still be reviewed and marked. Passing the deadline does not make an earlier submission late. These settings only control new late submissions or resubmissions.</p>:<p>Late work is saved and held until approved. Approval releases the saved work for marking; the student does not need to submit it again. The student can also resubmit after approval until you revoke it.</p>}
   {error&&<p role="alert">{error}</p>}
   {data?<>
    <p>Deadline: {data.due_date?displayAssignmentTime(data.due_date):'No deadline set'}</p>
-   <p><strong>{data.decline?'Submission declined — student must see the teacher':data.enabled?'Late submission approved for this student':data.held_work?.length?'Saved work awaiting teacher approval':'Late submission not approved'}</strong></p>
+   <p><strong>{data.decline?'Submission declined — student must see the teacher':data.enabled?'Late submission approved for this student':data.held_work?.length?'Saved work awaiting teacher approval':'New late submissions are not enabled'}</strong></p>
    {!workAfterActions&&heldWork}
    <button type="button" disabled={busy} onClick={change}>{busy?'Saving…':data.enabled?'Revoke late approval':data.held_work?.length?'Approve saved work for marking':'Approve late submission'}</button>
-   {!data.enabled&&!data.decline&&<button type="button" disabled={busy} onClick={()=>decline('keep')} style={{marginLeft:12,color:'#991b1b'}}>Decline and keep saved work</button>}
-   {!data.enabled&&!data.decline&&<button type="button" disabled={busy} onClick={()=>decline('delete')} style={{marginLeft:12,color:'#991b1b'}}>Decline and delete saved work</button>}
+   {data.held_work?.length>0&&!data.enabled&&!data.decline&&<button type="button" disabled={busy} onClick={()=>decline('keep')} style={{marginLeft:12,color:'#991b1b'}}>Decline and keep saved work</button>}
+   {data.held_work?.length>0&&!data.enabled&&!data.decline&&<button type="button" disabled={busy} onClick={()=>decline('delete')} style={{marginLeft:12,color:'#991b1b'}}>Decline and delete saved work</button>}
    {workAfterActions&&heldWork}
    {data.decline&&<p role="status">The student has been notified to see their teacher. {data.decline.work_deleted?'Pending late work was deleted. Approval above will allow the student to submit again after your conversation.':'Saved work is retained. Approval above will release it for marking after your conversation.'}</p>}
    {data.permissions[0]&&<p>Last action: {data.decline?'Declined':data.permissions[0].enabled?'Approved':'Revoked'} by {data.permissions[0].teacher_name || 'Teacher'} · {displayAssignmentTime(data.permissions[0].created_at)}</p>}
    {data.acceptances.length>0&&<><h4>Accepted PAST DUE</h4>{data.acceptances.map(e=><p key={e.id}>{e.method==='attachment'?'File uploaded':'Text submitted'} · {displayAssignmentTime(e.accepted_at)} · Original deadline: {displayAssignmentTime(e.due_at)} · Approved by {e.teacher_name || 'Teacher'}</p>)}</>}
   </>:!error&&<p>Loading approval…</p>}
- </section>;
+ </Container>;
 }
