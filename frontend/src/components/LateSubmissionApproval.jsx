@@ -43,12 +43,14 @@ export default function LateSubmissionApproval({assignmentId,studentEmail,onAppr
     <p>{item.method==='attachment'?item.original_name:'Written response'} · Received {displayAssignmentTime(item.received_at)}</p>
     {item.method==='text'?<div style={{whiteSpace:'pre-wrap'}}>{item.content}</div>:<button type="button" onClick={()=>download(item)}>Download held file</button>}
    </div>)}</div>;
- const permissionOnly=visibility==='permission_only';
- const Container=permissionOnly?'details':'section';
- return <Container style={{border:'1px solid #d7dce5',borderRadius:12,padding:16,margin:'12px 0',background:'#fff'}}>
-  {permissionOnly?<summary style={{cursor:'pointer',fontWeight:700}}>Late-submission settings — no work awaiting approval</summary>:<h3>{visibility==='previous_work'?'Previously held submission':'Past-due submission approval'}</h3>}
+ if(visibility==='accepted_late')return <section style={{border:'1px solid #d7dce5',borderRadius:12,padding:16,margin:'12px 0',background:'#fff'}}>
+  <strong>Submitted after deadline — accepted for marking</strong>
+  {data.acceptances.map(item=><p key={item.id} style={{marginBottom:0}}>{item.method==='attachment'?'File received':'Text received'}: {displayAssignmentTime(item.accepted_at)} · Deadline: {displayAssignmentTime(item.due_at)}</p>)}
+ </section>;
+ return <section style={{border:'1px solid #d7dce5',borderRadius:12,padding:16,margin:'12px 0',background:'#fff'}}>
+  <h3>{visibility==='previous_work'?'Previously held late submission':'Submitted after deadline — awaiting review'}</h3>
   {visibility==='previous_work'&&<p>The current deadline has not passed or has been removed. New submissions do not need late approval. The saved work below was held or declined earlier and still needs review.</p>}
-  {permissionOnly?<p>No saved work is awaiting late approval. Existing submitted work can still be reviewed and marked. Passing the deadline does not make an earlier submission late. These settings only control new late submissions or resubmissions.</p>:<p>Late work is saved and held until approved. Approval releases the saved work for marking; the student does not need to submit it again. The student can also resubmit after approval until you revoke it.</p>}
+  <p>This saved work was received after its deadline. Approval releases it for marking; the student does not need to submit it again.</p>
   {error&&<p role="alert">{error}</p>}
   {data?<>
    <p>Deadline: {data.due_date?displayAssignmentTime(data.due_date):'No deadline set'}</p>
@@ -62,5 +64,5 @@ export default function LateSubmissionApproval({assignmentId,studentEmail,onAppr
    {data.permissions[0]&&<p>Last action: {data.decline?'Declined':data.permissions[0].enabled?'Approved':'Revoked'} by {data.permissions[0].teacher_name || 'Teacher'} · {displayAssignmentTime(data.permissions[0].created_at)}</p>}
    {data.acceptances.length>0&&<><h4>Accepted PAST DUE</h4>{data.acceptances.map(e=><p key={e.id}>{e.method==='attachment'?'File uploaded':'Text submitted'} · {displayAssignmentTime(e.accepted_at)} · Original deadline: {displayAssignmentTime(e.due_at)} · Approved by {e.teacher_name || 'Teacher'}</p>)}</>}
   </>:!error&&<p>Loading approval…</p>}
- </Container>;
+ </section>;
 }
