@@ -2029,6 +2029,7 @@ export default function AssignmentSpeedGradingPage() {
                               ? `${API_BASE}${filePath}`
                               : "";
                           const mimeType = String(file.mime_type || "").toLowerCase();
+                          const isPdfFile = mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
                           const isAudioFile = mimeType.startsWith("audio/");
                           const isVideoFile = mimeType.startsWith("video/");
                           const sizeText = formatAttachmentSize(file.size_bytes || file.size || 0);
@@ -2050,6 +2051,7 @@ export default function AssignmentSpeedGradingPage() {
                               </div>
 
                               <div style={teacherAttachmentActionWrapStyle}>
+                                {isPdfFile && file.id ? <PdfMarkup attachmentId={file.id} fileName={fileName}/> : null}
                                 {href && isAudioFile ? (
                                   <audio
                                     controls
@@ -2147,9 +2149,6 @@ export default function AssignmentSpeedGradingPage() {
                       </div>
                     </div>
 
-                    <div style={{display:'grid',gap:8,marginBottom:12}}>
-                      {studentAttachments.filter(file=>file.mime_type==='application/pdf'||String(file.original_name||'').toLowerCase().endsWith('.pdf')).map(file=><div key={file.id}><strong>{file.original_name}</strong>{' '}<PdfMarkup key={file.id} attachmentId={file.id} fileName={file.original_name}/></div>)}
-                    </div>
                     <textarea
                       value={teacherFeedback}
                       onChange={(event) => {
@@ -2830,7 +2829,10 @@ function SubmissionPreviewPanel({
                 : ""}
             </div>
 
-            {isPdf && activeFile?.id ? <PdfMarkup key={activeFile.id} attachmentId={activeFile.id} fileName={activeFileName}/> : null}
+            <div aria-label="File actions" style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",margin:"10px 0"}}>
+              {isPdf && activeFile?.id ? <PdfMarkup key={activeFile.id} attachmentId={activeFile.id} fileName={activeFileName}/> : null}
+              {activeFileHref ? <a href={activeFileHref} target="_blank" rel="noreferrer" style={teacherAttachmentLinkStyle}>Open in New Window</a> : <span style={{color:"#4b5563",fontWeight:800}}>No file link</span>}
+            </div>
             {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isDocx ? <DocxPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
@@ -2841,16 +2843,11 @@ function SubmissionPreviewPanel({
             {activeFileHref && !canPreview ? (
               <div style={{ padding: "28px 18px", border: "1px dashed #94a3b8", borderRadius: "12px", background: "#f8fafc", textAlign: "center", lineHeight: 1.6 }}>
                 <strong>Preview is not available for this file type.</strong>
-                <div style={{ color: "#4b5563" }}>Download the original or open it in a separate window to review it.</div>
+                <div style={{ color: "#4b5563" }}>Open the file in a new window to review or download it.</div>
               </div>
             ) : null}
 
-            {activeFileHref ? (
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <a href={activeFileHref} target="_blank" rel="noreferrer" style={teacherAttachmentLinkStyle}>Open in New Window</a>
-                <a href={activeFileHref} download={activeFileName} style={teacherAttachmentLinkStyle}>Download Original</a>
-              </div>
-            ) : <div style={{ color: "#4b5563", fontWeight: 800 }}>No file link</div>}
+
           </div>
         ) : null}
       </section>
