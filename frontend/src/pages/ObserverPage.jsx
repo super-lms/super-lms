@@ -1,3 +1,4 @@
+import ObserverSpreadsheetGradebook from "../components/ObserverSpreadsheetGradebook.jsx"
 import HomeroomCourseSummary from "../components/HomeroomCourseSummary.jsx"
 import {loadHomeroomCourseSummaries} from "../services/homeroomCourseSummary.js"
 import ParentQuestionAssistant from "../components/ParentQuestionAssistant.jsx"
@@ -1303,6 +1304,10 @@ export default function ObserverPage() {
               </div>
             ) : (
               <>
+                {isChineseHomeroomTeacher ? <ObserverSpreadsheetGradebook
+                  assignments={toArray(courseDashboard?.assignments)} scores={toArray(readOnlyGradebook?.assignment_scores)}
+                  student={selectedStudent} currentPercent={readOnlyGradebook?.current_percent} language={language}
+                /> : null}
                 <div style={metricGridStyle}>
                   <MetricCard title={t.currentStanding} value={readOnlyGradebook?.current_percent == null ? "N/A" : formatPercent(readOnlyGradebook.current_percent)} />
                   <MetricCard title={t.proficiency} value={t[readOnlyGradebook?.proficiency] || readOnlyGradebook?.proficiency || t.notAvailable} />
@@ -1557,6 +1562,7 @@ const topBarStyle = {
 }
 
 const sectionStyle = {
+  minWidth: 0,
   border: "1px solid #d7dce5",
   borderRadius: "18px",
   padding: "18px",
