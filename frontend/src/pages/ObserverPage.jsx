@@ -98,7 +98,7 @@ const translations = {
     recentFeedbackHelp: "Review the latest teacher feedback across linked students.",
     viewFeedback: "View Feedback →",
     manageHomeroom: "Manage My Homeroom",
-    manageHomeroomHelp: "Select your homeroom students from all active students.",
+    manageHomeroomHelp: "Select your homeroom students from the complete school student directory.",
     openHomeroom: "Open Homeroom →",
     rtiStudentSupport: "RTI / Student Support",
     rtiStudentSupportHelp: "Open the intervention and student-support workspace.",
@@ -313,7 +313,7 @@ export default function ObserverPage() {
       setSelectedHomeroomIds(
         roster
           .filter((student) => student.already_linked)
-          .map((student) => String(student.master_student_id))
+          .map((student) => student.selection_key || String(student.master_student_id))
       )
     } catch (err) {
       setHomeroomError(err.message || "Failed to load homeroom roster")
@@ -328,7 +328,7 @@ export default function ObserverPage() {
     const map = new Map()
 
     observerData.students.forEach((student) => {
-      const email = String(student.student_email || "").trim().toLowerCase() || (student.master_student_id ? `roster:${student.master_student_id}` : "")
+      const email = String(student.student_email || "").trim().toLowerCase() || (student.master_student_id ? `roster:${student.master_student_id}` : student.student_user_id ? `roster:user:${student.student_user_id}` : "")
       if (!email) return
 
       if (!map.has(email)) {
@@ -845,7 +845,8 @@ export default function ObserverPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            masterStudentIds: selectedHomeroomIds.map(Number).filter(Boolean),
+            masterStudentIds: selectedHomeroomIds.filter(id=>!id.startsWith('user:')).map(id=>Number(id.replace(/^master:/,''))).filter(Boolean),
+            studentUserIds: selectedHomeroomIds.filter(id=>id.startsWith('user:')).map(id=>Number(id.slice(5))),
           }),
         }
       )
@@ -1128,7 +1129,7 @@ export default function ObserverPage() {
           {!homeroomLoading && filteredHomeroomRoster.length > 0 ? (
             <div style={{ display: "grid", gap: "10px" }}>
               {filteredHomeroomRoster.map((student) => {
-                const id = String(student.master_student_id)
+                const id = student.selection_key || String(student.master_student_id)
                 const checked = selectedHomeroomIds.includes(id)
 
                 return (
@@ -1194,7 +1195,7 @@ export default function ObserverPage() {
               {listedStudents.map((student) => (
                 <Card key={student.student_email} onClick={() => openStudent(student)}>
                   <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{student.student_name}</div>
-                  <div style={{ marginTop: "6px", color: "#4b5563" }}>{student.student_email.startsWith("roster:") ? (language==="zh"?"尚无学生账户":"No student account yet") : student.student_email}</div>
+                  <div style={{ marginTop: "6px", color: "#4b5563" }}>{student.student_email.startsWith("roster:") ? (language==="zh"?"尚无学生账户":"No student email recorded") : student.student_email}</div>
                   <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openStudent}</div>
                 </Card>
               ))}

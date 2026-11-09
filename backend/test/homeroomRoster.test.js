@@ -1,14 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const source = fs.readFileSync(require.resolve('../server/app.js'), 'utf8');
+const {createHomeroomRosterHandlers} = require('../server/homeroomRosterRoutes');
 function fixture({teacher = true, missing = false, failInsert = false} = {}) {
   const handlers = {}, calls = [];
   const observer = {id: 7, observer_relationship: teacher ? 'chinese_homeroom_teacher' : 'parent', has_homeroom_links: false};
   async function query(sql, args = []) {
     calls.push({sql, args});
-    if (sql.includes('FROM users\n      WHERE')) return {rows: [observer]};
+    if (sql.includes('FROM users u WHERE')) return {rows: teacher ? [{...observer, school_id:null}] : []};
+    if (sql.startsWith('WITH accounts AS')) return {rows: missing ? [] : [1,2].map(id=>({master_student_id:id,student_user_id:null,selection_key:`master:${id}`,current_grade:id===1?'10':'12',student_email:`student${id}@example.test`,display_name:`Student ${id}`,already_linked:id===2}))};
     if (sql.includes('FROM master_students ms')) {
       assert.doesNotMatch(sql, /TRIM\(ms.current_grade|LIMIT 300/);
       assert.doesNotMatch(sql, /COALESCE\(ms.student_email, ''\) <>/);
@@ -25,23 +24,20 @@ function fixture({teacher = true, missing = false, failInsert = false} = {}) {
     return {rows: []};
   }
   const client = {query, release() { calls.push({sql:'RELEASE'}); }};
-  vm.runInNewContext(source.slice(source.indexOf('/* ACTIVE SCHOOL ROSTER CANDIDATES'), source.indexOf('app.get("/api/observers/:email/dashboard"')), {
-    app: {get: (path,...fns) => handlers.get = fns.at(-1), post: (path,...fns) => handlers.post = fns.at(-1)},
-    authenticateJWT(){}, requireRole:()=>()=>{}, ensureStudentInfoColumns:async()=>{},
-    pool: {query, connect:async()=>client}, console: {error() {}}
-  });
+  const routes=createHomeroomRosterHandlers({pool:{query,connect:async()=>client},ensureStudentInfoColumns:async()=>{}});
+  handlers.get=routes.list;handlers.post=routes.save;
   return {handlers, calls};
 }
 function req(body = {masterStudentIds:[1,2]}, id=7) {return {params:{email:'staff@example.test'}, query:{current_grade:'11'}, body, user:{id,role:'observer'}};}
 function res() {return {code:200,status(n){this.code=n;return this;},json(body){this.body=body;return this;}};}
 test('roster lists all active grades even for a legacy Grade 11 request', async()=>{
  const f=fixture(), r=res();await f.handlers.get(req(),r);
- assert.equal(r.code,200);assert.deepEqual(Array.from(r.body.students,x=>x.current_grade),['10','12']);assert.equal(r.body.roster_scope,'all_active_students');
+ assert.equal(r.code,200);assert.deepEqual(Array.from(r.body.students,x=>x.current_grade),['10','12']);assert.equal(r.body.roster_scope,'all_school_students');
 });
 test('saving mixed grades replaces only this teachers homeroom links',async()=>{
  const f=fixture(),r=res();await f.handlers.post(req(),r);assert.equal(r.code,200);assert.equal(r.body.linkedCount,2);
  const removal=f.calls.find(x=>x.sql.startsWith('DELETE FROM observer_student_links'));
- assert.equal(removal.args[0],7);assert.deepEqual(Array.from(removal.args[1]),[101,102]);assert.match(removal.sql,/relationship = 'chinese_homeroom_teacher'/);assert.equal(f.calls.at(-2).sql,'COMMIT');
+ assert.equal(removal.args[0],7);assert.deepEqual(Array.from(removal.args[1]),[101,102]);assert.match(removal.sql,/relationship\s*=\s*'chinese_homeroom_teacher'/);assert.equal(f.calls.at(-2).sql,'COMMIT');
 });
 test('an explicit empty selection clears homeroom links and preserves teacher identity',async()=>{
  const f=fixture(),r=res();await f.handlers.post(req({masterStudentIds:[]}),r);assert.equal(r.code,200);assert.equal(r.body.linkedCount,0);
@@ -57,7 +53,7 @@ test('homeroom teachers cannot manage another teachers selection',async()=>{
  for(const method of ['get','post']){const f=fixture(),r=res();await f.handlers[method](req(undefined,8),r);assert.equal(r.code,403);}
 });
 test('invalid or inactive student selection leaves existing links unchanged',async()=>{
- const f=fixture({missing:true}),r=res();await f.handlers.post(req(),r);assert.equal(r.code,400);assert.ok(!f.calls.some(x=>x.sql==='BEGIN'));
+ const f=fixture({missing:true}),r=res();await f.handlers.post(req(),r);assert.equal(r.code,400);assert.ok(f.calls.some(x=>x.sql==='ROLLBACK'));assert.ok(!f.calls.some(x=>x.sql.startsWith('DELETE')));
 });
 test('failed save rolls back and never removes existing links',async()=>{
  const f=fixture({failInsert:true}),r=res();await f.handlers.post(req(),r);assert.equal(r.code,500);assert.ok(f.calls.some(x=>x.sql==='ROLLBACK'));assert.ok(!f.calls.some(x=>x.sql.startsWith('DELETE')));assert.equal(f.calls.at(-1).sql,'RELEASE');
