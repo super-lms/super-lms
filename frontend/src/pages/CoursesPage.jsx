@@ -1,3 +1,4 @@
+import { rosterPrintEndpoint } from "../services/rosterPrintChoices.js"
 import SectionAccessButton from "../components/SectionAccessButton.jsx"
 import { updateWorkspaceUrl } from "../services/workspaceLocation.js"
 import CourseDescriptionPreview from "../components/CourseDescriptionPreview.jsx"
@@ -453,7 +454,7 @@ export default function CoursesPage() {
             return null
           }
 
-          const res = await authFetch(`${API_BASE}/api/class-roster/${courseId}`)
+          const res = await authFetch(rosterPrintEndpoint({courseId, scope: "section"}))
           const data = await res.json()
 
           if (!res.ok) {
@@ -1779,7 +1780,8 @@ export default function CoursesPage() {
   }
 
   async function loadRoster(courseId, options = {}) {
-    if (activeRosterCourseId === courseId && !options.forceOpen) {
+    const scope = isMasterWorkspace ? "master" : "section"
+    if (activeRosterCourseId === courseId && rosterByCourseId[courseId]?.scope === scope && !options.forceOpen) {
       setActiveRosterCourseId(null)
       return
     }
@@ -1789,7 +1791,7 @@ export default function CoursesPage() {
       setMessage("")
       setError("")
 
-      const res = await authFetch(`${API_BASE}/api/class-roster/${courseId}`)
+      const res = await authFetch(rosterPrintEndpoint({courseId, scope}))
       const data = await res.json()
 
       if (!res.ok) throw new Error(data.error || "Failed to load course roster")
@@ -1797,6 +1799,7 @@ export default function CoursesPage() {
       setRosterByCourseId((current) => ({
         ...current,
         [courseId]: {
+          scope,
           course: data.course || null,
           isMasterRoster: data.is_master_roster === true,
           sections: Array.isArray(data.sections) ? data.sections : [],
@@ -2929,7 +2932,7 @@ export default function CoursesPage() {
                 : courseGroup?.sections || [course]
               const roster = rosterByCourseId[course.id]
               const rosterStudents = roster?.students || []
-              const isRosterOpen = activeRosterCourseId === course.id
+              const isRosterOpen = activeRosterCourseId === course.id && roster?.scope === (isMasterWorkspace ? "master" : "section")
               const isImportOpen = activeImportCourseId === course.id
               const isLearningPathsOpen = activeLearningPathCourseId === contentCourseId
               const isCompetenciesOpen = activeCompetencyCourseId === contentCourseId
