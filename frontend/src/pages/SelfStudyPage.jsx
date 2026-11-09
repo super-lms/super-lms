@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import authFetch from '../services/authFetch';
-import { addStudyDays, beijingToday, ipadStatusLabel, studyDays } from '../services/selfStudyCalendar.js';
+import { addStudyDays, beijingToday, ipadStatusLabel, studyDays, studyDateRange, loadStudyDateRange } from '../services/selfStudyCalendar.js';
 import './SelfStudyPage.css';
 const emptyDraft = date => ({ study_date: date, course_id: '', ipad_status: '', notes: '' });
 const dayLabel = date => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${date}T12:00:00Z`));
@@ -10,18 +10,22 @@ export default function SelfStudyPage() {
   const { user } = useAuth(), navigate = useNavigate();
   const canPost = ['admin', 'teacher'].includes(user?.role);
   const [date, setDate] = useState(beijingToday), [view, setView] = useState('week');
+  const [endDate,setEndDate] = useState(()=>studyDays(beijingToday(),'week').at(-1));
   const [notices, setNotices] = useState([]), [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [refresh, setRefresh] = useState(0), [editing, setEditing] = useState(null), [editorOpen, setEditorOpen] = useState(false);
   const [draft, setDraft] = useState(() => emptyDraft(beijingToday())), [saving, setSaving] = useState(false), [formError, setFormError] = useState('');
-  const formRef = useRef(null), days = studyDays(date, view), from = days[0], to = days.at(-1);
+  const formRef = useRef(null), days = view === 'range' ? studyDateRange(date,endDate) : studyDays(date, view), from = days[0], to = days.at(-1);
+  function shiftDates(count) { setDate(addStudyDays(from,count)); if(view==='range')setEndDate(addStudyDays(to,count)); }
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError('');
-    authFetch(`/api/self-study/notices?from=${from}&to=${to}`, { signal: controller.signal }).then(async response => {
-      const data = await response.json(); if (!response.ok) throw Error(data.error || 'Could not load self-study notices.');
-      if (!controller.signal.aborted) setNotices(data.notices || []);
-    }).catch(error => { if (!controller.signal.aborted) { setNotices([]); setError(error.message); } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    loadStudyDateRange(from,to,async(start,end)=>{
+      const response=await authFetch(`/api/self-study/notices?from=${start}&to=${end}`,{signal:controller.signal});
+      const data=await response.json();if(!response.ok)throw Error(data.error || 'Could not load self-study notices.');
+      return data;
+    }).then(entries=>{if(!controller.signal.aborted)setNotices(entries);})
+      .catch(error=>{if(!controller.signal.aborted){setNotices([]);setError(error.message);}})
+      .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return () => controller.abort();
   }, [from, to, refresh]);
   useEffect(() => {
@@ -82,9 +86,13 @@ export default function SelfStudyPage() {
     </form>}
     <section className="self-study-toolbar" aria-label="Calendar controls">
       <div className="self-study-actions"><button aria-pressed={view === 'day'} onClick={() => setView('day')}>Daily</button><button aria-pressed={view === 'week'} onClick={() => setView('week')}>Weekly</button></div>
-      <div className="self-study-actions"><button aria-label={`Previous ${view}`} onClick={() => setDate(addStudyDays(date, view === 'day' ? -1 : -7))}>← Previous</button><label>Selected date<input aria-label="Selected date" type="date" value={date} onChange={event => { if (event.target.value) setDate(event.target.value); }} /></label><button aria-label={`Next ${view}`} onClick={() => setDate(addStudyDays(date, view === 'day' ? 1 : 7))}>Next →</button><button onClick={() => setDate(beijingToday())}>Today</button><button onClick={() => setRefresh(current => current + 1)}>Refresh</button></div>
+      <div className="self-study-actions"><button disabled={!days.length} aria-label="Previous date range" onClick={()=>shiftDates(-days.length)}>← Previous</button>
+        <label>Start date<input aria-label="Start date" type="date" value={view==='range'?date:from} onChange={event=>{const next=event.target.value;if(next){setDate(next);setEndDate(to&&to>=next?to:next);setView('range');}}}/></label>
+        <label>End date<input aria-label="End date" type="date" min={view==='range'?date:from} value={view==='range'?endDate:to} onChange={event=>{if(event.target.value){setDate(from||date);setEndDate(event.target.value);setView('range');}}}/></label>
+        <button disabled={!days.length} aria-label="Next date range" onClick={()=>shiftDates(days.length)}>Next →</button><button onClick={()=>{setDate(beijingToday());if(view==='range')setEndDate(beijingToday());}}>Today</button><button onClick={()=>setRefresh(current=>current+1)}>Refresh</button></div>
+
     </section>
-    <p><strong>{view === 'week' ? `${dayLabel(from)} – ${dayLabel(to)}` : dayLabel(date)}</strong> · Beijing dates</p>
+    <p><strong>{days.length ? (from === to ? dayLabel(from) : `${dayLabel(from)} – ${dayLabel(to)}`) : 'Choose a valid date range'}</strong> · Beijing dates · Up to 31 days</p>
     <p>No notice does not mean “no iPad needed.” If any of your courses says an iPad is needed, bring it and follow your teachers’ instructions.</p>
     {loading ? <p role="status">Loading self-study notices…</p> : !error && <div className={`self-study-days ${view === 'day' ? 'self-study-daily' : ''}`}>
       {days.map(day => {

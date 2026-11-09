@@ -16,3 +16,12 @@ test('no notice is not presented as permission to leave an iPad behind',()=>{
  assert.equal(ipadStatusLabel('needed'),'Need iPad for Self Study');
  assert.equal(ipadStatusLabel('not_needed'),'Do Not Need iPad for Self Study');
 });
+
+test('custom ranges are inclusive across year boundaries and reject impossible or excessive dates',async()=>{
+ const {studyDateRange,loadStudyDateRange}=await import('./selfStudyCalendar.js');
+ assert.deepEqual(studyDateRange('2026-12-31','2027-01-02'),['2026-12-31','2027-01-01','2027-01-02']);
+ for(const pair of [['2026-02-30','2026-03-01'],['2026-11-10','2026-11-09'],['2026-11-01','2026-12-02']])assert.deepEqual(studyDateRange(...pair),[]);
+ const reads=[];const notices=await loadStudyDateRange('2026-11-01','2026-11-16',async(from,to)=>{reads.push([from,to]);return {notices:[from]}});
+ assert.deepEqual(reads,[['2026-11-01','2026-11-07'],['2026-11-08','2026-11-14'],['2026-11-15','2026-11-16']]);assert.equal(notices.length,3);
+ await assert.rejects(loadStudyDateRange('2026-11-01','2026-11-09',async()=>{throw Error('Unavailable')}),/Unavailable/);
+});
