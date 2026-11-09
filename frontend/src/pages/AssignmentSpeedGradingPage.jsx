@@ -6,7 +6,7 @@ import { calculateTeacherRubric } from '../services/teacherRubricScoring.js';
 import { RubricContribution } from '../components/rubrics/RubricContribution.jsx';
 import ReadAloudAssignment from "../components/ReadAloudAssignment.jsx";
 import AssignmentBatchDownloads from "../components/AssignmentBatchDownloads.jsx";
-import { findGradingStudent } from "../services/gradingStudent.js";
+import { findGradingStudent, firstStudentAwaitingGrade } from "../services/gradingStudent.js";
 import LateSubmissionApproval from '../components/LateSubmissionApproval.jsx';
 import { downloadStudentWork, printStudentWork } from "../services/studentWorkExport.js";
 import { getEarnedPoints } from "../services/gradebookMarks.js";
@@ -432,7 +432,9 @@ export default function AssignmentSpeedGradingPage() {
         const preferredRow =
           fromLink && (requestedStudentId || requestedStudentEmail)
             ? findGradingStudent(data.rows, requestedStudentId, requestedStudentEmail)
-            : findGradingStudent(data.rows, "", preferredEmail) || data.rows[0] || null;
+            : fromLink
+              ? firstStudentAwaitingGrade(data.rows, data.assignment)
+              : findGradingStudent(data.rows, "", preferredEmail) || data.rows[0] || null;
         if (fromLink && (requestedStudentId || requestedStudentEmail) && !preferredRow) {
           setGradingLoadError("The student named in this notice is not in the selected class roster. Choose the correct class section before marking.");
         }
