@@ -196,6 +196,8 @@ export default function ObserverPage() {
   const [selectedStudentEmail, setSelectedStudentEmail] = useState("")
   const [selectedCourseId, setSelectedCourseId] = useState("")
   const [viewMode, setViewMode] = useState("dashboard")
+  const [studentListScope,setStudentListScope] = useState("linked")
+  const [studentSearch,setStudentSearch] = useState("")
   const [assistantSection, setAssistantSection] = useState("")
   const [assistantCourseRequest, setAssistantCourseRequest] = useState(0)
   const [language, setLanguage] = useState(() => {
@@ -325,7 +327,7 @@ export default function ObserverPage() {
     const map = new Map()
 
     observerData.students.forEach((student) => {
-      const email = String(student.student_email || "").trim().toLowerCase()
+      const email = String(student.student_email || "").trim().toLowerCase() || (student.master_student_id ? `roster:${student.master_student_id}` : "")
       if (!email) return
 
       if (!map.has(email)) {
@@ -333,6 +335,7 @@ export default function ObserverPage() {
           student_name: student.student_name || email,
           student_email: email,
           student_id: student.student_id || "",
+          in_homeroom: student.in_homeroom !== false,
         })
       }
     })
@@ -341,6 +344,9 @@ export default function ObserverPage() {
       String(a.student_name || "").localeCompare(String(b.student_name || ""))
     )
   }, [observerData.students])
+
+  const linkedStudents = uniqueStudents.filter(student=>student.in_homeroom)
+  const listedStudents = uniqueStudents.filter(student=>(studentListScope==='all'||student.in_homeroom)&&`${student.student_name} ${student.student_email} ${student.student_id}`.toLowerCase().includes(studentSearch.toLowerCase()))
 
   const selectedStudent = useMemo(() => {
     return uniqueStudents.find((student) => student.student_email === selectedStudentEmail) || null
@@ -945,7 +951,7 @@ export default function ObserverPage() {
             </p>
 
             <div style={metricGridStyle}>
-              <MetricCard title={t.linkedStudents} value={uniqueStudents.length} onClick={() => setViewMode("students")} />
+              <MetricCard title={t.linkedStudents} value={linkedStudents.length} onClick={() => {setStudentListScope("linked");setViewMode("students")}} />
               <MetricCard title={t.visibleAssignments} value={allVisibleSubmissions.length} onClick={() => setViewMode("students")} />
               <MetricCard title={t.needsAttention} value={allMissingSubmissions.length} onClick={() => setViewMode("attention")} />
               <MetricCard title={t.averageScore} value={allAverageScore === null ? "N/A" : `${allAverageScore}%`} />
@@ -955,8 +961,12 @@ export default function ObserverPage() {
           <section style={sectionStyle}>
             <h2 style={sectionTitleStyle}>{t.quickActions}</h2>
             <div style={cardGridStyle}>
-              <Card onClick={viewStudents}>
-                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{t.viewStudents}</div>
+              {isChineseHomeroomTeacher ? <Card onClick={()=>{setStudentListScope('all');viewStudents();}}>
+                <div style={{fontSize:'1.15rem',fontWeight:900}}>{language==='zh'?'所有学生':'All Students'} · {uniqueStudents.length}</div>
+                <p>{language==='zh'?'查看学校所有学生；查看不会将其加入您的班级。':'View all school students. Opening a profile does not add them to your homeroom.'}</p>
+              </Card> : null}
+              <Card onClick={()=>{setStudentListScope('linked');viewStudents();}}>
+                <div style={{ fontSize: "1.15rem", fontWeight: 900 }}>{isChineseHomeroomTeacher ? (language === "zh" ? "我的班级 / 关联学生" : "My Homeroom / Linked Students") : t.viewStudents}</div>
                 <div style={{ marginTop: "8px", color: "#4b5563" }}>
                   {t.viewStudentsHelp}
                 </div>
@@ -1179,19 +1189,24 @@ export default function ObserverPage() {
             {t.backToDashboard}
           </button>
 
-          <h2 style={sectionTitleStyle}>{t.myStudents}</h2>
+          <h2 style={sectionTitleStyle}>{isChineseHomeroomTeacher ? (studentListScope==='all' ? (language==='zh'?'所有学生':'All Students') : (language==='zh'?'我的班级 / 关联学生':'My Homeroom / Linked Students')) : t.myStudents}</h2>
+          {isChineseHomeroomTeacher ? <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
+            <button type="button" aria-pressed={studentListScope==='all'} onClick={()=>setStudentListScope('all')}>{language==='zh'?'所有学生':'All Students'} ({uniqueStudents.length})</button>
+            <button type="button" aria-pressed={studentListScope==='linked'} onClick={()=>setStudentListScope('linked')}>{language==='zh'?'我的班级':'My Homeroom'} ({linkedStudents.length})</button>
+            <label>{language==='zh'?'搜索学生':'Search students'}<input type="search" value={studentSearch} onChange={event=>setStudentSearch(event.target.value)} /></label>
+          </div> : null}
 
-          {uniqueStudents.length === 0 ? (
+          {listedStudents.length === 0 ? (
             <div style={emptyStateStyle}>
-              <div style={emptyStateTitleStyle}>{t.noStudents}</div>
-              <p style={emptyStateTextStyle}>{t.noStudentsHelp}</p>
+              <div style={emptyStateTitleStyle}>{isChineseHomeroomTeacher ? (studentSearch ? (language === "zh" ? "没有匹配的学生。" : "No students match your search.") : (language === "zh" ? "班级名单中尚无学生。" : "No students in this list yet.")) : t.noStudents}</div>
+              <p style={emptyStateTextStyle}>{isChineseHomeroomTeacher ? (language === "zh" ? "清除搜索，或使用管理我的班级选择学生。" : "Clear the search, or use Manage My Homeroom to select your students.") : t.noStudentsHelp}</p>
             </div>
           ) : (
             <div style={cardGridStyle}>
-              {uniqueStudents.map((student) => (
+              {listedStudents.map((student) => (
                 <Card key={student.student_email} onClick={() => openStudent(student)}>
                   <div style={{ fontSize: "1.2rem", fontWeight: 900 }}>{student.student_name}</div>
-                  <div style={{ marginTop: "6px", color: "#4b5563" }}>{student.student_email}</div>
+                  <div style={{ marginTop: "6px", color: "#4b5563" }}>{student.student_email.startsWith("roster:") ? (language==="zh"?"尚无学生账户":"No student account yet") : student.student_email}</div>
                   <div style={{ marginTop: "12px", fontWeight: 800 }}>{t.openStudent}</div>
                 </Card>
               ))}

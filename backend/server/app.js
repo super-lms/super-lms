@@ -1,3 +1,4 @@
+const {loadHomeroomDirectory} = require("./homeroomDirectory");
 const {loadObserverTestSummary} = require("./observerTestSummary");
 const { calculateTeacherRubric } = require('./teacherRubricScoring');
 const {gradebookSubmissionIndex,latestSubmissionByAssignment} = require('./gradebookSubmissions');
@@ -4990,6 +4991,8 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
 });
 
 async function getObserverStudents(observerEmail) {
+  const directory = await loadHomeroomDirectory(pool, observerEmail);
+  if (directory) return directory;
   const linkedStudentsResult = await pool.query(
     `
     SELECT
