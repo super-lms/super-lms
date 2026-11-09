@@ -182,6 +182,7 @@ function getRubricCriterion(criteria, bucket, fallback) {
 
 
 function getSavedKduSummary(row) {
+  if (row?.rubric_selection?.excused === true) return {isGraded:false,label:"EX — Excused",percent:null,scoreOutOfSix:null};
   const rubricSelection = row?.rubric_selection || {};
 
   if (rubricSelection.source === "teacher_designed_rubric_ho" && Number.isFinite(rubricSelection.overallScore)) {
@@ -275,6 +276,7 @@ export default function AssignmentSpeedGradingPage() {
   }, []);
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
+  const [excusedDraft, setExcusedDraft] = useState(false);
   const [searchText, setSearchText] = useState("");
 
   const [doScore, setDoScore] = useState("");
@@ -345,6 +347,7 @@ export default function AssignmentSpeedGradingPage() {
     const savedOverall = saved.overallScore ?? saved.overall_score ?? selectedRow?.score ?? "";
     const savedPoints = savedOverall === "" ? "" : String(getEarnedPoints(assignment, { ...selectedRow, score: savedOverall }));
     const hasUnsavedChanges = selectedRow && (
+      excusedDraft !== (saved.excused === true) ||
       doScore !== String(saved.DO ?? saved.doScore ?? saved.do_score ?? "") ||
       knowScore !== String(saved.KNOW ?? saved.knowScore ?? saved.know_score ?? "") ||
       understandScore !== String(saved.UNDERSTAND ?? saved.understandScore ?? saved.understand_score ?? "") ||
@@ -777,6 +780,7 @@ export default function AssignmentSpeedGradingPage() {
 
   function loadKduScoresFromSelectedStudent(row) {
     const rubricSelection = row?.rubric_selection || {};
+    setExcusedDraft(rubricSelection.excused === true);
 
     const nextDoScore =
       rubricSelection.DO ?? rubricSelection.doScore ?? rubricSelection.do_score ?? "";
@@ -1075,7 +1079,7 @@ export default function AssignmentSpeedGradingPage() {
   }
 
   function isStudentGraded(row) {
-    return getSavedKduSummary(row).isGraded;
+    return row?.rubric_selection?.excused === true || getSavedKduSummary(row).isGraded;
   }
 
   function getNextUngradedStudentEmail() {
@@ -1145,6 +1149,7 @@ export default function AssignmentSpeedGradingPage() {
       return false;
     }
 
+    if (excusedDraft) scoreOverrides = {...scoreOverrides, excused:true};
     const nextDoScore = scoreOverrides.doScore ?? doScore;
     const nextKnowScore = scoreOverrides.knowScore ?? knowScore;
     const nextUnderstandScore = scoreOverrides.understandScore ?? understandScore;
@@ -1156,12 +1161,12 @@ export default function AssignmentSpeedGradingPage() {
       nextUnderstandScore,
     ].every((value) => String(value ?? "").trim() !== "");
 
-    if (isTeacherRubric && (teacherRubricLoading || teacherRubricError || !teacherCalculation.complete)) {
+    if (!scoreOverrides.excused && isTeacherRubric && (teacherRubricLoading || teacherRubricError || !teacherCalculation.complete)) {
       setKduSaveMessage(teacherRubricError || teacherCalculation.error || "Select a performance level for every criterion before saving.");
       return;
     }
 
-    if (!isTeacherRubric && !hasCompleteKduScores) {
+    if (!scoreOverrides.excused && !isTeacherRubric && !hasCompleteKduScores) {
       setKduSaveMessage(
         "Enter DO, KNOW, and UNDERSTAND scores before saving."
       );
@@ -1180,6 +1185,7 @@ export default function AssignmentSpeedGradingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           student_email: selectedRow.student_email,
+          ...(scoreOverrides.excused ? {excused:true,directPercentage:true} : {}),
           feedback: teacherFeedback,
           ...((assignment?.submission_required === false || Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore"))
             ? { pointsEarned, ...(assignment?.submission_required === false ? {directPercentage: true} : {}) } : {}),
@@ -1225,7 +1231,11 @@ export default function AssignmentSpeedGradingPage() {
       const nextSelectedEmail = options.advanceToNextStudent
         ? getNextUngradedStudentEmail() || getNextStudentEmail()
         : selectedRow?.student_email;
-      await loadGradebook(nextSelectedEmail);
+      const refreshed = await loadGradebook(nextSelectedEmail);
+      if (scoreOverrides.excused && refreshed) {
+        loadKduScoresFromSelectedStudent(refreshed);
+        setKduSaveMessage(`Excused saved ✓ at ${formattedTime}`);
+      }
 
       if (options.goToDashboard) {
         navigate("/dashboard");
@@ -1247,6 +1257,10 @@ export default function AssignmentSpeedGradingPage() {
       return;
     }
 
+    if (excusedDraft) {
+      if (await saveKduScores({excused:true})) backToAssignmentsPage();
+      return;
+    }
     const scoresAreComplete = [doScore, knowScore, understandScore].every(
       (value) => String(value ?? "").trim() !== ""
     );
@@ -2213,9 +2227,16 @@ export default function AssignmentSpeedGradingPage() {
                   </div>
 
                   <div style={{ marginBottom: "14px", fontSize: "1rem" }}>
-                    <strong>Existing Score:</strong> {selectedRow.score ?? "—"}
+                    <strong>Existing Score:</strong> {selectedRow.rubric_selection?.excused ? "EX — Excused" : selectedRow.score ?? "—"}
                   </div>
 
+                  <div style={{padding:"16px",border:"1px solid #d7dce5",borderRadius:"12px",marginBottom:"14px"}}>
+                    <label style={{fontWeight:800}}><input type="checkbox" checked={excusedDraft} disabled={savingKduScores} onChange={event=>setExcusedDraft(event.target.checked)} /> Excused — exclude this assignment from the student's grade</label>
+                    <p>No score or assignment weight is included when saved as excused. Student work is retained.</p>
+                    {excusedDraft ? <ActionButton onClick={()=>saveKduScores({excused:true})} disabled={savingKduScores}>{savingKduScores ? "Saving..." : "Save Excused"}</ActionButton> : selectedRow.rubric_selection?.excused ? <p>Enter and save a mark below to replace the saved excuse.</p> : null}
+                    {excusedDraft && kduSaveMessage ? <p role="status">{kduSaveMessage}</p> : null}
+                  </div>
+                  {!excusedDraft && <>
                   {!isOneScoreAssignment && !isTeacherRubric ? (
                     <>
                       <RawMarkEntryPanel
@@ -2678,6 +2699,7 @@ export default function AssignmentSpeedGradingPage() {
 
                   )}
 
+                  </>}
                   <ActionButton quiet onClick={() => backToAssignmentsPage()}>
                     ← Back to Assignments
                   </ActionButton>
