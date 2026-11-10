@@ -24,9 +24,9 @@ export default function AssignmentBatchDownloads({ assignmentId, sectionId }) {
     } catch (err) { setError(true); setMessage(err.message || 'Download failed. Please try again.'); }
     finally { setBusy(''); }
   }
-  return <section aria-label="Class submission downloads" style={{ border: '1px solid #d7dce5', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-    <strong>Download this class’s work</strong>
-    <p style={{ margin: '8px 0', lineHeight: 1.5 }}>Downloads use the class section selected above. Each ZIP contains a folder organised by student.</p>
+  return <details aria-label="Class submission downloads" style={{ border: '1px solid #d7dce5', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+    <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Download this class’s work (optional)</summary>
+    <p style={{ margin: '8px 0', lineHeight: 1.5 }}>Save a copy of the selected class’s submissions for offline use. This is optional and is not needed to mark work. Choose written responses, uploaded attachments, or both; each ZIP is organised by student.</p>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
       {[['written', 'Download Class Written Responses'], ['attachments', 'Download Class Attachments'], ['all', 'Download Both']].map(([kind, label]) =>
         <button key={kind} type="button" disabled={!!busy || !assignmentId} onClick={() => download(kind)}
@@ -35,5 +35,5 @@ export default function AssignmentBatchDownloads({ assignmentId, sectionId }) {
         </button>)}
     </div>
     {message && <p role={error ? 'alert' : 'status'} style={{ marginBottom: 0, lineHeight: 1.5, color: error ? '#b91c1c' : '#245b50' }}>{message}</p>}
-  </section>;
+  </details>;
 }

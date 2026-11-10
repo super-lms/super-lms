@@ -1508,10 +1508,10 @@ export default function AssignmentSpeedGradingPage() {
             </select>
           </label>
         ) : null}
+        <AssignmentBatchDownloads key={`downloads:${assignmentId}:${sectionId}`} assignmentId={assignmentId} sectionId={sectionId} />
         {gradingLoadError ? <p role="alert">{gradingLoadError}</p> : null}
         {sectionLoadError ? <p role="alert">{sectionLoadError}</p> : null}
-        <AssignmentBatchDownloads key={`${assignmentId}:${sectionId}`} assignmentId={assignmentId} sectionId={sectionId} />
-        <ClassLateSubmissionApproval key={`${assignmentId}:${sectionId}`} assignment={assignment} sectionId={sectionId || String(assignment?.cohort_id || assignment?.class_id || '')} classTitle={gradingSections.find(c => String(c.id) === String(sectionId || assignment?.cohort_id || assignment?.class_id))?.title || 'Selected class'} studentCount={rows.length} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow?.student_email); await loadStudentAttachments(selectedRow?.student_email); setApprovalRevision(value => value + 1); }} />
+        <ClassLateSubmissionApproval key={`late-approval:${assignmentId}:${sectionId}`} assignment={assignment} sectionId={sectionId || String(assignment?.cohort_id || assignment?.class_id || '')} classTitle={gradingSections.find(c => String(c.id) === String(sectionId || assignment?.cohort_id || assignment?.class_id))?.title || 'Selected class'} studentCount={rows.length} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow?.student_email); await loadStudentAttachments(selectedRow?.student_email); setApprovalRevision(value => value + 1); }} />
 
         {isOneScoreAssignment ? (
           <div
