@@ -81,3 +81,15 @@ test('live gradebook calculation excludes EX from group averages and graded weig
  await handler({params:{classId:2},query:{}},response);
  assert.equal(result.students[0].current_percent,null);
 });
+
+ test('teacher not-submitted status saves with zero for new and existing rows and can be cleared',async()=>{
+ for(const existing of [true,false]) {
+  const saved=await save({pointsEarned:0,directPercentage:true,notSubmitted:true},existing);
+  assert.equal(saved.status,200);assert.equal(saved.result.percent_score,0);
+  assert.equal(saved.result.rubric_selection.notSubmitted,true);
+ }
+ const marked=await save({pointsEarned:10,directPercentage:true,notSubmitted:false});
+ assert.equal(marked.result.percent_score,50);assert.equal(marked.result.rubric_selection.notSubmitted,undefined);
+ const excused=await save({excused:true,notSubmitted:true});
+ assert.equal(excused.result.rubric_selection.notSubmitted,undefined);
+});

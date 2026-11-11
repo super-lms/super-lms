@@ -277,6 +277,7 @@ export default function AssignmentSpeedGradingPage() {
   const [rows, setRows] = useState([]);
   const [selectedRow, setSelectedRow] = useState(null);
   const [excusedDraft, setExcusedDraft] = useState(false);
+  const [notSubmittedDraft, setNotSubmittedDraft] = useState(false);
   const [searchText, setSearchText] = useState("");
 
   const [doScore, setDoScore] = useState("");
@@ -347,7 +348,7 @@ export default function AssignmentSpeedGradingPage() {
     const savedOverall = saved.overallScore ?? saved.overall_score ?? selectedRow?.score ?? "";
     const savedPoints = savedOverall === "" ? "" : String(getEarnedPoints(assignment, { ...selectedRow, score: savedOverall }));
     const hasUnsavedChanges = selectedRow && (
-      excusedDraft !== (saved.excused === true) ||
+      excusedDraft !== (saved.excused === true) || notSubmittedDraft !== (saved.notSubmitted === true) ||
       doScore !== String(saved.DO ?? saved.doScore ?? saved.do_score ?? "") ||
       knowScore !== String(saved.KNOW ?? saved.knowScore ?? saved.know_score ?? "") ||
       understandScore !== String(saved.UNDERSTAND ?? saved.understandScore ?? saved.understand_score ?? "") ||
@@ -781,6 +782,7 @@ export default function AssignmentSpeedGradingPage() {
   function loadKduScoresFromSelectedStudent(row) {
     const rubricSelection = row?.rubric_selection || {};
     setExcusedDraft(rubricSelection.excused === true);
+    setNotSubmittedDraft(rubricSelection.notSubmitted === true);
 
     const nextDoScore =
       rubricSelection.DO ?? rubricSelection.doScore ?? rubricSelection.do_score ?? "";
@@ -1161,12 +1163,12 @@ export default function AssignmentSpeedGradingPage() {
       nextUnderstandScore,
     ].every((value) => String(value ?? "").trim() !== "");
 
-    if (!scoreOverrides.excused && isTeacherRubric && (teacherRubricLoading || teacherRubricError || !teacherCalculation.complete)) {
+    if (!scoreOverrides.excused && !scoreOverrides.directPercentage && isTeacherRubric && (teacherRubricLoading || teacherRubricError || !teacherCalculation.complete)) {
       setKduSaveMessage(teacherRubricError || teacherCalculation.error || "Select a performance level for every criterion before saving.");
       return;
     }
 
-    if (!scoreOverrides.excused && !isTeacherRubric && !hasCompleteKduScores) {
+    if (!scoreOverrides.excused && !scoreOverrides.directPercentage && !isTeacherRubric && !hasCompleteKduScores) {
       setKduSaveMessage(
         "Enter DO, KNOW, and UNDERSTAND scores before saving."
       );
@@ -1187,8 +1189,10 @@ export default function AssignmentSpeedGradingPage() {
           student_email: selectedRow.student_email,
           ...(scoreOverrides.excused ? {excused:true,directPercentage:true} : {}),
           feedback: teacherFeedback,
+          notSubmitted: !scoreOverrides.excused && notSubmittedDraft,
+          ...(scoreOverrides.directPercentage ? {directPercentage:true} : {}),
           ...((assignment?.submission_required === false || Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore"))
-            ? { pointsEarned, ...(assignment?.submission_required === false ? {directPercentage: true} : {}) } : {}),
+            ? { pointsEarned: scoreOverrides.pointsEarned ?? pointsEarned, ...(assignment?.submission_required === false ? {directPercentage: true} : {}) } : {}),
           ...(isTeacherRubric ? {
             teacherRubricSelections: teacherSelections,
             teacherRubricRevision: teacherRubric?.updated_at,
@@ -1232,9 +1236,9 @@ export default function AssignmentSpeedGradingPage() {
         ? getNextUngradedStudentEmail() || getNextStudentEmail()
         : selectedRow?.student_email;
       const refreshed = await loadGradebook(nextSelectedEmail);
-      if (scoreOverrides.excused && refreshed) {
+      if ((scoreOverrides.excused || notSubmittedDraft) && refreshed) {
         loadKduScoresFromSelectedStudent(refreshed);
-        setKduSaveMessage(`Excused saved ✓ at ${formattedTime}`);
+        setKduSaveMessage(`${scoreOverrides.excused ? "Excused" : "Not submitted"} saved ✓ at ${formattedTime}`);
       }
 
       if (options.goToDashboard) {
@@ -1257,6 +1261,10 @@ export default function AssignmentSpeedGradingPage() {
       return;
     }
 
+    if (notSubmittedDraft && !excusedDraft) {
+      if (await saveKduScores({overallScore:0,pointsEarned:String(pointsEarned).trim() === "" ? 0 : pointsEarned,directPercentage:true})) backToAssignmentsPage();
+      return;
+    }
     if (excusedDraft) {
       if (await saveKduScores({excused:true})) backToAssignmentsPage();
       return;
@@ -2231,11 +2239,17 @@ export default function AssignmentSpeedGradingPage() {
                   </div>
 
                   <div style={{padding:"16px",border:"1px solid #d7dce5",borderRadius:"12px",marginBottom:"14px"}}>
-                    <label style={{fontWeight:800}}><input type="checkbox" checked={excusedDraft} disabled={savingKduScores} onChange={event=>setExcusedDraft(event.target.checked)} /> Excused — exclude this assignment from the student's grade</label>
+                    <label style={{fontWeight:800}}><input type="checkbox" checked={excusedDraft} disabled={savingKduScores} onChange={event=>{setExcusedDraft(event.target.checked); if(event.target.checked) setNotSubmittedDraft(false);}} /> Excused — exclude this assignment from the student's grade</label>
                     <p>No score or assignment weight is included when saved as excused. Student work is retained.</p>
                     {excusedDraft ? <ActionButton onClick={()=>saveKduScores({excused:true})} disabled={savingKduScores}>{savingKduScores ? "Saving..." : "Save Excused"}</ActionButton> : selectedRow.rubric_selection?.excused ? <p>Enter and save a mark below to replace the saved excuse.</p> : null}
                     {excusedDraft && kduSaveMessage ? <p role="status">{kduSaveMessage}</p> : null}
                   </div>
+                  <section style={{marginBottom:16}}>
+                    <label><input type="checkbox" checked={notSubmittedDraft} disabled={savingKduScores} onChange={event => {setNotSubmittedDraft(event.target.checked); if(event.target.checked) setExcusedDraft(false);}} /> Not submitted</label>
+                    <p>Record missing work separately from its mark. A zero counts in the grade and appears beside “Work not submitted” in the IE report. Student files are retained.</p>
+                    {notSubmittedDraft && <ActionButton disabled={savingKduScores} onClick={()=>saveKduScores({overallScore:0,pointsEarned:0,directPercentage:true})}>Save Not submitted with zero</ActionButton>}
+                    {notSubmittedDraft && kduSaveMessage && <p role="status">{kduSaveMessage}</p>}
+                  </section>
                   {!excusedDraft && <>
                   {!isOneScoreAssignment && !isTeacherRubric ? (
                     <>

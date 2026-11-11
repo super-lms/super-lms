@@ -42,13 +42,13 @@ const IEReportSingle = forwardRef(function IEReport({ data, onMessage }, ref) {
       {[['date','Date','date'],['term','Term','text'],['name','Student name','text'],['email','Email','email'],['grade','Grade','text'],['className','Class (e.g. 10A)','text']].map(([key,label,type]) => <label key={key}>{label}<input name={key} aria-label={label} aria-invalid={validation && !String(meta[key]).trim() && key !== "term" ? true : undefined} type={type} value={meta[key]} onChange={e=>setMeta({...meta,[key]:e.target.value})} style={input}/></label>)}
     </div>
     <div style={{display:'flex',gap:12,marginBottom:12}}><button onClick={()=>setRows(rows.map(r=>({...r,included:true})))}>Include all</button><button onClick={()=>setRows(rows.map(r=>({...r,included:false})))}>Clear selection</button><button onClick={print}>Print IE / Save PDF</button></div>
-    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:1000}}><thead><tr>{['Include','Assignment Title','Original Assignment Date','Submitted / Not submitted','Score if submitted','Final Due Date','Directions to Student'].map(label=><th key={label} style={cell}>{label}</th>)}</tr></thead><tbody>
+    <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',minWidth:1000}}><thead><tr>{['Include','Assignment Title','Original Assignment Date','Submitted / Not submitted','Score','Final Due Date','Directions to Student'].map(label=><th key={label} style={cell}>{label}</th>)}</tr></thead><tbody>
     {rows.map((r,i)=><tr key={r.id}>
       <td style={cell}><input type="checkbox" aria-label={`Include assignment ${i+1}`} checked={r.included} onChange={e=>update(r.id,'included',e.target.checked)}/></td>
       <td style={cell}><input aria-label={`Assignment ${i+1} title`} value={r.title} onChange={e=>update(r.id,'title',e.target.value)} style={input}/></td>
       <td style={cell}><input aria-label={`Assignment ${i+1} original date`} type="date" value={dateField(r.originalDate)} onChange={e=>update(r.id,'originalDate',e.target.value)} style={input}/></td>
-      <td style={cell}>{r.submitted ? 'Submitted' : 'Not submitted'}</td>
-      <td style={cell}>{r.submitted ? r.score : ''}</td>
+      <td style={cell}>{r.submitted ? 'Submitted' : 'Work not submitted'}</td>
+      <td style={cell}>{r.score}</td>
       <td style={cell}><input aria-label={`Assignment ${i+1} final due date`} type="date" value={r.finalDate} onChange={e=>update(r.id,'finalDate',e.target.value)} style={input}/></td>
       <td style={cell}><textarea aria-label={`Assignment ${i+1} directions`} value={r.directions} onChange={e=>update(r.id,'directions',e.target.value)} rows={3} style={{...input,minWidth:200}}/></td>
     </tr>)}

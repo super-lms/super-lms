@@ -7978,6 +7978,8 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       saveContent = "Teacher-entered KDU rubric score.";
     }
 
+    if (!excused && req.body.notSubmitted === true) rubricSelection.notSubmitted = true;
+
     const userResult = await pool.query(
       `
       SELECT id, name
@@ -13012,7 +13014,7 @@ async function generateCourseReport(req, res) {
             gradedWeight += weight;
             gradedAssignmentCount += 1;
           }
-          if (submission && (submission.has_submitted_content || numericScore !== null)) {
+          if (submission && submission.rubric_selection?.notSubmitted !== true && (submission.has_submitted_content || numericScore !== null)) {
             completedWeight += weight;
             completedAssignmentCount += 1;
           }
@@ -13031,7 +13033,7 @@ async function generateCourseReport(req, res) {
             assignment_id: assignment.assignment_id,
             original_assignment_date: assignment.original_assignment_date || "",
             original_due_date: assignment.due_date || "",
-            submitted: Boolean(submission && (submission.has_submitted_content || numericScore !== null)),
+            submitted: Boolean(submission && submission.rubric_selection?.notSubmitted !== true && (submission.has_submitted_content || numericScore !== null)),
             assignment_title: assignment.assignment_title || "",
             lesson_title: "",
             category_name: assignment.category_name || "Unlinked",

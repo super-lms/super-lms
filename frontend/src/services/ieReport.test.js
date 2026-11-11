@@ -22,3 +22,11 @@ test('print cannot include passing or not marked assignments even if checked',()
  const html=iePrintHtml({},[{included:true,submitted:true,score:'100%',title:'Passing'},{included:true,submitted:true,score:'',title:'Awaiting marking'},{included:true,submitted:true,score:'39%',title:'Qualifying'}]);
  assert.ok(!html.includes('Passing'));assert.ok(!html.includes('Awaiting marking'));assert.ok(html.includes('Qualifying'));
 });
+
+test('missing work retains its recorded zero in the preview and printed Score column',()=>{
+ const rows=ieRows([{assignment_id:8,submitted:false,score:0,assignment_title:'Missing exercise'}]);
+ assert.equal(rows[0].submitted,false);assert.equal(rows[0].score,'0%');
+ const html=iePrintHtml({},rows);
+ assert.ok(html.includes('Work not submitted</td><td>0%'));
+ assert.ok(html.includes('<th>Score</th>'));assert.ok(!html.includes('Score if submitted'));
+});

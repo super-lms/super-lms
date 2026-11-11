@@ -146,6 +146,7 @@ export default function GradebookPage() {
   const [status, setStatus] = useState("Loading classes...");
   const [draftScores, setDraftScores] = useState({});
   const [spreadsheetMarkDrafts, setSpreadsheetMarkDrafts] = useState({});
+  const [notSubmittedDrafts, setNotSubmittedDrafts] = useState({});
   const [columnFillPercentages, setColumnFillPercentages] = useState({});
   const [columnFillMessages, setColumnFillMessages] = useState({});
   const [savingKey, setSavingKey] = useState("");
@@ -392,6 +393,7 @@ export default function GradebookPage() {
           overallScore: percentage,
           ...(excused ? { excused: true } : { pointsEarned: Number(rawMark) }),
           directPercentage: true,
+          notSubmitted: !excused && (notSubmittedDrafts[key] ?? match?.rubric_selection?.notSubmitted ?? false),
         }),
       });
       const data = await response.json();
@@ -403,6 +405,7 @@ export default function GradebookPage() {
           assignment_scores: row.assignment_scores.map(score => Number(score.assignment_id) !== Number(assignment.id) ? score :
             {...score, score: data.percent_score, rubric_selection: data.rubric_selection})}
       )} : current);
+      setNotSubmittedDrafts(current => { const next = {...current}; delete next[key]; return next; });
       setSpreadsheetMarkDrafts((current) => {
         const next = { ...current };
         delete next[key];
@@ -1385,6 +1388,7 @@ export default function GradebookPage() {
                                   value={isExcusedEntry(spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match)) ? "EX" : "score"}
                                   disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
                                   onChange={(event) => {
+                                    if (event.target.value === "EX") setNotSubmittedDrafts(current => ({...current,[markKey]:false}));
                                     setSpreadsheetMarkDrafts((current) => ({ ...current, [markKey]: event.target.value === "EX" ? "EX" : "" }));
                                     setCellSaveStatus((current) => ({ ...current, [markKey]: "Editing..." }));
                                   }}
@@ -1393,6 +1397,16 @@ export default function GradebookPage() {
                                   <option value="EX">EX — Excused</option>
                                 </select>
                               </div>
+                              <label style={{display:"block",fontSize:12,marginTop:6}}><input type="checkbox"
+                                aria-label={`${student.student_name} not submitted for ${assignment.title || "assignment"}`}
+                                checked={notSubmittedDrafts[markKey] ?? match?.rubric_selection?.notSubmitted ?? false}
+                                disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
+                                onChange={event => {
+                                  setNotSubmittedDrafts(current => ({...current,[markKey]:event.target.checked}));
+                                  const mark = spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match);
+                                  setSpreadsheetMarkDrafts(current => ({...current,[markKey]:event.target.checked && (String(mark).trim() === "" || isExcusedEntry(mark)) ? "0" : mark}));
+                                  setCellSaveStatus(current => ({...current,[markKey]:"Editing..."}));
+                                }} /> Not submitted</label>
                               {cellSaveStatus[markKey] ? (
                                 <div style={spreadsheetMarkStatusStyle}>{cellSaveStatus[markKey]}</div>
                               ) : null}
