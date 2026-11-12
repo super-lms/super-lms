@@ -766,8 +766,10 @@ export default function StudentDashboardPage() {
 
   const gradedAverage = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
+    const savedStanding = dashboard?.raw?.gradebook?.current_percent
+    if (savedStanding !== null && savedStanding !== undefined && Number.isFinite(Number(savedStanding))) return Number(savedStanding)
     return weightedCourseStanding(list, submissionStateByAssignmentId)
-  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+  }, [assignments, dashboard, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
 
   const missingAssignments = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
