@@ -691,9 +691,11 @@ function ReportsPage() {
     rows.push(["Course", reportData.course_title || ""]);
     rows.push(["Report Scope", reportData.report_scope || reportScope]);
     rows.push(["Student Count", reportData.class_summary?.student_count ?? ""]);
-    rows.push(["Class Average", reportData.class_summary?.class_average ?? ""]);
-    rows.push(["Highest Grade", reportData.class_summary?.highest_grade ?? ""]);
-    rows.push(["Lowest Grade", reportData.class_summary?.lowest_grade ?? ""]);
+    if (reportData.report_scope !== "student") {
+      rows.push(["Class Average", reportData.class_summary?.class_average ?? ""]);
+      rows.push(["Highest Grade", reportData.class_summary?.highest_grade ?? ""]);
+      rows.push(["Lowest Grade", reportData.class_summary?.lowest_grade ?? ""]);
+    }
     rows.push([]);
 
     reportData.students.forEach((student) => {
@@ -945,9 +947,7 @@ function ReportsPage() {
           <div class="summary">
             <p><strong>Report Scope:</strong> ${escapeHtml(reportData.report_scope || reportScope)}</p>
             <p><strong>Students:</strong> ${escapeHtml(String(reportData.class_summary?.student_count ?? ""))}</p>
-            <p><strong>Class Average:</strong> ${escapeHtml(String(reportData.class_summary?.class_average ?? ""))}%</p>
-            <p><strong>Highest Grade:</strong> ${escapeHtml(String(reportData.class_summary?.highest_grade ?? ""))}%</p>
-            <p><strong>Lowest Grade:</strong> ${escapeHtml(String(reportData.class_summary?.lowest_grade ?? ""))}%</p>
+            ${reportData.report_scope === "student" ? "" : `<p><strong>Class Average:</strong> ${escapeHtml(String(reportData.class_summary?.class_average ?? ""))}%</p><p><strong>Highest Grade:</strong> ${escapeHtml(String(reportData.class_summary?.highest_grade ?? ""))}%</p><p><strong>Lowest Grade:</strong> ${escapeHtml(String(reportData.class_summary?.lowest_grade ?? ""))}%</p>`}
           </div>
 
           ${studentSections || "<p>No report data available.</p>"}
@@ -1291,12 +1291,14 @@ function ReportsPage() {
             </button>
           </div>
 
-          <div style={summaryBoxStyle}>
-            <div><strong>Students:</strong> {reportData.class_summary.student_count}</div>
-            <div><strong>Average:</strong> {reportData.class_summary.class_average}%</div>
-            <div><strong>Highest:</strong> {reportData.class_summary.highest_grade}%</div>
-            <div><strong>Lowest:</strong> {reportData.class_summary.lowest_grade}%</div>
-          </div>
+          {reportData.report_scope !== "student" ? (
+            <div style={summaryBoxStyle}>
+              <div><strong>Students:</strong> {reportData.class_summary.student_count}</div>
+              <div><strong>Average:</strong> {reportData.class_summary.class_average}%</div>
+              <div><strong>Highest:</strong> {reportData.class_summary.highest_grade}%</div>
+              <div><strong>Lowest:</strong> {reportData.class_summary.lowest_grade}%</div>
+            </div>
+          ) : null}
 
           <h3 style={subheadingStyle}>Students</h3>
 
