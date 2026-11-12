@@ -42,3 +42,14 @@ export async function mapStudentReads(items, read) {
   }
   return results
 }
+
+// A saved teacher mark is authoritative: it must never be presented to a
+// student as work they still need to complete, even if its earlier submission
+// status was not updated.
+export function needsStudentAttention(assignment, submissionState) {
+  if (assignment?.submission_required === false) return false
+  const score = submissionState?.submission?.score
+  if (score !== null && score !== undefined && score !== "" && !Number.isNaN(Number(score))) return false
+  const status = submissionState?.submission_status || "not_submitted"
+  return status === "not_submitted" || status === "awaiting_approval" || status === "declined"
+}
