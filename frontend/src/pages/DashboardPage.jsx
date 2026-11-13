@@ -1,3 +1,4 @@
+import SchoolCalendarPage from "./SchoolCalendarPage.jsx"
 import { getKduCellLabel, getKduCellDescriptor } from "../services/teacherHeatmapDisplay.js"
 import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
 import { useEffect, useId, useMemo, useState } from "react"
@@ -720,6 +721,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="content-area" style={{ display: "grid", gap: "18px" }}>
+        <SchoolCalendarPage embedded />
         <TeacherQuickLookup students={students} courses={courses} teacherId={teacherId} onOpen={goTo} />
         <section className="panel">
           <h2 style={{ marginTop: 0, fontSize: "28px" }}>My Teaching Dashboard</h2>

@@ -3562,7 +3562,8 @@ app.get('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher',
 
     if (String(req.user?.role || '').toLowerCase() !== 'admin') {
       params.push(audience);
-      filters.push(`audiences ? $${params.length}`);
+      params.push(req.user.id);
+      filters.push(`(audiences ? $${params.length-1} OR created_by = $${params.length})`);
     }
 
     const from = String(req.query.from || '').trim();
@@ -3577,7 +3578,7 @@ app.get('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher',
     }
 
     const result = await pool.query(
-      `SELECT id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_at, updated_at
+      `SELECT id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_by, created_at, updated_at
        FROM school_calendar_events
        ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
        ORDER BY starts_at ASC, id ASC`,
@@ -3590,7 +3591,7 @@ app.get('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher',
   }
 });
 
-app.post('/api/calendar/events', authenticateJWT, requireRole('admin'), async (req, res) => {
+app.post('/api/calendar/events', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
   try {
     await ensureSchoolCalendarTables();
     const title = String(req.body?.title || '').trim();
@@ -3600,14 +3601,14 @@ app.post('/api/calendar/events', authenticateJWT, requireRole('admin'), async (r
     if (!title || !startsAt || !endsAt || audiences.length === 0) {
       return res.status(400).json({ error: 'Title, start, end, and at least one audience are required' });
     }
-    if (new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+    if (!Number.isFinite(Date.parse(startsAt)) || !Number.isFinite(Date.parse(endsAt)) || new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
       return res.status(400).json({ error: 'The event end must be after its start' });
     }
     const result = await pool.query(
       `INSERT INTO school_calendar_events
         (title, description, starts_at, ends_at, all_day, location, color, audiences, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
-       RETURNING id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_at, updated_at`,
+       RETURNING id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_by, created_at, updated_at`,
       [
         title,
         String(req.body?.description || '').trim(),
@@ -3627,7 +3628,7 @@ app.post('/api/calendar/events', authenticateJWT, requireRole('admin'), async (r
   }
 });
 
-app.put('/api/calendar/events/:eventId', authenticateJWT, requireRole('admin'), async (req, res) => {
+app.put('/api/calendar/events/:eventId', authenticateJWT, requireRole('admin', 'teacher'), async (req, res) => {
   try {
     await ensureSchoolCalendarTables();
     const eventId = Number(req.params.eventId);
@@ -3638,15 +3639,15 @@ app.put('/api/calendar/events/:eventId', authenticateJWT, requireRole('admin'), 
     if (!eventId || !title || !startsAt || !endsAt || audiences.length === 0) {
       return res.status(400).json({ error: 'Title, start, end, and at least one audience are required' });
     }
-    if (new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
+    if (!Number.isFinite(Date.parse(startsAt)) || !Number.isFinite(Date.parse(endsAt)) || new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
       return res.status(400).json({ error: 'The event end must be after its start' });
     }
     const result = await pool.query(
       `UPDATE school_calendar_events
        SET title=$1, description=$2, starts_at=$3, ends_at=$4, all_day=$5, location=$6, color=$7, audiences=$8::jsonb, updated_at=NOW()
-       WHERE id=$9
-       RETURNING id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_at, updated_at`,
-      [title, String(req.body?.description || '').trim(), startsAt, endsAt, Boolean(req.body?.all_day), String(req.body?.location || '').trim(), /^#[0-9a-fA-F]{6}$/.test(String(req.body?.color || '')) ? req.body.color : '#2563eb', JSON.stringify(audiences), eventId]
+       WHERE id=$9 AND ($10::boolean OR created_by=$11)
+       RETURNING id, title, description, starts_at, ends_at, all_day, location, color, audiences, created_by, created_at, updated_at`,
+      [title, String(req.body?.description || '').trim(), startsAt, endsAt, Boolean(req.body?.all_day), String(req.body?.location || '').trim(), /^#[0-9a-fA-F]{6}$/.test(String(req.body?.color || '')) ? req.body.color : '#2563eb', JSON.stringify(audiences), eventId, String(req.user.role).toLowerCase() === 'admin', req.user.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Calendar event not found' });
     return res.json({ event: result.rows[0] });
