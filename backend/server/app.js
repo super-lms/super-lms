@@ -5308,7 +5308,7 @@ app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole(
       (SELECT COUNT(DISTINCT ce.student_user_id)::integer FROM class_enrollments ce
        WHERE ce.student_user_id=ANY($2::integer[]) AND (a.cohort_id IS NULL OR ce.class_id=a.cohort_id)) AS roster_count,
       COUNT(s.id)::integer AS submission_count,
-      COUNT(s.id) FILTER (WHERE s.score IS NOT NULL OR NULLIF(TRIM(COALESCE(s.grade,'')),'') IS NOT NULL OR s.rubric_selection IS NOT NULL)::integer AS graded_count
+      COUNT(s.id) FILTER (WHERE s.score IS NOT NULL OR NULLIF(TRIM(COALESCE(s.grade,'')),'') IS NOT NULL OR s.rubric_selection->>'excused'='true')::integer AS graded_count
       FROM assignments a
       LEFT JOIN LATERAL (
         SELECT DISTINCT ON (u.id) sub.* FROM users u JOIN submissions sub

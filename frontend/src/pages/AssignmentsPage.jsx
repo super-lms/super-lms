@@ -1,3 +1,4 @@
+import { assignmentProgress } from "../services/assignmentProgress.js";
 import AssignmentCard from "../components/AssignmentCard.jsx";
 import AssignmentSubmissionSetting from "../components/AssignmentSubmissionSetting";
 import AssignmentDueDate from "../components/AssignmentDueDate.jsx";
@@ -415,15 +416,7 @@ export default function AssignmentsPage() {
   }
 
   function getAssignmentStatusLabel(assignment, classStudentTotal) {
-    const submissions = getAssignmentSubmissionCount(assignment)
-    const graded = getAssignmentGradedCount(assignment)
-    const ungraded = getAssignmentUngradedCount(assignment)
-
-    if ((assignment.roster_count ?? classStudentTotal) === 0) return "Roster Needed"
-    if (submissions === 0) return "No Submissions"
-    if (ungraded > 0) return "Ready to Grade"
-    if (graded > 0 && graded >= submissions) return "Completed"
-    return "In Progress"
+    return assignmentProgress(assignment, classStudentTotal).status
   }
 
   function closeDeleteConfirmation() {
@@ -1489,7 +1482,7 @@ export default function AssignmentsPage() {
         const submissions = getAssignmentSubmissionCount(assignment)
         const graded = getAssignmentGradedCount(assignment)
         const ungraded = getAssignmentUngradedCount(assignment)
-        const missing = Math.max(classStudentCount - submissions, 0)
+        const missing = assignmentProgress(assignment, classStudentCount).missing
 
         return {
           assignment,
@@ -1801,7 +1794,7 @@ export default function AssignmentsPage() {
                   >
                     <SummaryCard label="Ready to Grade" value={teacherAssignmentStatusSummary.readyToGrade} helper="Submissions need grading." />
                     <SummaryCard label="No Submissions" value={teacherAssignmentStatusSummary.noSubmissions} helper="Waiting on students." />
-                    <SummaryCard label="Completed" value={teacherAssignmentStatusSummary.completed} helper="Appears fully graded." />
+                    <SummaryCard label="Completed" value={teacherAssignmentStatusSummary.completed} helper="Every student has a recorded mark or excuse." />
                     <SummaryCard label="Roster Needed" value={teacherAssignmentStatusSummary.rosterNeeded} helper="Needs students first." />
                   </div>
 
@@ -1818,7 +1811,7 @@ export default function AssignmentsPage() {
 
                     {teacherAssignmentInboxItems.length === 0 ? (
                       <NoticeBox>
-                        No assignments need attention right now. Completed or empty assignment lists will appear in Current Assignments.
+                        No assignments need attention right now. Fully marked assignments appear in Current Assignments.
                       </NoticeBox>
                     ) : (
                       <div style={assignmentInboxGridStyle}>
