@@ -17,10 +17,22 @@ export function getEarnedPoints(assignment, match) {
   const rubric = match?.rubric_selection || {};
   if (rubric.pointsEarned !== null && rubric.pointsEarned !== undefined && rubric.pointsEarned !== "" &&
       Number.isFinite(Number(rubric.pointsEarned))) return Number(rubric.pointsEarned);
+  // Checklist imports also retain the teacher's original points.
+  if (rubric.importedChecklistMark !== null && rubric.importedChecklistMark !== undefined &&
+      rubric.importedChecklistMark !== "" && Number.isFinite(Number(rubric.importedChecklistMark))) {
+    return Number(rubric.importedChecklistMark);
+  }
   // Older direct marks retain the original percentage in the rubric JSON.
   const percentage = rubric.overallScore ?? rubric.overall_score ?? match.score;
   const points = Number(percentage) * getPointsPossible(assignment) / 100;
-  return Number.isFinite(points) ? Number(points.toFixed(4)) : "";
+  if (!Number.isFinite(points)) return "";
+  // Legacy percentages are rounded to two decimals. Recover a whole point only
+  // if it produces exactly that saved percentage; never round exact raw marks.
+  const total = getPointsPossible(assignment);
+  const whole = Math.round(points);
+  if (rubric.overallScore == null && rubric.overall_score == null && total < 10000 &&
+      Number((whole / total * 100).toFixed(2)) === Number(percentage)) return whole;
+  return Number(points.toFixed(4));
 }
 
 export function pointsToPercentage(value, assignment) {

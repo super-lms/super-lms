@@ -45,11 +45,11 @@ test('persisted raw marks survive rounded percentage storage and repeated reload
   assert.equal(calculateRawMark(4, 14).percentage.toFixed(1), '28.6');
 });
 
-test('legacy direct marks recover from original percentage without guessing whole marks', () => {
+test('legacy direct marks recover whole points within stored percentage rounding', () => {
   assert.equal(getEarnedPoints({ points_possible: 14 }, {
     score: 28.57, rubric_selection: { overallScore: 4 / 14 * 100, directPercentage: true },
   }), 4);
-  assert.equal(getEarnedPoints({ points_possible: 14 }, { score: 28.57 }), 3.9998);
+  assert.equal(getEarnedPoints({ points_possible: 14 }, { score: 28.57 }), 4);
 });
 
 test('server validates raw marks including blanks and fractional marks', async () => {
@@ -89,4 +89,16 @@ test('column fill converts percentages to points while preserving EX and other c
   for (const invalid of ['', ' ', undefined, null, -1, 101, 'EX', Infinity]) {
     assert.throws(() => fillAssignmentPercentage(students, assignment, {}, invalid), /percentage from 0 to 100/);
   }
+});
+
+test('SpeedGrader points remain unchanged in Gradebook despite rounded percentages', () => {
+ const assignment={points_possible:14};
+ for(const points of [0,4,3.9998,4.125,14]) {
+  const score=Number((points/14*100).toFixed(2));
+  assert.equal(getEarnedPoints(assignment,{score,rubric_selection:{pointsEarned:points}}),points);
+ }
+ assert.equal(getEarnedPoints(assignment,{score:28.57}),4);
+ assert.equal(getEarnedPoints(assignment,{score:28.56}),3.9984);
+ assert.equal(getEarnedPoints(assignment,{score:28.57,rubric_selection:{importedChecklistMark:4}}),4);
+ assert.equal(getEarnedPoints(assignment,{score:28.57,rubric_selection:{overallScore:28.57}}),3.9998);
 });
