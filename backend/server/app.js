@@ -6400,7 +6400,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
         cs.name AS subcategory_name,
         cc.name AS category_name,
         cc.weight_percent AS category_weight_percent,
-        cs.weight_percent_of_parent
+        cs.weight_percent_of_parent,
+        ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS course_weight_percent
       FROM assignments a
       LEFT JOIN LATERAL (
         SELECT
@@ -6458,6 +6459,23 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       [contentCourseId, studentEmail, courseId]
     );
 
+    // Students can only open published assignments, but a returned mark must
+    // still count in the standing shown by the teacher gradebook and report.
+    // Load the complete grading set separately so hiding a future assignment
+    // never changes an already-calculated course mark.
+    const standingAssignmentsResult = await pool.query(
+      `
+      SELECT a.id, a.subcategory_id,
+        ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS course_weight_percent
+      FROM assignments a
+      LEFT JOIN category_subcategories cs ON cs.id = a.subcategory_id
+      LEFT JOIN course_categories cc ON cc.id = cs.course_category_id
+      WHERE a.class_id = $1 AND (a.cohort_id IS NULL OR a.cohort_id = $2)
+      ORDER BY a.id ASC
+      `,
+      [contentCourseId, courseId]
+    );
+
     const lessonsResult = await pool.query(
       `
       SELECT l.id, l.course_id, l.title, l.content, l.order_index, l.created_at, l.updated_at,
@@ -6513,6 +6531,35 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       };
     });
 
+    // Keep the student-facing standing on exactly the same evidence-tier
+    // calculation used by the teacher gradebook. A tier is weighted once,
+    // then uses the average of its returned marks.
+    const scoresByGroup = new Map();
+    standingAssignmentsResult.rows.forEach((assignment) => {
+      const score = submissionsByAssignmentId[String(assignment.id)]?.score;
+      if (!assignment.subcategory_id || score === null || score === undefined || score === "" || !Number.isFinite(Number(score))) return;
+      const key = String(assignment.subcategory_id);
+      if (!scoresByGroup.has(key)) scoresByGroup.set(key, []);
+      scoresByGroup.get(key).push(Number(score));
+    });
+    let earnedCoursePoints = 0;
+    let gradedWeightPercent = 0;
+    const groupBreakdown = new Map();
+    standingAssignmentsResult.rows.forEach((assignment) => {
+      const key = String(assignment.subcategory_id || "");
+      if (groupBreakdown.has(key) || !scoresByGroup.has(key)) return;
+      const scores = scoresByGroup.get(key);
+      const weight = Number(assignment.course_weight_percent || 0);
+      if (!Number.isFinite(weight) || weight <= 0) return;
+      const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+      earnedCoursePoints += average * weight / 100;
+      gradedWeightPercent += weight;
+      groupBreakdown.set(key, { average_score: Number(average.toFixed(2)), course_weight_percent: weight });
+    });
+    const currentPercent = gradedWeightPercent > 0
+      ? Number((earnedCoursePoints / gradedWeightPercent * 100).toFixed(2))
+      : null;
+
     return res.json({
       course: courseResult.rows[0],
       assignments: assignmentsResult.rows,
@@ -6520,6 +6567,12 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       class_resources: classResourcesResult.rows,
       content_course_id: contentCourseId,
       submissionStatesByAssignmentId,
+      gradebook: {
+        group_breakdown: Array.from(groupBreakdown.values()),
+        earned_course_points: Number(earnedCoursePoints.toFixed(2)),
+        graded_weight_percent: Number(gradedWeightPercent.toFixed(2)),
+        current_percent: currentPercent,
+      },
     });
   } catch (err) {
     console.error("GET /api/students/:studentEmail/courses/:courseId/dashboard failed:", err);
@@ -12895,6 +12948,7 @@ async function generateCourseReport(req, res) {
         a.due_date,
         COALESCE(to_jsonb(a)->>'available_from', to_jsonb(a)->>'created_at') AS original_assignment_date,
         cc.name AS category_name,
+        cs.id AS subcategory_id,
         cs.name AS level_name,
         ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS calculated_weight_percent
       FROM assignments a
@@ -13011,24 +13065,11 @@ async function generateCourseReport(req, res) {
 
           const weight = Number(assignment.calculated_weight_percent || 0);
           totalWeight += weight;
-          if (numericScore !== null) {
-            gradedWeight += weight;
-            gradedAssignmentCount += 1;
-          }
+          if (numericScore !== null) gradedAssignmentCount += 1;
           if (submission && submission.rubric_selection?.notSubmitted !== true && (submission.has_submitted_content || numericScore !== null)) {
             completedWeight += weight;
             completedAssignmentCount += 1;
           }
-          const contribution =
-            numericScore === null ? 0 : Number(((numericScore * weight) / 100).toFixed(2));
-
-          if (assignment.category_name) {
-            categoryTotals[assignment.category_name] =
-              Number(categoryTotals[assignment.category_name] || 0) + contribution;
-          }
-
-          courseTotal += contribution;
-
           return {
             submission_id: submission?.submission_id || null,
             assignment_id: assignment.assignment_id,
@@ -13041,9 +13082,39 @@ async function generateCourseReport(req, res) {
             level_name: assignment.level_name || "KDU Rubric Assessments",
             score: numericScore === null ? "" : numericScore,
             calculated_weight_percent: Number(weight.toFixed(2)),
-            contribution,
+            subcategory_id: assignment.subcategory_id,
+            contribution: 0,
           };
         });
+
+      // A grading tier has one course weight. Average all returned marks in
+      // that tier before applying its weight, matching the gradebook and the
+      // student dashboard rather than applying the tier weight once per row.
+      const gradedGroups = new Map();
+      assignments.forEach((assignment) => {
+        if (assignment.score === "") return;
+        const key = String(assignment.subcategory_id || `assignment:${assignment.assignment_id}`);
+        if (!gradedGroups.has(key)) {
+          gradedGroups.set(key, {
+            weight: Number(assignment.calculated_weight_percent || 0),
+            category: assignment.category_name,
+            assignments: [],
+          });
+        }
+        gradedGroups.get(key).assignments.push(assignment);
+      });
+      gradedGroups.forEach((group) => {
+        const scores = group.assignments.map((assignment) => Number(assignment.score));
+        const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+        const contribution = (average * group.weight) / 100;
+        courseTotal += contribution;
+        gradedWeight += group.weight;
+        if (group.category) categoryTotals[group.category] = Number(categoryTotals[group.category] || 0) + contribution;
+        group.assignments.forEach((assignment) => {
+          assignment.calculated_weight_percent = Number((group.weight / group.assignments.length).toFixed(2));
+          assignment.contribution = Number((contribution / group.assignments.length).toFixed(2));
+        });
+      });
 
       const roundedCategoryTotals = {};
 

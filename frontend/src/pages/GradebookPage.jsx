@@ -35,6 +35,21 @@ function getDraftKey(studentEmail, assignmentId) {
   return `${studentEmail}:${assignmentId}`;
 }
 
+function getSubmissionStatusLabel(match) {
+  switch (String(match?.submission_status || "not_submitted")) {
+    case "submitted":
+      return "Submitted";
+    case "awaiting_approval":
+      return "Awaiting approval";
+    case "declined":
+      return "Submission declined";
+    case "no_submission_required":
+      return "No submission required";
+    default:
+      return "Not submitted";
+  }
+}
+
 function getExistingKdu(match) {
   const rubric = match?.rubric_selection || {};
   return {
@@ -1355,6 +1370,8 @@ export default function GradebookPage() {
                             (item) => item.assignment_id === assignment.id
                           );
                           const markKey = getDraftKey(student.student_email, assignment.id);
+                          const submissionStatus = getSubmissionStatusLabel(match);
+                          const isSubmitted = String(match?.submission_status || "") === "submitted";
 
                           return (
                             <td key={assignment.id} style={spreadsheetScoreCellStyle}>
@@ -1397,16 +1414,36 @@ export default function GradebookPage() {
                                   <option value="EX">EX — Excused</option>
                                 </select>
                               </div>
-                              <label style={{display:"block",fontSize:12,marginTop:6}}><input type="checkbox"
-                                aria-label={`${student.student_name} not submitted for ${assignment.title || "assignment"}`}
-                                checked={notSubmittedDrafts[markKey] ?? match?.rubric_selection?.notSubmitted ?? false}
-                                disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
-                                onChange={event => {
-                                  setNotSubmittedDrafts(current => ({...current,[markKey]:event.target.checked}));
-                                  const mark = spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match);
-                                  setSpreadsheetMarkDrafts(current => ({...current,[markKey]:event.target.checked && (String(mark).trim() === "" || isExcusedEntry(mark)) ? "0" : mark}));
-                                  setCellSaveStatus(current => ({...current,[markKey]:"Editing..."}));
-                                }} /> Not submitted</label>
+                              <div
+                                aria-label={`${student.student_name} submission status for ${assignment.title || "assignment"}`}
+                                style={{
+                                  marginTop: 6,
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: isSubmitted ? "#166534" : "#7c2d12",
+                                }}
+                              >
+                                {submissionStatus}
+                              </div>
+                              <details style={{ marginTop: 4, fontSize: 12 }}>
+                                <summary style={{ cursor: "pointer", color: "#475569" }}>
+                                  Override missing-work status
+                                </summary>
+                                <label style={{ display: "block", marginTop: 5 }}>
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`${student.student_name} manually marked not submitted for ${assignment.title || "assignment"}`}
+                                    checked={notSubmittedDrafts[markKey] ?? match?.rubric_selection?.notSubmitted ?? false}
+                                    disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
+                                    onChange={event => {
+                                      setNotSubmittedDrafts(current => ({ ...current, [markKey]: event.target.checked }));
+                                      const mark = spreadsheetMarkDrafts[markKey] ?? getEarnedPoints(assignment, match);
+                                      setSpreadsheetMarkDrafts(current => ({ ...current, [markKey]: event.target.checked && (String(mark).trim() === "" || isExcusedEntry(mark)) ? "0" : mark }));
+                                      setCellSaveStatus(current => ({ ...current, [markKey]: "Editing..." }));
+                                    }}
+                                  /> Mark as not submitted
+                                </label>
+                              </details>
                               {cellSaveStatus[markKey] ? (
                                 <div style={spreadsheetMarkStatusStyle}>{cellSaveStatus[markKey]}</div>
                               ) : null}

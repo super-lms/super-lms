@@ -1,4 +1,4 @@
-import { mapStudentReads } from "../services/studentPortalData.js"
+import { mapStudentReads, needsStudentAttention } from "../services/studentPortalData.js"
 import StudentStatusBadge from "../components/student/StudentStatusBadge.jsx"
 import StudentAssignmentList, { AssignmentViewToggle } from "../components/student/StudentAssignmentList.jsx"
 import FeedbackFiles from "../components/FeedbackFiles.jsx";
@@ -766,8 +766,10 @@ export default function StudentDashboardPage() {
 
   const gradedAverage = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
+    const savedStanding = dashboard?.raw?.gradebook?.current_percent
+    if (savedStanding !== null && savedStanding !== undefined && Number.isFinite(Number(savedStanding))) return Number(savedStanding)
     return weightedCourseStanding(list, submissionStateByAssignmentId)
-  }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+  }, [assignments, dashboard, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
 
   const missingAssignments = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
@@ -775,7 +777,7 @@ export default function StudentDashboardPage() {
     return list.filter((assignment) => {
       const assignmentId = String(assignment.id)
       const submissionState = submissionStateByAssignmentId[assignmentId]
-      return assignment.submission_required !== false && submissionState?.submission_status !== "submitted"
+      return needsStudentAttention(assignment, submissionState)
     })
   }, [assignments, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
 

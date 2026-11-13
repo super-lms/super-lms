@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { loadStudentCourses, loadStudentProgressData } from "./studentPortalData.js"
+import { loadStudentCourses, loadStudentProgressData, needsStudentAttention } from "./studentPortalData.js"
 
 test("progress uses only student-scoped reads and preserves section assignment identity and scores", async () => {
   const calls = []
@@ -70,4 +70,12 @@ test("full-term fallback reads are bounded, ordered and preserve zero/blank mark
   assert.ok(maximum <= 4)
   assert.deepEqual(results, source)
   assert.equal(JSON.stringify(source), before)
+})
+
+test("a saved teacher mark clears student attention even when an older submission status says not submitted", () => {
+  const assignment = { id: 5, submission_required: true }
+  assert.equal(needsStudentAttention(assignment, { submission_status: "not_submitted", submission: { score: 0 } }), false)
+  assert.equal(needsStudentAttention(assignment, { submission_status: "not_submitted", submission: { score: 85 } }), false)
+  assert.equal(needsStudentAttention(assignment, { submission_status: "not_submitted", submission: { score: null } }), true)
+  assert.equal(needsStudentAttention(assignment, { submission_status: "submitted", submission: { score: null } }), false)
 })
