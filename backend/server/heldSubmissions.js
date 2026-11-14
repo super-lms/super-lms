@@ -27,7 +27,11 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
   }
   // Caller holds the per-student lock. Approval and promotion commit together.
   async function promote(client, assignmentId, studentId, permissionId) {
-    const held = await client.query(`SELECT * FROM assignment_held_work
+    // Keep attachment bytes inside PostgreSQL while promoting them. Loading every
+    // BYTEA into Node at once can exhaust the web process during whole-class
+    // approval and temporarily take unrelated requests (including login) down.
+    const held = await client.query(`SELECT id,method,content,original_name,stored_name,mime_type,size_bytes,received_at,due_at,student_email,student_name
+      FROM assignment_held_work
       WHERE assignment_id=$1 AND student_id=$2 AND approved_at IS NULL AND declined_at IS NULL ORDER BY id FOR UPDATE`, [assignmentId, studentId]);
     if (!held.rows.length) return 0;
     await ensureAttachments();
@@ -50,8 +54,8 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
       } else {
         await client.query(`INSERT INTO submission_attachments
           (submission_id,assignment_id,student_email,original_name,stored_name,file_path,mime_type,size_bytes,file_data,created_at)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [submissionId, assignmentId, item.student_email,
-          item.original_name, item.stored_name, `/uploads/${item.stored_name}`, item.mime_type, item.size_bytes, item.file_data, item.received_at]);
+          SELECT $1,h.assignment_id,h.student_email,h.original_name,h.stored_name,$2,h.mime_type,h.size_bytes,h.file_data,h.received_at
+          FROM assignment_held_work h WHERE h.id=$3`, [submissionId, `/uploads/${item.stored_name}`, item.id]);
       }
       await deadlines.record({late:true,due:item.due_at,permission_id:permissionId}, assignmentId, studentId, submissionId, item.method, client);
       // Keep the receipt/audit metadata, but don't duplicate file bytes after promotion.
