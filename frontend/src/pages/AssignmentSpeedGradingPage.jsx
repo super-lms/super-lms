@@ -2841,7 +2841,8 @@ function SubmissionPreviewPanel({
   const isSpreadsheet = [
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ].includes(activeMimeType) || ["xls", "xlsx"].includes(activeExtension);
+    "application/vnd.oasis.opendocument.spreadsheet",
+  ].includes(activeMimeType) || ["xls", "xlsx", "ods"].includes(activeExtension);
   const isImage = activeMimeType.startsWith("image/");
   const isAudio = activeMimeType.startsWith("audio/");
   const isVideo = activeMimeType.startsWith("video/");
