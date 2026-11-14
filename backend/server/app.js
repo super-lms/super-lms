@@ -11800,7 +11800,7 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
         JOIN assignments a
           ON a.id = s.assignment_id
         LEFT JOIN users u
-          ON LOWER(u.email) = LOWER(s.student_email)
+          ON u.id = s.student_id
         LEFT JOIN courses c
           ON c.id = a.class_id
         WHERE a.class_id = ANY($1::int[])
