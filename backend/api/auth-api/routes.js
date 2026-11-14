@@ -18,6 +18,7 @@ const RESET_CODE_REQUIRED_PASSWORD = "PASSWORD_RESET_CODE_REQUIRED";
 const recoveryAttempts = new Map();
 let loginAnalyticsTableReady;
 let loginAnalyticsPausedUntil = 0;
+let passwordRecoveryTablesReady;
 
 const PLACEHOLDER_PASSWORDS = new Set([
   "TEMP_PASSWORD_NEEDS_RESET",
@@ -29,48 +30,72 @@ const PLACEHOLDER_PASSWORDS = new Set([
 ]);
 
 async function ensurePasswordRecoveryTables() {
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS password_reset_token_hash TEXT
-  `);
+  if (!passwordRecoveryTablesReady) {
+    passwordRecoveryTablesReady = (async () => {
+      // Catalog reads do not lock the users table. Avoid repeating ALTER TABLE
+      // on every password-recovery request when production is already ready.
+      const ready = await pool.query(`
+        SELECT
+          to_regclass('public.password_reset_tokens') IS NOT NULL AS has_tokens,
+          to_regclass('public.admin_recovery_codes') IS NOT NULL AS has_codes,
+          to_regclass('public.password_recovery_audit') IS NOT NULL AS has_audit,
+          COUNT(*) FILTER (
+            WHERE column_name IN ('password_reset_token_hash', 'password_reset_expires_at')
+          ) = 2 AS has_user_columns
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'users'
+      `);
+      const schema = ready.rows[0] || {};
+      if (schema.has_tokens && schema.has_codes && schema.has_audit && schema.has_user_columns) return;
 
-  await pool.query(`
-    ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS password_reset_tokens (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      token_hash TEXT NOT NULL,
-      created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      expires_at TIMESTAMP NOT NULL,
-      used_at TIMESTAMP,
-      created_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_recovery_codes (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      code_hash TEXT NOT NULL,
-      used_at TIMESTAMP,
-      created_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS password_recovery_audit (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-      event_type TEXT NOT NULL,
-      request_ip TEXT DEFAULT '',
-      created_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token_hash TEXT`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires_at TIMESTAMPTZ`);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL,
+            created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            expires_at TIMESTAMP NOT NULL,
+            used_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS admin_recovery_codes (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            code_hash TEXT NOT NULL,
+            used_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS password_recovery_audit (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            event_type TEXT NOT NULL,
+            request_ip TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT NOW()
+          )
+        `);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error) => {
+      passwordRecoveryTablesReady = undefined;
+      throw error;
+    });
+  }
+  return passwordRecoveryTablesReady;
 }
 
 async function ensureLoginAnalyticsTable() {
@@ -496,8 +521,8 @@ router.post("/complete-password-reset", async (req, res) => {
       return res.status(429).json({ success: false, error: "Too many recovery attempts. Please wait 15 minutes." });
     }
 
-    await client.query("BEGIN");
     await ensurePasswordRecoveryTables();
+    await client.query("BEGIN");
     const result = await client.query(
       `
       SELECT u.id AS user_id
@@ -599,6 +624,7 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
     }
 
     const resetCode = generateRecoveryCode();
+    await ensurePasswordRecoveryTables();
     await client.query("BEGIN");
     await client.query(
       `
@@ -608,7 +634,6 @@ router.post("/admin-reset-password", authenticateJWT, requireRole("admin"), asyn
       `,
       [user.id]
     );
-    await ensurePasswordRecoveryTables();
     await client.query(
       `
       INSERT INTO password_reset_tokens (user_id, token_hash, created_by_user_id, expires_at)

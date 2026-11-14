@@ -258,22 +258,91 @@ app.use("/api", assessmentRoutes);
 app.use("/api", emergencyAssignmentImportRoutes);
 app.use("/api", dingtalkRoutes);
 app.use("/api/users", adminUserRoutes);
+let studentInfoColumnsReady;
 async function ensureStudentInfoColumns() {
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id TEXT`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS observer_relationship TEXT`);
+  if (!studentInfoColumnsReady) {
+    studentInfoColumnsReady = (async () => {
+      const result = await pool.query(`
+        SELECT COUNT(*) = 3 AS ready
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name IN ('parent_email', 'student_id', 'observer_relationship')
+      `);
+      if (result.rows[0]?.ready) return;
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_email TEXT`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS student_id TEXT`);
+        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS observer_relationship TEXT`);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error) => {
+      studentInfoColumnsReady = undefined;
+      throw error;
+    });
+  }
+  return studentInfoColumnsReady;
 }
 
+let manualStudentDirectoryReady;
 async function ensureManualStudentDirectorySupport() {
-  await pool.query(`
-    ALTER TABLE master_students
-    ALTER COLUMN pen DROP NOT NULL
-  `);
+  if (!manualStudentDirectoryReady) {
+    manualStudentDirectoryReady = (async () => {
+      const result = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE column_name = 'parent_email') = 1 AS has_parent_email,
+          BOOL_OR(column_name = 'pen' AND is_nullable = 'YES') AS pen_is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'master_students'
+      `);
+      if (result.rows[0]?.has_parent_email && result.rows[0]?.pen_is_nullable) return;
 
-  await pool.query(`
-    ALTER TABLE master_students
-    ADD COLUMN IF NOT EXISTS parent_email TEXT
-  `);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`ALTER TABLE master_students ALTER COLUMN pen DROP NOT NULL`);
+        await client.query(`ALTER TABLE master_students ADD COLUMN IF NOT EXISTS parent_email TEXT`);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error) => {
+      manualStudentDirectoryReady = undefined;
+      throw error;
+    });
+  }
+  return manualStudentDirectoryReady;
+}
+
+let courseTypeColumnReady;
+async function ensureCourseTypeColumn() {
+  if (!courseTypeColumnReady) {
+    courseTypeColumnReady = (async () => {
+      const result = await pool.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'courses' AND column_name = 'course_type'
+        ) AS ready
+      `);
+      if (result.rows[0]?.ready) return;
+      await pool.query(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS course_type TEXT DEFAULT 'custom_competency'`);
+    })().catch((error) => {
+      courseTypeColumnReady = undefined;
+      throw error;
+    });
+  }
+  return courseTypeColumnReady;
 }
 
 async function ensureCourseScheduleSettingsTable() {
@@ -508,7 +577,31 @@ function assignmentIsAvailableToStudents(assignment) {
   return new Date(assignment.available_from).getTime() <= Date.now();
 }
 
+let rubricFrameworkReady;
 async function ensureRubricFrameworkTables() {
+  if (rubricFrameworkReady) return rubricFrameworkReady;
+  rubricFrameworkReady = (async () => {
+  const existing = await pool.query(`
+    SELECT
+      to_regclass('public.main_competencies') IS NOT NULL AS has_main,
+      to_regclass('public.competencies') IS NOT NULL AS has_competencies,
+      to_regclass('public.sub_competency_facets') IS NOT NULL AS has_facets,
+      to_regclass('public.assignment_rubrics') IS NOT NULL AS has_rubrics,
+      to_regclass('public.rubric_criteria') IS NOT NULL AS has_criteria,
+      to_regclass('public.rubric_scores') IS NOT NULL AS has_scores,
+      to_regclass('public.teacher_designed_rubrics') IS NOT NULL AS has_teacher_rubrics,
+      to_regclass('public.rubric_repository') IS NOT NULL AS has_repository,
+      (SELECT COUNT(*) = 2 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'assignment_rubrics'
+         AND column_name IN ('full_rubric_json', 'full_rubric_activity_type')) AS has_rubric_columns,
+      (SELECT COUNT(*) = 2 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'rubric_criteria'
+         AND column_name IN ('competency_bucket', 'bucket_weight_percent')) AS has_criteria_columns
+  `);
+  const schema = existing.rows[0] || {};
+  if (schema.has_main && schema.has_competencies && schema.has_facets && schema.has_rubrics &&
+      schema.has_criteria && schema.has_scores && schema.has_teacher_rubrics && schema.has_repository &&
+      schema.has_rubric_columns && schema.has_criteria_columns) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS main_competencies (
       id SERIAL PRIMARY KEY,
@@ -609,6 +702,9 @@ async function ensureRubricFrameworkTables() {
     ADD COLUMN IF NOT EXISTS full_rubric_activity_type TEXT
   `);
 
+  await pool.query(`ALTER TABLE rubric_criteria ADD COLUMN IF NOT EXISTS competency_bucket TEXT`);
+  await pool.query(`ALTER TABLE rubric_criteria ADD COLUMN IF NOT EXISTS bucket_weight_percent NUMERIC`);
+
   await pool.query(`
     INSERT INTO main_competencies (name, description)
     VALUES
@@ -617,6 +713,11 @@ async function ensureRubricFrameworkTables() {
       ('Contextual Knowledge', 'Understand genre, form, literary elements, perspectives, and context.')
     ON CONFLICT (name) DO NOTHING
   `);
+  })().catch((error) => {
+    rubricFrameworkReady = undefined;
+    throw error;
+  });
+  return rubricFrameworkReady;
 }
 
 function rubricScoreToPercent(score) {
@@ -1524,7 +1625,19 @@ async function buildRubricGradebookStudents(classId, contentClassId = classId) {
 }
 
 
+let learningPathItemTablesReady;
 async function ensureLearningPathItemTables() {
+  if (learningPathItemTablesReady) return learningPathItemTablesReady;
+  learningPathItemTablesReady = (async () => {
+  const existing = await pool.query(`
+    SELECT
+      to_regclass('public.learning_paths') IS NOT NULL AS has_paths,
+      to_regclass('public.learning_path_items') IS NOT NULL AS has_items,
+      (SELECT COUNT(*) = 2 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'learning_paths'
+         AND column_name IN ('is_published', 'grading_category_id')) AS has_columns
+  `);
+  if (existing.rows[0]?.has_paths && existing.rows[0]?.has_items && existing.rows[0]?.has_columns) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS learning_paths (
       id SERIAL PRIMARY KEY,
@@ -1567,7 +1680,11 @@ async function ensureLearningPathItemTables() {
     CREATE UNIQUE INDEX IF NOT EXISTS learning_paths_grading_category_unique
     ON learning_paths (grading_category_id)
   `);
-
+  })().catch((error) => {
+    learningPathItemTablesReady = undefined;
+    throw error;
+  });
+  return learningPathItemTablesReady;
 }
 
 
@@ -1607,51 +1724,111 @@ async function ensureCourseStructureTemplateTables() {
 }
 
 
+let assignmentRuntimeColumnsReady;
+async function ensureAssignmentRuntimeColumns() {
+  if (!assignmentRuntimeColumnsReady) {
+    assignmentRuntimeColumnsReady = (async () => {
+      const result = await pool.query(`
+        SELECT COUNT(*) = 8 AS ready
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'assignments'
+          AND column_name IN (
+            'scoring_method', 'single_score_know_percent', 'single_score_do_percent',
+            'single_score_understand_percent', 'source_type', 'available_from',
+            'submission_required', 'points_possible'
+          )
+      `);
+      if (result.rows[0]?.ready) return;
+      await pool.query(`
+        ALTER TABLE assignments
+        ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
+        ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
+        ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
+        ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
+        ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment',
+        ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
+      `);
+    })().catch((error) => {
+      assignmentRuntimeColumnsReady = undefined;
+      throw error;
+    });
+  }
+  return assignmentRuntimeColumnsReady;
+}
+
+let assignmentSectionTablesReady;
 async function ensureAssignmentSectionTables() {
-  await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS available_from TIMESTAMP`);
-  await pool.query(`ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
-      ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100`);
-  await ensureAssignmentTimeZones(pool);
+  if (!assignmentSectionTablesReady) {
+    assignmentSectionTablesReady = (async () => {
+      await ensureAssignmentRuntimeColumns();
+      await ensureAssignmentTimeZones(pool);
+      const ready = await pool.query(`
+        SELECT
+          to_regclass('public.assignment_sections') IS NOT NULL AS has_sections,
+          to_regclass('public.student_section_scores') IS NOT NULL AS has_scores,
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'student_section_scores'
+              AND column_name = 'student_user_id'
+          ) AS has_student_user_id
+      `);
+      const schema = ready.rows[0] || {};
+      if (schema.has_sections && schema.has_scores && schema.has_student_user_id) return;
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS assignment_sections (
-      id SERIAL PRIMARY KEY,
-      assignment_id INTEGER REFERENCES assignments(id) ON DELETE CASCADE,
-      section_name TEXT NOT NULL,
-      competency_bucket TEXT NOT NULL,
-      max_points NUMERIC NOT NULL DEFAULT 0,
-      section_weight NUMERIC NOT NULL DEFAULT 1,
-      sort_order INTEGER NOT NULL DEFAULT 1,
-      created_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS student_section_scores (
-      id SERIAL PRIMARY KEY,
-      student_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      assignment_section_id INTEGER REFERENCES assignment_sections(id) ON DELETE CASCADE,
-      earned_points NUMERIC,
-      converted_competency_level NUMERIC,
-      updated_at TIMESTAMP DEFAULT NOW(),
-      UNIQUE (student_user_id, assignment_section_id)
-    )
-  `);
-
-  await pool.query(`
-    ALTER TABLE student_section_scores
-    ADD COLUMN IF NOT EXISTS student_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
-  `);
-
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS student_section_scores_student_section_unique
-    ON student_section_scores (student_user_id, assignment_section_id)
-  `);
-
-  await pool.query(`
-    ALTER TABLE student_section_scores
-    ALTER COLUMN student_email DROP NOT NULL
-  `).catch(() => {});
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS assignment_sections (
+            id SERIAL PRIMARY KEY,
+            assignment_id INTEGER REFERENCES assignments(id) ON DELETE CASCADE,
+            section_name TEXT NOT NULL,
+            competency_bucket TEXT NOT NULL,
+            max_points NUMERIC NOT NULL DEFAULT 0,
+            section_weight NUMERIC NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT NOW()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS student_section_scores (
+            id SERIAL PRIMARY KEY,
+            student_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            assignment_section_id INTEGER REFERENCES assignment_sections(id) ON DELETE CASCADE,
+            earned_points NUMERIC,
+            converted_competency_level NUMERIC,
+            updated_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (student_user_id, assignment_section_id)
+          )
+        `);
+        await client.query(`ALTER TABLE student_section_scores ADD COLUMN IF NOT EXISTS student_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE`);
+        await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS student_section_scores_student_section_unique ON student_section_scores (student_user_id, assignment_section_id)`);
+        await client.query(`
+          DO $$ BEGIN
+            IF EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'student_section_scores'
+                AND column_name = 'student_email'
+            ) THEN
+              ALTER TABLE student_section_scores ALTER COLUMN student_email DROP NOT NULL;
+            END IF;
+          END $$
+        `);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error) => {
+      assignmentSectionTablesReady = undefined;
+      throw error;
+    });
+  }
+  return assignmentSectionTablesReady;
 }
 
 async function ensureAssignmentResourceTables() {
@@ -1727,8 +1904,8 @@ function averageSectionLevels(sectionRows, bucketName) {
   return Number((weightedTotal / totalWeight).toFixed(2));
 }
 
-async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
-  const studentResult = await pool.query(
+async function syncSectionScoresToSubmission(assignmentId, studentUserId, queryable = pool) {
+  const studentResult = await queryable.query(
     `
     SELECT id, CONCAT(first_name, ' ', last_name) AS name, email
     FROM users
@@ -1745,7 +1922,7 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
   const student = studentResult.rows[0];
   const studentEmail = String(student.email || "").trim().toLowerCase();
 
-  const assignmentResult = await pool.query(
+  const assignmentResult = await queryable.query(
     `
     SELECT id, teacher_id, class_id, title
     FROM assignments
@@ -1777,7 +1954,7 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
     throw new Error("Assignment class_id is required before syncing raw marks");
   }
 
-  const sectionScoresResult = await pool.query(
+  const sectionScoresResult = await queryable.query(
     `
     SELECT
       aps.id AS assignment_section_id,
@@ -1812,7 +1989,7 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
 
   const percentScore = Number(((weightedScore / 6) * 100).toFixed(2));
 
-  const existingResult = await pool.query(
+  const existingResult = await queryable.query(
     `
     SELECT id
     FROM submissions
@@ -1824,7 +2001,7 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
   );
 
   if (existingResult.rows.length > 0) {
-    await pool.query(
+    await queryable.query(
       `
       UPDATE submissions
       SET score = $1,
@@ -1842,7 +2019,7 @@ async function syncSectionScoresToSubmission(assignmentId, studentUserId) {
       ]
     );
   } else {
-    await pool.query(
+    await queryable.query(
       `
       INSERT INTO submissions (
         assignment_id,
@@ -4920,17 +5097,7 @@ app.get("/api/assignments", authenticateJWT, requireRole("admin", "teacher", "st
            )`
         : "";
     const learnerParams = ["student", "observer"].includes(viewerRole) ? [Number(req.user.id)] : [];
-    await pool.query(`
-      ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
-      ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
-      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS source_type TEXT DEFAULT 'assignment',
-      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
-      ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
-      ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
-    `);
+    await ensureAssignmentRuntimeColumns();
 
     await pool.query(`
       WITH ordered AS (
@@ -5354,16 +5521,7 @@ app.get('/api/classes/:classId/assignment-counts', authenticateJWT, requireRole(
 /* CREATE ASSIGNMENT */
 app.post("/api/assignments", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
-    await pool.query(`
-      ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
-      ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
-      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS available_from TIMESTAMP,
-      ADD COLUMN IF NOT EXISTS submission_required BOOLEAN NOT NULL DEFAULT TRUE,
-      ADD COLUMN IF NOT EXISTS points_possible NUMERIC NOT NULL DEFAULT 100
-    `);
+    await ensureAssignmentRuntimeColumns();
 
     await ensureAssignmentTimeZones(pool);
     const { class_id, teacher_id, title, description, available_from, due_date, subcategory_id } = req.body;
@@ -5585,13 +5743,7 @@ app.post("/api/assignments/:assignmentId/reorder", authenticateJWT, requireRole(
 
     await client.query("BEGIN");
 
-    await client.query(`
-      ALTER TABLE assignments
-      ADD COLUMN IF NOT EXISTS scoring_method TEXT DEFAULT 'rubric',
-      ADD COLUMN IF NOT EXISTS single_score_know_percent NUMERIC DEFAULT 25,
-      ADD COLUMN IF NOT EXISTS single_score_do_percent NUMERIC DEFAULT 50,
-      ADD COLUMN IF NOT EXISTS single_score_understand_percent NUMERIC DEFAULT 25
-    `);
+    await ensureAssignmentRuntimeColumns();
 
     const currentResult = await client.query(
       `
@@ -8571,16 +8723,6 @@ app.post("/api/assignments/:assignmentId/build-kdu-rubric", authenticateJWT, req
       return res.status(404).json({ error: "Assignment not found" });
     }
 
-    await pool.query(`
-      ALTER TABLE rubric_criteria
-      ADD COLUMN IF NOT EXISTS competency_bucket TEXT
-    `);
-
-    await pool.query(`
-      ALTER TABLE rubric_criteria
-      ADD COLUMN IF NOT EXISTS bucket_weight_percent NUMERIC
-    `);
-
     let rubricResult = await pool.query(
       `
       SELECT id
@@ -8876,6 +9018,7 @@ app.post("/api/assignments/:assignmentId/export-kdu-rubric-docx", authenticateJW
 
 /* SET UP BLANK COURSE STRUCTURE */
 app.post("/api/courses/:courseId/setup-kdu-assessment-structure", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  let client;
   try {
     const courseId = Number(req.params.courseId);
     const replaceExisting = Boolean(req.body?.replaceExisting);
@@ -8916,10 +9059,11 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", authenticateJW
       });
     }
 
-    await pool.query("BEGIN");
+    client = await pool.connect();
+    await client.query("BEGIN");
 
     if (replaceExisting) {
-      await pool.query(
+      await client.query(
         `
         UPDATE assignments
         SET subcategory_id = NULL
@@ -8928,7 +9072,7 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", authenticateJW
         [courseId]
       );
 
-      await pool.query(
+      await client.query(
         `
         DELETE FROM course_categories
         WHERE course_id = $1
@@ -8937,7 +9081,7 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", authenticateJW
       );
     }
 
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
 
     return res.json({
       success: true,
@@ -8951,9 +9095,11 @@ app.post("/api/courses/:courseId/setup-kdu-assessment-structure", authenticateJW
       assessment_groups: [],
     });
   } catch (err) {
-    await pool.query("ROLLBACK").catch(() => {});
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/courses/:courseId/setup-kdu-assessment-structure failed:", err);
     return res.status(500).json({ error: "Failed to set up blank course structure" });
+  } finally {
+    client?.release();
   }
 });
 
@@ -10749,10 +10895,7 @@ app.post("/api/courses", authenticateJWT, requireRole("admin", "teacher"), async
   const client = await pool.connect();
 
   try {
-    await client.query(`
-      ALTER TABLE courses
-      ADD COLUMN IF NOT EXISTS course_type TEXT DEFAULT 'custom_competency'
-    `);
+    await ensureCourseTypeColumn();
 
     const title = String(req.body.title || "").trim();
     const description = String(req.body.description || "").trim();
@@ -13940,6 +14083,7 @@ app.get("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole(
 });
 
 app.put("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+  let client;
   try {
     await ensureAssignmentSectionTables();
 
@@ -13968,9 +14112,10 @@ app.put("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole(
       return res.status(404).json({ error: "Assignment not found" });
     }
 
-    await pool.query("BEGIN");
+    client = await pool.connect();
+    await client.query("BEGIN");
 
-    await pool.query(
+    await client.query(
       `
       DELETE FROM assignment_sections
       WHERE assignment_id = $1
@@ -13999,7 +14144,7 @@ app.put("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole(
         throw new Error("Every section needs max_points greater than 0");
       }
 
-      const insertedResult = await pool.query(
+      const insertedResult = await client.query(
         `
         INSERT INTO assignment_sections (
           assignment_id,
@@ -14025,7 +14170,7 @@ app.put("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole(
       insertedSections.push(insertedResult.rows[0]);
     }
 
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
 
     return res.json({
       success: true,
@@ -14033,9 +14178,11 @@ app.put("/api/assignments/:assignmentId/sections", authenticateJWT, requireRole(
       sections: insertedSections,
     });
   } catch (err) {
-    await pool.query("ROLLBACK").catch(() => {});
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/assignments/:assignmentId/sections failed:", err);
     return res.status(500).json({ error: err.message || "Failed to save assignment sections" });
+  } finally {
+    client?.release();
   }
 });
 
@@ -14094,6 +14241,7 @@ app.get("/api/assignments/:assignmentId/section-scores", authenticateJWT, requir
 });
 
 app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requireRole("admin", "teacher"), cohortGradingMiddleware(pool), heldSubmissions.gradeMiddleware, async (req, res) => {
+  let client;
   try {
     await ensureAssignmentSectionTables();
 
@@ -14109,7 +14257,8 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
       return res.status(400).json({ error: "Valid student_user_id is required" });
     }
 
-    await pool.query("BEGIN");
+    client = await pool.connect();
+    await client.query("BEGIN");
 
     for (const scoreRow of scores) {
       const assignmentSectionId = Number(scoreRow.assignment_section_id);
@@ -14122,7 +14271,7 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
         continue;
       }
 
-      const sectionResult = await pool.query(
+      const sectionResult = await client.query(
         `
         SELECT id, max_points
         FROM assignment_sections
@@ -14142,7 +14291,7 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
           ? null
           : rawPercentToCompetencyLevel(earnedPoints, sectionResult.rows[0].max_points);
 
-      await pool.query(
+      await client.query(
         `
         INSERT INTO student_section_scores (
           student_user_id,
@@ -14162,9 +14311,9 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
       );
     }
 
-    const syncedResult = await syncSectionScoresToSubmission(assignmentId, studentUserId);
+    const syncedResult = await syncSectionScoresToSubmission(assignmentId, studentUserId, client);
 
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
 
     return res.json({
       success: true,
@@ -14173,9 +14322,11 @@ app.post("/api/assignments/:assignmentId/section-scores", authenticateJWT, requi
       ...syncedResult,
     });
   } catch (err) {
-    await pool.query("ROLLBACK").catch(() => {});
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/assignments/:assignmentId/section-scores failed:", err);
     return res.status(500).json({ error: err.message || "Failed to save section scores" });
+  } finally {
+    client?.release();
   }
 });
 

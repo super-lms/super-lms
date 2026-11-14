@@ -376,6 +376,7 @@ async function ensureMasterStudentContactColumns() {
 }
 
 router.post("/import", async (req, res) => {
+  let client;
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
 
   if (rows.length === 0) {
@@ -393,12 +394,13 @@ router.post("/import", async (req, res) => {
   try {
     await ensureMasterStudentContactColumns();
 
-    await pool.query("BEGIN");
+    client = await pool.connect();
+    await client.query("BEGIN");
 
     let insertedOrUpdated = 0;
 
     for (const row of readyRows) {
-      await pool.query(
+      await client.query(
         `
         INSERT INTO master_students (
           pen,
@@ -477,7 +479,7 @@ router.post("/import", async (req, res) => {
       insertedOrUpdated += 1;
     }
 
-    await pool.query("COMMIT");
+    await client.query("COMMIT");
 
     return res.json({
       success: true,
@@ -485,9 +487,11 @@ router.post("/import", async (req, res) => {
       skippedCount: rows.length - readyRows.length,
     });
   } catch (err) {
-    await pool.query("ROLLBACK").catch(() => {});
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/master-students/import failed:", err);
     return res.status(500).json({ error: "Failed to import master students" });
+  } finally {
+    client?.release();
   }
 });
 

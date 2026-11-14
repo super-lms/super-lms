@@ -136,6 +136,7 @@ function createAssignmentSectionRoutes(pool) {
   });
 
   router.put("/assignments/:assignmentId/sections", async (req, res) => {
+    let client;
     try {
       await ensureExamSectionTables();
 
@@ -164,9 +165,10 @@ function createAssignmentSectionRoutes(pool) {
         return res.status(404).json({ error: "Assignment not found" });
       }
 
-      await pool.query("BEGIN");
+      client = await pool.connect();
+      await client.query("BEGIN");
 
-      await pool.query(
+      await client.query(
         `
         DELETE FROM assignment_sections
         WHERE assignment_id = $1
@@ -201,7 +203,7 @@ function createAssignmentSectionRoutes(pool) {
           throw new Error("Every section needs max_points greater than 0");
         }
 
-        const insertedResult = await pool.query(
+        const insertedResult = await client.query(
           `
           INSERT INTO assignment_sections (
             assignment_id,
@@ -227,7 +229,7 @@ function createAssignmentSectionRoutes(pool) {
         savedSections.push(insertedResult.rows[0]);
       }
 
-      await pool.query("COMMIT");
+      await client.query("COMMIT");
 
       return res.json({
         success: true,
@@ -239,11 +241,13 @@ function createAssignmentSectionRoutes(pool) {
         })),
       });
     } catch (err) {
-      await pool.query("ROLLBACK").catch(() => {});
+      if (client) await client.query("ROLLBACK").catch(() => {});
       console.error("PUT /api/assignments/:assignmentId/sections failed:", err);
       return res.status(500).json({
         error: err.message || "Failed to save assignment sections",
       });
+    } finally {
+      client?.release();
     }
   });
 
@@ -351,6 +355,7 @@ function createAssignmentSectionRoutes(pool) {
   });
 
   router.post("/assignments/:assignmentId/section-scores", async (req, res) => {
+    let client;
     try {
       await ensureExamSectionTables();
 
@@ -405,7 +410,8 @@ function createAssignmentSectionRoutes(pool) {
         });
       }
 
-      await pool.query("BEGIN");
+      client = await pool.connect();
+      await client.query("BEGIN");
 
       for (const score of scores) {
         const sectionId = Number(score.assignment_section_id);
@@ -425,7 +431,7 @@ function createAssignmentSectionRoutes(pool) {
         const convertedLevel =
           earnedPoints === null ? null : rawMarkToKduLevel(earnedPoints, section.max_points);
 
-        await pool.query(
+        await client.query(
           `
           INSERT INTO student_section_scores (
             student_email,
@@ -445,7 +451,7 @@ function createAssignmentSectionRoutes(pool) {
         );
       }
 
-      const savedScoresResult = await pool.query(
+      const savedScoresResult = await client.query(
         `
         SELECT
           assignment_section.id AS assignment_section_id,
@@ -506,7 +512,7 @@ function createAssignmentSectionRoutes(pool) {
 
       const percentScore = Number(((weightedScore / 6) * 100).toFixed(2));
 
-      const userResult = await pool.query(
+      const userResult = await client.query(
         `
         SELECT name
         FROM users
@@ -519,7 +525,7 @@ function createAssignmentSectionRoutes(pool) {
       const studentName =
         userResult.rows.length > 0 ? userResult.rows[0].name : studentEmail;
 
-      const existingSubmissionResult = await pool.query(
+      const existingSubmissionResult = await client.query(
         `
         SELECT id
         FROM submissions
@@ -533,7 +539,7 @@ function createAssignmentSectionRoutes(pool) {
       let submissionResult;
 
       if (existingSubmissionResult.rows.length > 0) {
-        submissionResult = await pool.query(
+        submissionResult = await client.query(
           `
           UPDATE submissions
           SET score = $1,
@@ -552,7 +558,7 @@ function createAssignmentSectionRoutes(pool) {
           ]
         );
       } else {
-        submissionResult = await pool.query(
+        submissionResult = await client.query(
           `
           INSERT INTO submissions (
             assignment_id,
@@ -580,7 +586,7 @@ function createAssignmentSectionRoutes(pool) {
         );
       }
 
-      await pool.query("COMMIT");
+      await client.query("COMMIT");
 
       return res.json({
         success: true,
@@ -606,11 +612,13 @@ function createAssignmentSectionRoutes(pool) {
         submission: submissionResult.rows[0],
       });
     } catch (err) {
-      await pool.query("ROLLBACK").catch(() => {});
+      if (client) await client.query("ROLLBACK").catch(() => {});
       console.error("POST /api/assignments/:assignmentId/section-scores failed:", err);
       return res.status(500).json({
         error: err.message || "Failed to save section scores",
       });
+    } finally {
+      client?.release();
     }
   });
 
