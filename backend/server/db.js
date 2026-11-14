@@ -10,7 +10,10 @@ const pool = new Pool(
         keepAlive: true,
         connectionTimeoutMillis: 8000,
         idleTimeoutMillis: 30000,
-        max: Number(process.env.DB_POOL_MAX || 15),
+        // Railway briefly overlaps old and new instances during deploys. A
+        // 15-connection pool per instance can exhaust the database and make
+        // authentication fail until one instance is removed.
+        max: Number(process.env.DB_POOL_MAX || 5),
       }
     : {
         user: "postgres",
@@ -21,7 +24,7 @@ const pool = new Pool(
         keepAlive: true,
         connectionTimeoutMillis: 8000,
         idleTimeoutMillis: 30000,
-        max: Number(process.env.DB_POOL_MAX || 15),
+        max: Number(process.env.DB_POOL_MAX || 5),
       }
 );
 
