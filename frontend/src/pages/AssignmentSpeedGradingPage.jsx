@@ -292,6 +292,7 @@ export default function AssignmentSpeedGradingPage() {
   const [savingKduScores, setSavingKduScores] = useState(false);
   const [kduSaveMessage, setKduSaveMessage] = useState("");
   const [kduLastSavedAt, setKduLastSavedAt] = useState("");
+  const [declinedOverrideRequired, setDeclinedOverrideRequired] = useState(false);
 
   const [rubricLoading, setRubricLoading] = useState(false);
   const [rubric, setRubric] = useState(null);
@@ -819,6 +820,7 @@ export default function AssignmentSpeedGradingPage() {
   // Editing feedback already clears it; a different grading context must too.
   useEffect(() => {
     setFeedbackSaveMessage("");
+    setDeclinedOverrideRequired(false);
   }, [assignmentId, selectedRow?.student_email]);
 
   async function saveTeacherFeedback(options = {}) {
@@ -1190,6 +1192,7 @@ export default function AssignmentSpeedGradingPage() {
           ...(scoreOverrides.excused ? {excused:true,directPercentage:true} : {}),
           feedback: teacherFeedback,
           notSubmitted: !scoreOverrides.excused && notSubmittedDraft,
+          gradeExistingWork: scoreOverrides.gradeExistingWork === true,
           ...(scoreOverrides.directPercentage ? {directPercentage:true} : {}),
           ...((assignment?.submission_required === false || Object.prototype.hasOwnProperty.call(scoreOverrides, "overallScore"))
             ? { pointsEarned: scoreOverrides.pointsEarned ?? pointsEarned, ...(assignment?.submission_required === false ? {directPercentage: true} : {}) } : {}),
@@ -1209,7 +1212,9 @@ export default function AssignmentSpeedGradingPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save KDU scores");
+        const saveError = new Error(data.error || "Failed to save KDU scores");
+        saveError.code = data.code;
+        throw saveError;
       }
 
       const now = new Date();
@@ -1247,11 +1252,29 @@ export default function AssignmentSpeedGradingPage() {
       return true;
     } catch (error) {
       console.error("Failed to save KDU scores:", error);
+      if (error.code === "SUBMISSION_DECLINED") {
+        setDeclinedOverrideRequired(true);
+      }
       setKduSaveMessage(error.message || "Failed to save KDU scores.");
       return false;
     } finally {
       setSavingKduScores(false);
     }
+  }
+
+  function saveDeclinedExistingWork() {
+    if (isOneScoreAssignment) {
+      const convertedScore = convertOverallPercentToSixPointScore(overallScore);
+      return saveKduScores({
+        doScore: convertedScore,
+        knowScore: convertedScore,
+        understandScore: convertedScore,
+        overallScore,
+        gradeExistingWork: true,
+      });
+    }
+
+    return saveKduScores({ gradeExistingWork: true });
   }
 
   async function saveAndBackToAssignments() {
@@ -1981,6 +2004,21 @@ export default function AssignmentSpeedGradingPage() {
                     <strong>Submission:</strong>{" "}
                     {selectedRow.submission_status || "None"}
                   </div>
+
+                  {String(selectedRow.submission_status || "").toLowerCase() === "declined" || declinedOverrideRequired ? (
+                    <div style={declinedSpeedGraderOverrideStyle}>
+                      <strong>The latest resubmission was declined.</strong>
+                      <div style={{ marginTop: 4 }}>
+                        You can still grade the existing work without approving that resubmission.
+                      </div>
+                      <ActionButton
+                        onClick={saveDeclinedExistingWork}
+                        disabled={savingKduScores || (isOneScoreAssignment && overallScore === "")}
+                      >
+                        {savingKduScores ? "Saving..." : "Override declined resubmission and save this mark"}
+                      </ActionButton>
+                    </div>
+                  ) : null}
 
                     <LateSubmissionApproval workAfterActions key={`${assignmentId}:${selectedRow.student_email}:${approvalRevision}`} assignmentId={assignmentId} studentEmail={selectedRow.student_email} onApproved={async () => { await reloadAfterRawMarkSave(selectedRow.student_email); await loadStudentAttachments(selectedRow.student_email); }} />
 
@@ -3067,6 +3105,18 @@ const inputStyle = {
   borderRadius: "10px",
   fontSize: "1rem",
   boxSizing: "border-box",
+};
+
+const declinedSpeedGraderOverrideStyle = {
+  marginBottom: "16px",
+  padding: "14px",
+  border: "2px solid #c2410c",
+  borderRadius: "12px",
+  background: "#fff7ed",
+  color: "#7c2d12",
+  lineHeight: 1.5,
+  display: "grid",
+  gap: "10px",
 };
 
 const teacherFeedbackPanelStyle = {

@@ -378,7 +378,7 @@ export default function GradebookPage() {
     }
   }
 
-  async function saveSpreadsheetMark(student, assignment, match, advance = false, batch = false) {
+  async function saveSpreadsheetMark(student, assignment, match, advance = false, batch = false, forceGradeExistingWork = false) {
     if (columnSaveRef.current && !batch) return false;
     const key = getDraftKey(student.student_email, assignment.id);
     if (spreadsheetSavesRef.current.has(key)) return;
@@ -411,12 +411,15 @@ export default function GradebookPage() {
           directPercentage: true,
           notSubmitted: !excused && (notSubmittedDrafts[key] ?? match?.rubric_selection?.notSubmitted ?? false),
           gradeExistingWork:
-            String(match?.submission_status || "") === "declined" &&
-            gradeDeclinedWorkDrafts[key] === true,
+            forceGradeExistingWork || gradeDeclinedWorkDrafts[key] === true,
         }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to save mark");
+      if (!response.ok) {
+        const saveError = new Error(data.error || "Failed to save mark");
+        saveError.code = data.code;
+        throw saveError;
+      }
 
       // Keep the confirmed server mark visible while the full gradebook refreshes.
       setGradebook(current => current ? {...current, students: current.students.map(row =>
@@ -447,6 +450,9 @@ export default function GradebookPage() {
       return true;
     } catch (error) {
       console.error(error);
+      if (error.code === "SUBMISSION_DECLINED") {
+        setGradeDeclinedWorkDrafts(current => ({ ...current, [key]: true }));
+      }
       setCellSaveStatus((current) => ({ ...current, [key]: error.message || "Save failed" }));
       return false;
     } finally {
@@ -1431,30 +1437,18 @@ export default function GradebookPage() {
                               >
                                 {submissionStatus}
                               </div>
-                              {isDeclined ? (
-                                <label style={declinedWorkOverrideStyle}>
-                                  <input
-                                    type="checkbox"
-                                    aria-label={`${student.student_name} grade existing work despite declined resubmission for ${assignment.title || "assignment"}`}
-                                    checked={gradeDeclinedWorkDrafts[markKey] === true}
-                                    disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
-                                    onChange={event => {
-                                      setGradeDeclinedWorkDrafts(current => ({ ...current, [markKey]: event.target.checked }));
-                                      setCellSaveStatus(current => ({
-                                        ...current,
-                                        [markKey]: event.target.checked
-                                          ? "Existing work authorized for grading"
-                                          : "Authorization required to grade existing work",
-                                      }));
-                                    }}
-                                  />
-                                  <span>
-                                    <strong>Grade the existing work anyway</strong>
-                                    <small style={{ display: "block", marginTop: 2 }}>
-                                      Keeps the declined resubmission declined.
-                                    </small>
-                                  </span>
-                                </label>
+                              {isDeclined || gradeDeclinedWorkDrafts[markKey] === true ? (
+                                <button
+                                  type="button"
+                                  style={declinedWorkOverrideStyle}
+                                  disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
+                                  onClick={() => saveSpreadsheetMark(student, assignment, match, false, false, true)}
+                                >
+                                  <strong>Override declined resubmission and save this mark</strong>
+                                  <small style={{ display: "block", marginTop: 3 }}>
+                                    Grades the existing work; the declined resubmission stays declined.
+                                  </small>
+                                </button>
                               ) : null}
                               <details style={{ marginTop: 4, fontSize: 12 }}>
                                 <summary style={{ cursor: "pointer", color: "#475569" }}>
@@ -2387,9 +2381,8 @@ const spreadsheetMarkStatusStyle = {
 };
 
 const declinedWorkOverrideStyle = {
-  display: "flex",
-  alignItems: "flex-start",
-  gap: "7px",
+  display: "block",
+  width: "100%",
   marginTop: "8px",
   padding: "8px",
   border: "1px solid #c2410c",

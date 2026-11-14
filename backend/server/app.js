@@ -7391,6 +7391,7 @@ app.delete("/api/student-attachments/:attachmentId", authenticateJWT, requireRol
 app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     await ensureTeacherAudioFeedbackTable();
+    await submissionDeadlines.ensure();
     const assignmentId = Number(req.params.assignmentId);
 
     if (!assignmentId) {
@@ -7444,6 +7445,15 @@ app.get("/api/assignments/:assignmentId/gradebook", authenticateJWT, requireRole
           LIMIT 1
         ) AS audio_feedback_url,
         CASE
+          WHEN EXISTS (
+            SELECT 1 FROM assignment_submission_declines d
+            WHERE d.assignment_id = a.id AND d.student_id = u.id AND d.resolved_at IS NULL
+          ) THEN 'Declined'
+          WHEN EXISTS (
+            SELECT 1 FROM assignment_held_work h
+            WHERE h.assignment_id = a.id AND h.student_id = u.id
+              AND h.approved_at IS NULL AND h.declined_at IS NULL
+          ) THEN 'Awaiting approval'
           WHEN s.id IS NULL THEN 'None'
           WHEN NULLIF(TRIM(s.content), '') IS NOT NULL
             OR EXISTS (
@@ -13211,6 +13221,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/report", authenticateJWT,
 /* GET KDU ASSESSMENT GROUP GRADEBOOK */
 app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
+    if (typeof submissionDeadlines !== "undefined") await submissionDeadlines.ensure();
+    if (typeof heldSubmissions !== "undefined") await heldSubmissions.ensure();
     const classId = Number(req.params.classId);
 
     if (!classId) {
@@ -13304,7 +13316,21 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
         LOWER(s.student_email) AS student_email,
         s.score,
         s.rubric_selection,
-        s.feedback
+        s.feedback,
+        s.content,
+        EXISTS (
+          SELECT 1 FROM submission_attachments sa WHERE sa.submission_id = s.id
+        ) AS has_attachment,
+        EXISTS (
+          SELECT 1 FROM assignment_submission_declines d
+          WHERE d.assignment_id = s.assignment_id AND d.student_id = s.student_id
+            AND d.resolved_at IS NULL
+        ) AS has_decline,
+        EXISTS (
+          SELECT 1 FROM assignment_held_work h
+          WHERE h.assignment_id = s.assignment_id AND h.student_id = s.student_id
+            AND h.approved_at IS NULL AND h.declined_at IS NULL
+        ) AS has_held_work
       FROM submissions s
       JOIN assignments a
         ON a.id = s.assignment_id
@@ -13318,6 +13344,9 @@ app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("adm
 const students = studentsResult.rows.map((student) => {
       const assignmentScores = assignmentsResult.rows.filter(assignment => !assignment.cohort_id || cohortMemberships.get(student.student_user_id)?.includes(assignment.cohort_id)).map((assignment) => {
         const submission = submissionsByStudentAssignment.get(student, assignment.id);
+        const hasSubmittedWork = Boolean(
+          submission && (String(submission.content || "").trim() || submission.has_attachment)
+        );
 
         return {
           assignment_id: assignment.id,
@@ -13336,6 +13365,16 @@ const students = studentsResult.rows.map((student) => {
               : null,
           rubric_selection: submission ? submission.rubric_selection : null,
           feedback: submission ? submission.feedback : null,
+          submission_status:
+            assignment.submission_required === false
+              ? "no_submission_required"
+              : submission?.has_decline
+                ? "declined"
+                : submission?.has_held_work
+                  ? "awaiting_approval"
+                  : hasSubmittedWork
+                    ? "submitted"
+                    : "not_submitted",
         };
       });
 
