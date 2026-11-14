@@ -14288,24 +14288,30 @@ const server = app.listen(port, () => {
 server.requestTimeout = 900000;
 startDatabaseWatchdog(pool);
 
-Promise.all([
-  ensureAssignmentCohorts(pool),
-  ensurePasswordRecoveryTables(),
-  ensureStudentInfoColumns(),
-  ensureManualStudentDirectorySupport(),
-  ensureRubricFrameworkTables(),
-  ensureStudentReportCommentsTable(),
-  ensureSafeReportTables(),
-  ensureAttendanceTables(),
-  ensureAssignmentSectionTables(),
-  ensureAssignmentResourceTables(),
-  ensureLearningPathItemTables(),
-  ensureLessonsTables(),
-  ensureCourseResourcesTable(),
-  ensureAssessmentTables(),
-])
-  .then(() => ensureCourseSectionStructure())
-  .then(() => backfillLegacyCourseResources())
+(async () => {
+  // Schema preparation contains DDL against related tables. Running every
+  // operation concurrently can create a lock convoy that leaves normal course
+  // and dashboard reads waiting indefinitely after a deploy.
+  const preparationSteps = [
+    () => ensureAssignmentCohorts(pool),
+    () => ensurePasswordRecoveryTables(),
+    () => ensureStudentInfoColumns(),
+    () => ensureManualStudentDirectorySupport(),
+    () => ensureRubricFrameworkTables(),
+    () => ensureStudentReportCommentsTable(),
+    () => ensureSafeReportTables(),
+    () => ensureAttendanceTables(),
+    () => ensureAssignmentSectionTables(),
+    () => ensureAssignmentResourceTables(),
+    () => ensureLearningPathItemTables(),
+    () => ensureLessonsTables(),
+    () => ensureCourseResourcesTable(),
+    () => ensureAssessmentTables(),
+    () => ensureCourseSectionStructure(),
+    () => backfillLegacyCourseResources(),
+  ];
+  for (const prepare of preparationSteps) await prepare();
+})()
   .then(() => console.log("Backend database preparation complete."))
   .catch((err) => {
     console.error("Failed to prepare backend database:", err);
