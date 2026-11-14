@@ -11,3 +11,9 @@ export function loadTeacherDashboard(teacherId) {
   const scope = JSON.stringify([getAuthToken(), adminWorkspace || path === "/login" ? "admin" : "teacher"])
   return readDashboard(teacherId, scope)
 }
+
+export async function loadTeacherDashboardLite(teacherId) {
+  const response = await authFetch(`/api/teachers/${teacherId}/dashboard-lite`)
+  if (!response.ok) throw new Error(`Request failed with status ${response.status}`)
+  return response.json()
+}

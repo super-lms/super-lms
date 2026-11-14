@@ -11695,6 +11695,19 @@ app.post("/api/students", authenticateJWT, requireRole("admin"), async (req, res
 });
 
 /* GET TEACHER DASHBOARD */
+app.get("/api/teachers/:teacherId/dashboard-lite", authenticateJWT, requireRole("admin", "teacher"), (req, res) => {
+  const teacherId = Number(req.params.teacherId);
+  if (!Number.isSafeInteger(teacherId) || teacherId <= 0) return res.status(400).json({ error: "Valid teacherId is required" });
+  if (String(req.user?.role || "").toLowerCase() === "teacher" && Number(req.user.id) !== teacherId)
+    return res.status(403).json({ error: "Teachers may only open their own dashboard" });
+  res.set("Cache-Control", "private, no-store");
+  return res.json({
+    teacher: { id: teacherId, name: req.user?.name || req.user?.email || "Teacher", email: req.user?.email || "", role: req.user?.role || "teacher" },
+    courses: [], students: [], grades: [], kdu_heatmap: [], course_risk: null,
+    summary_deferred: true,
+  });
+});
+
 app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
   try {
     const teacherId = Number(req.params.teacherId);

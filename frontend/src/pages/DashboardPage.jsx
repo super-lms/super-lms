@@ -3,7 +3,7 @@ import { getKduCellLabel, getKduCellDescriptor } from "../services/teacherHeatma
 import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
 import { useEffect, useId, useMemo, useState } from "react"
 import { useAuth } from "../AuthContext.jsx"
-import { loadTeacherDashboard } from "../services/teacherDashboard.js"
+import { loadTeacherDashboard, loadTeacherDashboardLite } from "../services/teacherDashboard.js"
 import authFetch from "../services/authFetch"
 
 function toArray(value) {
@@ -534,7 +534,9 @@ export default function DashboardPage() {
 
       setErrorText("")
 
-      const data = await loadTeacherDashboard(teacherId)
+      const data = String(user?.role || "").toLowerCase() === "admin"
+        ? await loadTeacherDashboardLite(teacherId)
+        : await loadTeacherDashboard(teacherId)
       setDashboardData(data)
     } catch (error) {
       setErrorText(error.message || "Could not load dashboard data.")
@@ -736,7 +738,7 @@ export default function DashboardPage() {
 
           <div style={{ marginTop: "24px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
             {courses.length === 0 ? (
-              <DashboardActionCard title="My Courses" description="No courses assigned yet." meta="0 courses" onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
+              <DashboardActionCard title="My Courses" description={summaryDeferred ? "Open Courses to view the current school course workspaces." : "No courses assigned yet."} meta={summaryDeferred ? "Open courses" : "0 courses"} onClick={() => goTo("/courses")} active={loadingRoute === "/courses"} />
             ) : (
               courses.map((course) => (
                 <DashboardActionCard
