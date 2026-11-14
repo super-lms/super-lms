@@ -1,7 +1,6 @@
 const { Pool } = require("pg");
 
-const pool = new Pool(
-  process.env.DATABASE_URL
+const baseConfig = process.env.DATABASE_URL
     ? {
         connectionString: process.env.DATABASE_URL,
         ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
@@ -14,10 +13,6 @@ const pool = new Pool(
         lock_timeout: 4000,
         idle_in_transaction_session_timeout: 15000,
         idleTimeoutMillis: 30000,
-        // Railway briefly overlaps old and new instances during deploys. A
-        // A large pool per instance can exhaust the database and make
-        // authentication fail until one instance is removed.
-        max: Number(process.env.DB_POOL_MAX || 8),
       }
     : {
         user: "postgres",
@@ -32,13 +27,21 @@ const pool = new Pool(
         lock_timeout: 4000,
         idle_in_transaction_session_timeout: 15000,
         idleTimeoutMillis: 30000,
-        max: Number(process.env.DB_POOL_MAX || 8),
-      }
-);
+      };
+
+// Keep authentication capacity separate from dashboard, reporting, file, and
+// bulk-approval traffic. Railway may briefly run two application instances, so
+// both pools stay deliberately small enough for overlapping deployments.
+const pool = new Pool({ ...baseConfig, max: Math.min(Number(process.env.DB_POOL_MAX || 6), 8) });
+const authPool = new Pool({ ...baseConfig, max: 2, connectionTimeoutMillis: 4000, query_timeout: 10000, statement_timeout: 9000 });
+pool.authPool = authPool;
 
 pool.on("error", (error) => {
   // Prevent an idle client error from terminating the whole web service.
   console.error("Unexpected PostgreSQL pool error:", error);
+});
+authPool.on("error", (error) => {
+  console.error("Unexpected PostgreSQL authentication pool error:", error);
 });
 
 module.exports = pool;

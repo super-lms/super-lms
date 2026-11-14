@@ -6,6 +6,7 @@ const nodemailer = require("nodemailer");
 const { authenticateJWT, requireRole } = require("../../middleware/auth");
 const router = express.Router();
 const pool = require("../../server/db");
+const authPool = pool.authPool || pool;
 
 const JWT_SECRET =
   process.env.JWT_SECRET ||
@@ -318,7 +319,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const result = await pool.query({
+    const result = await authPool.query({
       text: `
       SELECT
         id,
