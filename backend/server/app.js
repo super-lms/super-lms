@@ -14279,6 +14279,15 @@ app.get(
   }
 );
 
+// Accept health and login requests while idempotent schema preparation runs.
+// Waiting for every migration before opening the port makes Railway report 502
+// throughout a slow database reconnect, even when the application code is fine.
+const server = app.listen(port, () => {
+  console.log("Super LMS backend running on port 3000");
+});
+server.requestTimeout = 900000;
+startDatabaseWatchdog(pool);
+
 Promise.all([
   ensureAssignmentCohorts(pool),
   ensurePasswordRecoveryTables(),
@@ -14297,14 +14306,7 @@ Promise.all([
 ])
   .then(() => ensureCourseSectionStructure())
   .then(() => backfillLegacyCourseResources())
-  .then(() => {
-    const server = app.listen(port, () => {
-      console.log("Super LMS backend running on port 3000");
-    });
-    server.requestTimeout = 900000;
-    startDatabaseWatchdog(pool);
-  })
+  .then(() => console.log("Backend database preparation complete."))
   .catch((err) => {
     console.error("Failed to prepare backend database:", err);
-    process.exit(1);
   });
