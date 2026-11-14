@@ -2,7 +2,6 @@ const {loadHomeroomDirectory} = require("./homeroomDirectory");
 const {loadObserverTestSummary} = require("./observerTestSummary");
 const { calculateTeacherRubric } = require('./teacherRubricScoring');
 const {gradebookSubmissionIndex,latestSubmissionByAssignment} = require('./gradebookSubmissions');
-const {loadCourseRisk} = require('./dashboardRisk');
 const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
@@ -11806,6 +11805,7 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
           ON c.id = a.class_id
         WHERE a.class_id = ANY($1::int[])
         ORDER BY s.id DESC
+        LIMIT 500
         `,
         [teacherCourseIds]
       );
@@ -11874,7 +11874,10 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
       students,
       grades,
       kdu_heatmap: kduHeatmap,
-      course_risk: await loadCourseRisk(pool,coursesResult.rows,students),
+      // Risk analysis is intentionally not allowed to hold the initial teacher
+      // dashboard open. The gradebook remains the source of truth while a
+      // dedicated bounded risk endpoint is prepared.
+      course_risk: null,
     });
   } catch (err) {
     console.error("GET /api/teachers/:teacherId/dashboard failed:", err);
