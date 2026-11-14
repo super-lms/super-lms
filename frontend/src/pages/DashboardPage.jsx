@@ -554,6 +554,7 @@ export default function DashboardPage() {
   const students = useMemo(() => toArray(dashboardData?.students), [dashboardData])
   const grades = useMemo(() => toArray(dashboardData?.grades), [dashboardData])
   const kduHeatmap = useMemo(() => toArray(dashboardData?.kdu_heatmap), [dashboardData])
+  const summaryDeferred = dashboardData?.summary_deferred === true
 
   const recentCourses = useMemo(() => courses.slice(0, 4), [courses])
   const recentStudents = useMemo(() => students.slice(0, 4), [students])
@@ -628,12 +629,14 @@ export default function DashboardPage() {
       },
       {
         title: "Enrolled students loaded",
-        detail: `${students.length} ${students.length === 1 ? "student is" : "students are"} visible in enrolled student data.`,
+        detail: summaryDeferred ? "Open Class Roster for current enrolled-student details." : `${students.length} ${students.length === 1 ? "student is" : "students are"} visible in enrolled student data.`,
       },
       {
         title: "Grading data available",
         detail:
-          averageGrade !== null
+          summaryDeferred
+            ? "Open Gradebook for current marks and grading evidence."
+            : averageGrade !== null
             ? `${grades.length} records are loaded with an overall average of ${formatAverage(averageGrade)}.`
             : `${grades.length} grade records are loaded. Numeric averaging is not available yet.`,
       },
@@ -642,7 +645,7 @@ export default function DashboardPage() {
         detail: "You can move from dashboard to assignments, gradebook, courses, and enrolled students without changing workflows.",
       },
     ]
-  }, [courses.length, students.length, grades.length, averageGrade])
+  }, [courses.length, students.length, grades.length, averageGrade, summaryDeferred])
 
   async function resetDemoData() {
     try {
@@ -847,7 +850,7 @@ export default function DashboardPage() {
             />
 
             {recentStudents.length === 0 ? (
-              <p>No enrolled students found.</p>
+              <p>{summaryDeferred ? "Open Class Roster to view current enrolled students." : "No enrolled students found."}</p>
             ) : (
               <div style={{ display: "grid", gap: "12px" }}>
                 {recentStudents.map((student, index) => (
@@ -875,7 +878,7 @@ export default function DashboardPage() {
             />
 
             {recentGrades.length === 0 ? (
-              <p>No grades found.</p>
+              <p>{summaryDeferred ? "Open Gradebook to view current grade records." : "No grades found."}</p>
             ) : (
               <div style={{ display: "grid", gap: "12px" }}>
                 {recentGrades.map((grade, index) => {

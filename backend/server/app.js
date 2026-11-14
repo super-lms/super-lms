@@ -11753,12 +11753,13 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
     );
 
     const teacherCourseIds = coursesResult.rows.map((course) => Number(course.id)).filter(Boolean);
+    const deferDetailedSummary = String(req.user?.role || "").trim().toLowerCase() === "admin";
 
     let students = [];
     let grades = [];
     let kduHeatmap = [];
 
-    if (teacherCourseIds.length > 0) {
+    if (teacherCourseIds.length > 0 && !deferDetailedSummary) {
       const studentsResult = await pool.query(
         `
         SELECT DISTINCT
@@ -11874,6 +11875,7 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
       students,
       grades,
       kdu_heatmap: kduHeatmap,
+      summary_deferred: deferDetailedSummary,
       // Risk analysis is intentionally not allowed to hold the initial teacher
       // dashboard open. The gradebook remains the source of truth while a
       // dedicated bounded risk endpoint is prepared.
