@@ -13,6 +13,7 @@
     "start": "node server.mjs"
   },
   "dependencies": {
+    "jszip": "^3.10.2",
     "lucide-react": "^1.8.0",
     "mammoth": "^1.12.3",
     "pdf-lib": "^1.17.1",

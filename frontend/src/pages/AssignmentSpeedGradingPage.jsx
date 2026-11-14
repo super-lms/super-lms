@@ -2838,6 +2838,7 @@ function SubmissionPreviewPanel({
   const activeExtension = activeFileName.split(".").pop()?.toLowerCase() || "";
   const isPdf = activeMimeType === "application/pdf" || activeExtension === "pdf";
   const isDocx = activeMimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || activeExtension === "docx";
+  const isOdt = activeMimeType === "application/vnd.oasis.opendocument.text" || activeExtension === "odt";
   const isSpreadsheet = [
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2847,7 +2848,7 @@ function SubmissionPreviewPanel({
   const isAudio = activeMimeType.startsWith("audio/");
   const isVideo = activeMimeType.startsWith("video/");
   const canFrameText = activeMimeType.startsWith("text/") || ["txt", "html", "htm"].includes(activeExtension);
-  const canPreview = isPdf || isDocx || isSpreadsheet || isImage || isAudio || isVideo || canFrameText;
+  const canPreview = isPdf || isDocx || isOdt || isSpreadsheet || isImage || isAudio || isVideo || canFrameText;
 
   return (
     <aside style={submissionPreviewPanelStyle}>
@@ -2916,6 +2917,7 @@ function SubmissionPreviewPanel({
             </div>
             {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isDocx ? <DocxPreview href={activeFileHref} fileName={activeFileName} /> : null}
+            {activeFileHref && isOdt ? <OdtPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && isSpreadsheet ? <SpreadsheetPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isImage ? <img src={activeFileHref} alt={activeFileName} style={submissionImageStyle} /> : null}
@@ -3050,6 +3052,129 @@ function DocxPreview({ href, fileName }) {
     return (
       <div style={docxPreviewMessageStyle}>
         <strong>Word preview unavailable.</strong>
+        <div>{previewError}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      aria-label={`Preview ${fileName}`}
+      style={docxPreviewStyle}
+      dangerouslySetInnerHTML={{ __html: previewHtml }}
+    />
+  );
+}
+
+function escapePreviewHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function odtNodeToHtml(node) {
+  if (node.nodeType === window.Node.TEXT_NODE) return escapePreviewHtml(node.nodeValue);
+  if (node.nodeType !== window.Node.ELEMENT_NODE) return "";
+
+  const children = Array.from(node.childNodes).map(odtNodeToHtml).join("");
+  const localName = String(node.localName || node.nodeName || "").toLowerCase();
+
+  if (localName === "h") {
+    const requestedLevel = Number(node.getAttribute("text:outline-level") || node.getAttribute("outline-level") || 2);
+    const level = Math.min(6, Math.max(1, Number.isFinite(requestedLevel) ? requestedLevel : 2));
+    return `<h${level}>${children}</h${level}>`;
+  }
+  if (localName === "p") return `<p>${children || "&nbsp;"}</p>`;
+  if (localName === "span") return `<span>${children}</span>`;
+  if (localName === "list") return `<ul>${children}</ul>`;
+  if (localName === "list-item") return `<li>${children}</li>`;
+  if (localName === "table") return `<table>${children}</table>`;
+  if (localName === "table-header-rows") return `<thead>${children}</thead>`;
+  if (localName === "table-row") return `<tr>${children}</tr>`;
+  if (localName === "table-cell" || localName === "covered-table-cell") return `<td>${children}</td>`;
+  if (localName === "line-break") return "<br>";
+  if (localName === "tab") return "&emsp;";
+  if (localName === "s") {
+    const spaces = Math.min(20, Math.max(1, Number(node.getAttribute("text:c") || node.getAttribute("c") || 1)));
+    return "&nbsp;".repeat(spaces);
+  }
+  if (localName === "a") {
+    const href = String(node.getAttribute("xlink:href") || node.getAttribute("href") || "");
+    return /^(https?:|mailto:)/i.test(href)
+      ? `<a href="${escapePreviewHtml(href)}">${children}</a>`
+      : children;
+  }
+
+  return children;
+}
+
+function convertOdtXmlToHtml(xmlText) {
+  if (typeof window === "undefined" || typeof window.DOMParser === "undefined") return "";
+  const xmlDocument = new window.DOMParser().parseFromString(String(xmlText || ""), "application/xml");
+  if (xmlDocument.querySelector("parsererror")) throw new Error("The ODT document content is not readable.");
+  const officeText = Array.from(xmlDocument.getElementsByTagName("*")).find(
+    (element) => String(element.localName || "").toLowerCase() === "text"
+  );
+  if (!officeText) throw new Error("This ODT file does not contain a readable text document.");
+  return sanitizeDocxHtml(Array.from(officeText.childNodes).map(odtNodeToHtml).join(""));
+}
+
+function OdtPreview({ href, fileName }) {
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewStatus, setPreviewStatus] = useState("loading");
+  const [previewError, setPreviewError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setPreviewHtml("");
+    setPreviewStatus("loading");
+    setPreviewError("");
+
+    fetch(href, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          const serverMessage = await response.text().catch(() => "");
+          throw new Error(serverMessage || "The ODT document could not be downloaded for preview.");
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) throw new Error("This uploaded ODT file is empty.");
+        return arrayBuffer;
+      })
+      .then(async (arrayBuffer) => {
+        const jszipModule = await import("jszip");
+        const JSZip = jszipModule.default || jszipModule;
+        const archive = await JSZip.loadAsync(arrayBuffer);
+        const contentFile = archive.file("content.xml");
+        if (!contentFile) throw new Error("This ODT file does not contain readable document content.");
+        return contentFile.async("text");
+      })
+      .then((xmlText) => {
+        if (controller.signal.aborted) return;
+        const safeHtml = convertOdtXmlToHtml(xmlText);
+        if (!safeHtml.trim()) throw new Error("This ODT document does not contain previewable text.");
+        setPreviewHtml(safeHtml);
+        setPreviewStatus("ready");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setPreviewError(error.message || "The ODT document could not be previewed.");
+        setPreviewStatus("error");
+      });
+
+    return () => controller.abort();
+  }, [href]);
+
+  if (previewStatus === "loading") {
+    return <div style={docxPreviewMessageStyle}>Preparing ODT document preview...</div>;
+  }
+
+  if (previewStatus === "error") {
+    return (
+      <div style={docxPreviewMessageStyle}>
+        <strong>ODT preview unavailable.</strong>
         <div>{previewError}</div>
       </div>
     );
