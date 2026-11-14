@@ -2839,6 +2839,11 @@ function SubmissionPreviewPanel({
   const isPdf = activeMimeType === "application/pdf" || activeExtension === "pdf";
   const isDocx = activeMimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || activeExtension === "docx";
   const isOdt = activeMimeType === "application/vnd.oasis.opendocument.text" || activeExtension === "odt";
+  const isSlideDeck = [
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.oasis.opendocument.presentation",
+  ].includes(activeMimeType) || ["pptx", "odp"].includes(activeExtension);
+  const isLegacyPowerPoint = activeMimeType === "application/vnd.ms-powerpoint" || activeExtension === "ppt";
   const isSpreadsheet = [
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2848,7 +2853,7 @@ function SubmissionPreviewPanel({
   const isAudio = activeMimeType.startsWith("audio/");
   const isVideo = activeMimeType.startsWith("video/");
   const canFrameText = activeMimeType.startsWith("text/") || ["txt", "html", "htm"].includes(activeExtension);
-  const canPreview = isPdf || isDocx || isOdt || isSpreadsheet || isImage || isAudio || isVideo || canFrameText;
+  const canPreview = isPdf || isDocx || isOdt || isSlideDeck || isSpreadsheet || isImage || isAudio || isVideo || canFrameText;
 
   return (
     <aside style={submissionPreviewPanelStyle}>
@@ -2918,13 +2923,21 @@ function SubmissionPreviewPanel({
             {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isDocx ? <DocxPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && isOdt ? <OdtPreview href={activeFileHref} fileName={activeFileName} /> : null}
+            {activeFileHref && isSlideDeck ? <SlideDeckPreview href={activeFileHref} fileName={activeFileName} extension={activeExtension} /> : null}
             {activeFileHref && isSpreadsheet ? <SpreadsheetPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isImage ? <img src={activeFileHref} alt={activeFileName} style={submissionImageStyle} /> : null}
             {activeFileHref && isAudio ? <audio controls preload="metadata" src={activeFileHref} style={{ width: "100%" }} /> : null}
             {activeFileHref && isVideo ? <video controls preload="metadata" src={activeFileHref} style={submissionVideoStyle} /> : null}
 
-            {activeFileHref && !canPreview ? (
+            {activeFileHref && isLegacyPowerPoint ? (
+              <div style={docxPreviewMessageStyle}>
+                <strong>This is an older PowerPoint (.ppt) file.</strong>
+                <div>Save it as .pptx to preview the slides here. The original file can still be opened or downloaded.</div>
+              </div>
+            ) : null}
+
+            {activeFileHref && !canPreview && !isLegacyPowerPoint ? (
               <div style={{ padding: "28px 18px", border: "1px dashed #94a3b8", borderRadius: "12px", background: "#f8fafc", textAlign: "center", lineHeight: 1.6 }}>
                 <strong>Preview is not available for this file type.</strong>
                 <div style={{ color: "#4b5563" }}>Open the file in a new window to review or download it.</div>
@@ -3189,6 +3202,175 @@ function OdtPreview({ href, fileName }) {
   );
 }
 
+const SLIDE_PREVIEW_LIMIT = 100;
+
+function presentationImageMimeType(path) {
+  const extension = String(path || "").split(".").pop()?.toLowerCase();
+  return ({
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+  })[extension] || "";
+}
+
+async function zipImageDataUrl(archive, path) {
+  const normalizedPath = String(path || "").replace(/^\.\.\//, "ppt/").replace(/^\.\//, "");
+  const mimeType = presentationImageMimeType(normalizedPath);
+  const file = mimeType ? archive.file(normalizedPath) : null;
+  if (!file) return "";
+  return `data:${mimeType};base64,${await file.async("base64")}`;
+}
+
+function parsePresentationXml(xmlText, errorMessage) {
+  const documentNode = new window.DOMParser().parseFromString(String(xmlText || ""), "application/xml");
+  if (documentNode.querySelector("parsererror")) throw new Error(errorMessage);
+  return documentNode;
+}
+
+function presentationParagraphs(root) {
+  return Array.from(root.getElementsByTagName("*") || [])
+    .filter((element) => ["p", "h"].includes(String(element.localName || "").toLowerCase()))
+    .map((element) => String(element.textContent || "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+async function readPptxSlides(archive) {
+  const slidePaths = Object.keys(archive.files)
+    .filter((path) => /^ppt\/slides\/slide\d+\.xml$/i.test(path))
+    .sort((left, right) => Number(left.match(/\d+/)?.[0]) - Number(right.match(/\d+/)?.[0]))
+    .slice(0, SLIDE_PREVIEW_LIMIT);
+
+  return Promise.all(slidePaths.map(async (slidePath, index) => {
+    const slideXml = await archive.file(slidePath).async("text");
+    const slideDocument = parsePresentationXml(slideXml, `Slide ${index + 1} could not be read.`);
+    const paragraphs = presentationParagraphs(slideDocument);
+    const relationshipPath = slidePath.replace("ppt/slides/", "ppt/slides/_rels/") + ".rels";
+    const relationshipFile = archive.file(relationshipPath);
+    let imagePaths = [];
+
+    if (relationshipFile) {
+      const relationshipXml = await relationshipFile.async("text");
+      const relationshipDocument = parsePresentationXml(relationshipXml, `Slide ${index + 1} media could not be read.`);
+      imagePaths = Array.from(relationshipDocument.getElementsByTagName("*") || [])
+        .filter((element) => String(element.localName || "").toLowerCase() === "relationship")
+        .filter((element) => /\/image$/i.test(String(element.getAttribute("Type") || "")))
+        .map((element) => String(element.getAttribute("Target") || ""));
+    }
+
+    const images = (await Promise.all(imagePaths.map((path) => zipImageDataUrl(archive, path)))).filter(Boolean);
+    return { number: index + 1, paragraphs, images };
+  }));
+}
+
+async function readOdpSlides(archive) {
+  const contentFile = archive.file("content.xml");
+  if (!contentFile) throw new Error("This ODP file does not contain readable slide content.");
+  const contentXml = await contentFile.async("text");
+  const documentNode = parsePresentationXml(contentXml, "The ODP slide content could not be read.");
+  const pages = Array.from(documentNode.getElementsByTagName("*") || [])
+    .filter((element) => String(element.localName || "").toLowerCase() === "page")
+    .slice(0, SLIDE_PREVIEW_LIMIT);
+
+  return Promise.all(pages.map(async (page, index) => {
+    const paragraphs = presentationParagraphs(page);
+    const imagePaths = Array.from(page.getElementsByTagName("*") || [])
+      .filter((element) => String(element.localName || "").toLowerCase() === "image")
+      .map((element) => String(element.getAttribute("xlink:href") || element.getAttribute("href") || ""));
+    const images = (await Promise.all(imagePaths.map((path) => zipImageDataUrl(archive, path)))).filter(Boolean);
+    return { number: index + 1, paragraphs, images };
+  }));
+}
+
+function SlideDeckPreview({ href, fileName, extension }) {
+  const [slides, setSlides] = useState([]);
+  const [previewStatus, setPreviewStatus] = useState("loading");
+  const [previewError, setPreviewError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSlides([]);
+    setPreviewStatus("loading");
+    setPreviewError("");
+
+    fetch(href, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          const serverMessage = await response.text().catch(() => "");
+          throw new Error(serverMessage || "The slide deck could not be downloaded for preview.");
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) throw new Error("This uploaded slide deck is empty.");
+        return arrayBuffer;
+      })
+      .then(async (arrayBuffer) => {
+        const jszipModule = await import("jszip");
+        const JSZip = jszipModule.default || jszipModule;
+        const archive = await JSZip.loadAsync(arrayBuffer);
+        return extension === "odp" ? readOdpSlides(archive) : readPptxSlides(archive);
+      })
+      .then((nextSlides) => {
+        if (controller.signal.aborted) return;
+        if (!nextSlides.length) throw new Error("This presentation does not contain previewable slides.");
+        setSlides(nextSlides);
+        setPreviewStatus("ready");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setPreviewError(error.message || "The slide deck could not be previewed.");
+        setPreviewStatus("error");
+      });
+
+    return () => controller.abort();
+  }, [extension, href]);
+
+  if (previewStatus === "loading") {
+    return <div style={docxPreviewMessageStyle}>Preparing slide deck preview...</div>;
+  }
+
+  if (previewStatus === "error") {
+    return (
+      <div style={docxPreviewMessageStyle}>
+        <strong>Slide deck preview unavailable.</strong>
+        <div>{previewError}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div aria-label={`Preview ${fileName}`} style={slideDeckPreviewStyle}>
+      <div style={slideDeckSummaryStyle}>
+        {slides.length} slide{slides.length === 1 ? "" : "s"} · Static preview (animations and transitions are not shown)
+      </div>
+      <div style={slideDeckGridStyle}>
+        {slides.map((slide) => (
+          <article key={slide.number} style={slidePreviewCardStyle} aria-label={`Slide ${slide.number}`}>
+            <div style={slideNumberStyle}>Slide {slide.number}</div>
+            {slide.images.length ? (
+              <div style={slideImageGridStyle}>
+                {slide.images.map((source, imageIndex) => (
+                  <img key={imageIndex} src={source} alt={`Slide ${slide.number} image ${imageIndex + 1}`} style={slidePreviewImageStyle} />
+                ))}
+              </div>
+            ) : null}
+            {slide.paragraphs.length ? (
+              <div style={slideTextStyle}>
+                {slide.paragraphs.map((paragraph, paragraphIndex) => (
+                  <div key={paragraphIndex} style={paragraphIndex === 0 ? slideTitleStyle : undefined}>{paragraph}</div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#64748b", fontStyle: "italic" }}>No previewable text on this slide.</div>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const SPREADSHEET_PREVIEW_MAX_ROWS = 500;
 const SPREADSHEET_PREVIEW_MAX_COLUMNS = 100;
 
@@ -3382,6 +3564,82 @@ const spreadsheetPreviewStyle = {
   borderRadius: "10px",
   background: "#ffffff",
   overflow: "hidden",
+};
+
+const slideDeckPreviewStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#e2e8f0",
+  overflow: "hidden",
+};
+
+const slideDeckSummaryStyle = {
+  padding: "10px 12px",
+  borderBottom: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  color: "#475569",
+  fontWeight: 800,
+};
+
+const slideDeckGridStyle = {
+  display: "grid",
+  gap: "16px",
+  maxHeight: "min(64vh, 760px)",
+  overflow: "auto",
+  padding: "16px",
+};
+
+const slidePreviewCardStyle = {
+  aspectRatio: "16 / 9",
+  minHeight: "300px",
+  position: "relative",
+  display: "grid",
+  alignContent: "center",
+  gap: "14px",
+  padding: "34px 38px",
+  border: "1px solid #94a3b8",
+  borderRadius: "8px",
+  background: "#ffffff",
+  color: "#111827",
+  boxShadow: "0 4px 14px rgba(15, 23, 42, 0.12)",
+  overflow: "auto",
+};
+
+const slideNumberStyle = {
+  position: "absolute",
+  right: "12px",
+  bottom: "8px",
+  color: "#64748b",
+  fontSize: "0.8rem",
+  fontWeight: 800,
+};
+
+const slideImageGridStyle = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+  maxHeight: "55%",
+};
+
+const slidePreviewImageStyle = {
+  maxWidth: "100%",
+  maxHeight: "240px",
+  objectFit: "contain",
+};
+
+const slideTextStyle = {
+  display: "grid",
+  gap: "8px",
+  lineHeight: 1.4,
+  whiteSpace: "pre-wrap",
+};
+
+const slideTitleStyle = {
+  fontSize: "1.35rem",
+  fontWeight: 900,
+  marginBottom: "4px",
 };
 
 const spreadsheetSheetTabsStyle = {
