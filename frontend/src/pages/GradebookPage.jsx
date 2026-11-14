@@ -162,6 +162,7 @@ export default function GradebookPage() {
   const [draftScores, setDraftScores] = useState({});
   const [spreadsheetMarkDrafts, setSpreadsheetMarkDrafts] = useState({});
   const [notSubmittedDrafts, setNotSubmittedDrafts] = useState({});
+  const [gradeDeclinedWorkDrafts, setGradeDeclinedWorkDrafts] = useState({});
   const [columnFillPercentages, setColumnFillPercentages] = useState({});
   const [columnFillMessages, setColumnFillMessages] = useState({});
   const [savingKey, setSavingKey] = useState("");
@@ -409,6 +410,9 @@ export default function GradebookPage() {
           ...(excused ? { excused: true } : { pointsEarned: Number(rawMark) }),
           directPercentage: true,
           notSubmitted: !excused && (notSubmittedDrafts[key] ?? match?.rubric_selection?.notSubmitted ?? false),
+          gradeExistingWork:
+            String(match?.submission_status || "") === "declined" &&
+            gradeDeclinedWorkDrafts[key] === true,
         }),
       });
       const data = await response.json();
@@ -421,6 +425,7 @@ export default function GradebookPage() {
             {...score, score: data.percent_score, rubric_selection: data.rubric_selection})}
       )} : current);
       setNotSubmittedDrafts(current => { const next = {...current}; delete next[key]; return next; });
+      setGradeDeclinedWorkDrafts(current => { const next = {...current}; delete next[key]; return next; });
       setSpreadsheetMarkDrafts((current) => {
         const next = { ...current };
         delete next[key];
@@ -1372,6 +1377,7 @@ export default function GradebookPage() {
                           const markKey = getDraftKey(student.student_email, assignment.id);
                           const submissionStatus = getSubmissionStatusLabel(match);
                           const isSubmitted = String(match?.submission_status || "") === "submitted";
+                          const isDeclined = String(match?.submission_status || "") === "declined";
 
                           return (
                             <td key={assignment.id} style={spreadsheetScoreCellStyle}>
@@ -1425,6 +1431,31 @@ export default function GradebookPage() {
                               >
                                 {submissionStatus}
                               </div>
+                              {isDeclined ? (
+                                <label style={declinedWorkOverrideStyle}>
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`${student.student_name} grade existing work despite declined resubmission for ${assignment.title || "assignment"}`}
+                                    checked={gradeDeclinedWorkDrafts[markKey] === true}
+                                    disabled={savingColumn !== null || spreadsheetSavesRef.current.has(markKey)}
+                                    onChange={event => {
+                                      setGradeDeclinedWorkDrafts(current => ({ ...current, [markKey]: event.target.checked }));
+                                      setCellSaveStatus(current => ({
+                                        ...current,
+                                        [markKey]: event.target.checked
+                                          ? "Existing work authorized for grading"
+                                          : "Authorization required to grade existing work",
+                                      }));
+                                    }}
+                                  />
+                                  <span>
+                                    <strong>Grade the existing work anyway</strong>
+                                    <small style={{ display: "block", marginTop: 2 }}>
+                                      Keeps the declined resubmission declined.
+                                    </small>
+                                  </span>
+                                </label>
+                              ) : null}
                               <details style={{ marginTop: 4, fontSize: 12 }}>
                                 <summary style={{ cursor: "pointer", color: "#475569" }}>
                                   Override missing-work status
@@ -2353,6 +2384,22 @@ const spreadsheetMarkStatusStyle = {
   marginTop: "0.25rem",
   fontSize: "0.72rem",
   color: "#475569",
+};
+
+const declinedWorkOverrideStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "7px",
+  marginTop: "8px",
+  padding: "8px",
+  border: "1px solid #c2410c",
+  borderRadius: "8px",
+  background: "#fff7ed",
+  color: "#7c2d12",
+  fontSize: "0.75rem",
+  lineHeight: 1.3,
+  textAlign: "left",
+  cursor: "pointer",
 };
 
 const spreadsheetSummaryHeaderStyle = {

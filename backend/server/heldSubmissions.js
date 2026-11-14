@@ -105,7 +105,12 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
       const declined = await pool.query(`SELECT 1 FROM assignment_submission_declines WHERE assignment_id=$1 AND resolved_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.id=$1 AND a.submission_required=FALSE)
         AND (student_id=$2 OR student_id=(SELECT id FROM users WHERE LOWER(email)=$3 LIMIT 1)) LIMIT 1`,[Number(req.params.assignmentId),Number(req.body.student_user_id)||null,String(req.body.student_email||'').trim().toLowerCase()]);
-      if(declined.rows.length)return res.status(409).json({code:'SUBMISSION_DECLINED',error:'This submission was declined. Speak with the student and approve it before marking.'});
+      if(declined.rows.length){
+        if(req.body.gradeExistingWork!==true)return res.status(409).json({code:'SUBMISSION_DECLINED',error:'This resubmission was declined. Select “Grade the existing work anyway” to mark the earlier work without approving the declined resubmission.'});
+        const existing=await pool.query(`SELECT 1 FROM submissions WHERE assignment_id=$1
+          AND (student_id=$2 OR LOWER(student_email)=$3) LIMIT 1`,[Number(req.params.assignmentId),Number(req.body.student_user_id)||null,String(req.body.student_email||'').trim().toLowerCase()]);
+        if(!existing.rows.length)return res.status(409).json({code:'NO_EXISTING_WORK',error:'No earlier submission is available to grade. Approve the retained work before marking.'});
+      }
       const result=await pool.query(`SELECT 1 FROM assignment_held_work WHERE assignment_id=$1 AND approved_at IS NULL AND declined_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.id=$1 AND a.submission_required=FALSE)
         AND (student_id=$2 OR student_email=$3) LIMIT 1`, [Number(req.params.assignmentId),
