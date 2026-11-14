@@ -14288,7 +14288,7 @@ const server = app.listen(port, () => {
 server.requestTimeout = 900000;
 startDatabaseWatchdog(pool);
 
-(async () => {
+async function prepareBackendDatabase() {
   // Schema preparation contains DDL against related tables. Running every
   // operation concurrently can create a lock convoy that leaves normal course
   // and dashboard reads waiting indefinitely after a deploy.
@@ -14311,8 +14311,14 @@ startDatabaseWatchdog(pool);
     () => backfillLegacyCourseResources(),
   ];
   for (const prepare of preparationSteps) await prepare();
-})()
-  .then(() => console.log("Backend database preparation complete."))
+}
+
+// Production schema changes are applied deliberately. Re-running ALTER TABLE
+// statements on every web restart can queue an exclusive lock ahead of normal
+// Courses/Dashboard reads and make the live school appear frozen.
+const runStartupPreparation = process.env.NODE_ENV !== "production" || process.env.RUN_STARTUP_SCHEMA_PREPARATION === "true";
+(runStartupPreparation ? prepareBackendDatabase() : Promise.resolve())
+  .then(() => console.log(runStartupPreparation ? "Backend database preparation complete." : "Production schema preparation skipped during web startup."))
   .catch((err) => {
     console.error("Failed to prepare backend database:", err);
   });
