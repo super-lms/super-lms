@@ -41,6 +41,12 @@ const { Document, Packer, Paragraph, Table, TableCell, TableRow, WidthType, Text
 const submissionDeadlines = require('./submissionDeadline').createSubmissionDeadline(pool);
 const app = express();
 const port = 3000;
+let databaseServiceStatus = {
+  state: "starting",
+  consecutiveFailures: 0,
+  restartRequested: false,
+  checkedAt: null,
+};
 const RTI_APP_URL = String(
   process.env.RTI_APP_URL ||
     (process.env.NODE_ENV === "production"
@@ -59,6 +65,26 @@ function getRtiSsoSecret() {
 
 app.use(cors());
 app.use(express.json({ limit: "75mb" }));
+app.get("/api/system/database-status", (_req, res) => {
+  const available = !["repairing", "restarting"].includes(databaseServiceStatus.state);
+  return res.status(available ? 200 : 503).json({
+    available,
+    state: databaseServiceStatus.state,
+    message: available
+      ? "SUPER LMS database is available."
+      : "SUPER LMS detected a database lock and is repairing it automatically. Please wait about one minute, then try again.",
+    checked_at: databaseServiceStatus.checkedAt,
+  });
+});
+app.use("/api", (req, res, next) => {
+  if (!["repairing", "restarting"].includes(databaseServiceStatus.state)) return next();
+  res.set("Retry-After", "30");
+  return res.status(503).json({
+    success: false,
+    code: "DATABASE_AUTO_REPAIR",
+    error: "SUPER LMS detected a database lock and is repairing it automatically. No work has been lost. Please wait about one minute, then try again.",
+  });
+});
 const heldSubmissions = require('./heldSubmissions').createHeldSubmissions(pool, submissionDeadlines, ensureSubmissionAttachmentsTable);
 app.use('/api/assignments',require('./routes/lateSubmissionRoutes').createLateSubmissionRouter(pool,submissionDeadlines,heldSubmissions));
 app.use('/api/assignments',require('./routes/readAloudRoutes').createReadAloudRouter(pool,submissionDeadlines,{studentHasLiveCourseAccess,assignmentIsAvailableToStudents}));
@@ -14304,7 +14330,16 @@ const server = app.listen(port, () => {
   console.log("Super LMS backend running on port 3000");
 });
 server.requestTimeout = 900000;
-startDatabaseWatchdog(pool);
+const databaseWatchdog = startDatabaseWatchdog(pool, {
+  onStateChange(status) {
+    databaseServiceStatus = status;
+    if (status.state === "repairing") {
+      console.error("SUPER LMS database auto-repair mode enabled.");
+    }
+  },
+});
+// Do not wait for the first interval before detecting an existing lock.
+databaseWatchdog.check();
 
 async function prepareBackendDatabase() {
   // Schema preparation contains DDL against related tables. Running every

@@ -45,3 +45,33 @@ test("database watchdog requests a restart after consecutive failures", async ()
   assert.deepEqual(exits, [1]);
   watchdog.stop();
 });
+
+test("database watchdog probes a critical table and reports repair state", async () => {
+  const queries = [];
+  const states = [];
+  const pool = {
+    query: async (query) => {
+      queries.push(query);
+      const error = new Error("canceling statement due to lock timeout");
+      error.code = "55P03";
+      throw error;
+    },
+  };
+  const watchdog = startDatabaseWatchdog(pool, {
+    intervalMs: 60000,
+    failureLimit: 2,
+    logger: quietLogger,
+    exit() {},
+    onStateChange: (status) => states.push(status),
+  });
+
+  await watchdog.check();
+  assert.match(queries[0].text, /FROM users/);
+  assert.equal(states.at(-1).state, "repairing");
+  assert.equal(states.at(-1).errorCode, "55P03");
+
+  await watchdog.check();
+  assert.equal(states.at(-1).state, "restarting");
+  assert.equal(watchdog.getStatus().restartRequested, true);
+  watchdog.stop();
+});

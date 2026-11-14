@@ -79,7 +79,10 @@ function proxyRequest(request, response, target, upstreamPath = request.url) {
         "Cache-Control": "no-store",
       })
     }
-    response.end(JSON.stringify({ error: "SUPER LMS service is temporarily unavailable" }))
+    response.end(JSON.stringify({
+      code: "DATABASE_AUTO_REPAIR",
+      error: "SUPER LMS is temporarily repairing its database connection. No work has been lost. Please wait about one minute, then try again.",
+    }))
   })
 
   request.pipe(upstreamRequest)
