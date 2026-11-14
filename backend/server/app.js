@@ -11746,12 +11746,12 @@ app.get("/api/teachers/:teacherId/dashboard", authenticateJWT, requireRole("admi
     );
 
     const teacher = teacherResult.rows[0];
-    const viewerRole = String(req.user?.role || "").trim().toLowerCase();
-    if (viewerRole === "teacher") {
-      coursesResult.rows = coursesResult.rows.filter((course) =>
-        shouldShowCourseForTeacher({ email: teacher.email, teacherId, course })
-      );
-    }
+    // This endpoint represents one teacher's workspace even when an
+    // administrator opens it. Never expand an admin's teacher dashboard to the
+    // entire school's courses, students, submissions, and risk calculations.
+    coursesResult.rows = coursesResult.rows.filter((course) =>
+      shouldShowCourseForTeacher({ email: teacher.email, teacherId, course })
+    );
 
     const teacherCourseIds = coursesResult.rows.map((course) => Number(course.id)).filter(Boolean);
 
