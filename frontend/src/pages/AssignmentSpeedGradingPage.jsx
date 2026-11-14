@@ -2838,11 +2838,15 @@ function SubmissionPreviewPanel({
   const activeExtension = activeFileName.split(".").pop()?.toLowerCase() || "";
   const isPdf = activeMimeType === "application/pdf" || activeExtension === "pdf";
   const isDocx = activeMimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || activeExtension === "docx";
+  const isSpreadsheet = [
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ].includes(activeMimeType) || ["xls", "xlsx"].includes(activeExtension);
   const isImage = activeMimeType.startsWith("image/");
   const isAudio = activeMimeType.startsWith("audio/");
   const isVideo = activeMimeType.startsWith("video/");
   const canFrameText = activeMimeType.startsWith("text/") || ["txt", "html", "htm"].includes(activeExtension);
-  const canPreview = isPdf || isDocx || isImage || isAudio || isVideo || canFrameText;
+  const canPreview = isPdf || isDocx || isSpreadsheet || isImage || isAudio || isVideo || canFrameText;
 
   return (
     <aside style={submissionPreviewPanelStyle}>
@@ -2911,6 +2915,7 @@ function SubmissionPreviewPanel({
             </div>
             {activeFileHref && isPdf ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isDocx ? <DocxPreview href={activeFileHref} fileName={activeFileName} /> : null}
+            {activeFileHref && isSpreadsheet ? <SpreadsheetPreview href={activeFileHref} fileName={activeFileName} /> : null}
             {activeFileHref && canFrameText ? <iframe src={activeFileHref} title={`Preview ${activeFileName}`} style={submissionDocumentFrameStyle} /> : null}
             {activeFileHref && isImage ? <img src={activeFileHref} alt={activeFileName} style={submissionImageStyle} /> : null}
             {activeFileHref && isAudio ? <audio controls preload="metadata" src={activeFileHref} style={{ width: "100%" }} /> : null}
@@ -3058,6 +3063,155 @@ function DocxPreview({ href, fileName }) {
   );
 }
 
+const SPREADSHEET_PREVIEW_MAX_ROWS = 500;
+const SPREADSHEET_PREVIEW_MAX_COLUMNS = 100;
+
+function spreadsheetColumnLabel(columnIndex) {
+  let label = "";
+  let value = columnIndex + 1;
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
+
+function SpreadsheetPreview({ href, fileName }) {
+  const [workbookSheets, setWorkbookSheets] = useState([]);
+  const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+  const [previewStatus, setPreviewStatus] = useState("loading");
+  const [previewError, setPreviewError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setWorkbookSheets([]);
+    setActiveSheetIndex(0);
+    setPreviewStatus("loading");
+    setPreviewError("");
+
+    fetch(href, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          const serverMessage = await response.text().catch(() => "");
+          throw new Error(serverMessage || "The spreadsheet could not be downloaded for preview.");
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) {
+          throw new Error("This uploaded spreadsheet is empty.");
+        }
+        return arrayBuffer;
+      })
+      .then(async (arrayBuffer) => {
+        const xlsxModule = await import("xlsx");
+        const XLSX = xlsxModule.default || xlsxModule;
+        const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+        return workbook.SheetNames.map((name) => {
+          const allRows = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+            header: 1,
+            defval: "",
+            raw: false,
+            dateNF: "yyyy-mm-dd",
+          });
+          const totalRows = allRows.length;
+          const totalColumns = allRows.reduce((largest, row) => Math.max(largest, row.length), 0);
+          const rows = allRows
+            .slice(0, SPREADSHEET_PREVIEW_MAX_ROWS)
+            .map((row) => row.slice(0, SPREADSHEET_PREVIEW_MAX_COLUMNS));
+          return { name, rows, totalRows, totalColumns };
+        });
+      })
+      .then((sheets) => {
+        if (controller.signal.aborted) return;
+        if (!sheets.length) throw new Error("This workbook does not contain any worksheets.");
+        setWorkbookSheets(sheets);
+        setPreviewStatus("ready");
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setPreviewError(error.message || "The spreadsheet could not be previewed.");
+        setPreviewStatus("error");
+      });
+
+    return () => controller.abort();
+  }, [href]);
+
+  if (previewStatus === "loading") {
+    return <div style={docxPreviewMessageStyle}>Preparing spreadsheet preview...</div>;
+  }
+
+  if (previewStatus === "error") {
+    return (
+      <div style={docxPreviewMessageStyle}>
+        <strong>Spreadsheet preview unavailable.</strong>
+        <div>{previewError}</div>
+      </div>
+    );
+  }
+
+  const activeSheet = workbookSheets[activeSheetIndex] || workbookSheets[0];
+  const visibleColumnCount = Math.min(
+    SPREADSHEET_PREVIEW_MAX_COLUMNS,
+    Math.max(1, activeSheet.rows.reduce((largest, row) => Math.max(largest, row.length), 0))
+  );
+  const wasLimited = activeSheet.totalRows > SPREADSHEET_PREVIEW_MAX_ROWS
+    || activeSheet.totalColumns > SPREADSHEET_PREVIEW_MAX_COLUMNS;
+
+  return (
+    <div aria-label={`Preview ${fileName}`} style={spreadsheetPreviewStyle}>
+      <div style={spreadsheetSheetTabsStyle} role="tablist" aria-label="Workbook worksheets">
+        {workbookSheets.map((sheet, index) => (
+          <button
+            key={`${sheet.name}-${index}`}
+            type="button"
+            role="tab"
+            aria-selected={index === activeSheetIndex}
+            onClick={() => setActiveSheetIndex(index)}
+            style={index === activeSheetIndex ? activeSpreadsheetTabStyle : spreadsheetTabStyle}
+          >
+            {sheet.name}
+          </button>
+        ))}
+      </div>
+      <div style={spreadsheetTableViewportStyle}>
+        {activeSheet.rows.length ? (
+          <table style={spreadsheetTableStyle}>
+            <thead>
+              <tr>
+                <th aria-label="Row number" style={spreadsheetCornerCellStyle} />
+                {Array.from({ length: visibleColumnCount }, (_, columnIndex) => (
+                  <th key={columnIndex} scope="col" style={spreadsheetColumnHeaderStyle}>
+                    {spreadsheetColumnLabel(columnIndex)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activeSheet.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  <th scope="row" style={spreadsheetRowNumberStyle}>{rowIndex + 1}</th>
+                  {Array.from({ length: visibleColumnCount }, (_, columnIndex) => (
+                    <td key={columnIndex} style={spreadsheetCellStyle}>
+                      {String(row[columnIndex] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div style={docxPreviewMessageStyle}>This worksheet is empty.</div>
+        )}
+      </div>
+      {wasLimited ? (
+        <div style={spreadsheetLimitNoticeStyle}>
+          Previewing the first {Math.min(activeSheet.totalRows, SPREADSHEET_PREVIEW_MAX_ROWS)} rows and {Math.min(activeSheet.totalColumns, SPREADSHEET_PREVIEW_MAX_COLUMNS)} columns. Open the original file to review the remainder.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const fileTabStyle = {
   border: "1px solid #cbd5e1",
   borderRadius: "8px",
@@ -3095,6 +3249,105 @@ const docxPreviewStyle = {
   background: "#ffffff",
   color: "#111827",
   lineHeight: 1.55,
+};
+
+const spreadsheetPreviewStyle = {
+  border: "1px solid #cbd5e1",
+  borderRadius: "10px",
+  background: "#ffffff",
+  overflow: "hidden",
+};
+
+const spreadsheetSheetTabsStyle = {
+  display: "flex",
+  gap: "6px",
+  overflowX: "auto",
+  padding: "10px",
+  borderBottom: "1px solid #cbd5e1",
+  background: "#f8fafc",
+};
+
+const spreadsheetTabStyle = {
+  ...fileTabStyle,
+  padding: "6px 10px",
+};
+
+const activeSpreadsheetTabStyle = {
+  ...spreadsheetTabStyle,
+  borderColor: "#2563eb",
+  background: "#dbeafe",
+  color: "#1d4ed8",
+};
+
+const spreadsheetTableViewportStyle = {
+  minHeight: "420px",
+  maxHeight: "min(58vh, 680px)",
+  overflow: "auto",
+};
+
+const spreadsheetTableStyle = {
+  borderCollapse: "collapse",
+  width: "max-content",
+  minWidth: "100%",
+  fontSize: "0.9rem",
+};
+
+const spreadsheetCellStyle = {
+  minWidth: "110px",
+  maxWidth: "320px",
+  padding: "7px 9px",
+  borderRight: "1px solid #d7dce5",
+  borderBottom: "1px solid #d7dce5",
+  background: "#ffffff",
+  color: "#111827",
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+  verticalAlign: "top",
+};
+
+const spreadsheetRowNumberStyle = {
+  position: "sticky",
+  left: 0,
+  zIndex: 1,
+  width: "48px",
+  minWidth: "48px",
+  padding: "7px 8px",
+  borderRight: "1px solid #94a3b8",
+  borderBottom: "1px solid #d7dce5",
+  background: "#f1f5f9",
+  color: "#475569",
+  textAlign: "right",
+  fontWeight: 800,
+};
+
+const spreadsheetCornerCellStyle = {
+  ...spreadsheetRowNumberStyle,
+  top: 0,
+  zIndex: 3,
+  textAlign: "center",
+};
+
+const spreadsheetColumnHeaderStyle = {
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  minWidth: "110px",
+  padding: "7px 9px",
+  borderRight: "1px solid #94a3b8",
+  borderBottom: "1px solid #94a3b8",
+  background: "#f1f5f9",
+  color: "#475569",
+  textAlign: "center",
+  fontWeight: 800,
+};
+
+const spreadsheetLimitNoticeStyle = {
+  padding: "10px 12px",
+  borderTop: "1px solid #cbd5e1",
+  background: "#fff7ed",
+  color: "#9a3412",
+  fontWeight: 700,
+  lineHeight: 1.45,
 };
 
 
