@@ -30,11 +30,20 @@ function createSelfStudyNotices(pool) {
   }
   const courseScope = `NULLIF(to_jsonb(c)->>'school_id','')::integer IS NOT DISTINCT FROM $1`;
   const teacherAccess = `(c.teacher_id=$2 OR EXISTS(SELECT 1 FROM courses m WHERE m.id=c.master_course_id AND m.teacher_id=$2)
-    OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$2))`;
+    OR EXISTS(SELECT 1 FROM course_teachers ct WHERE ct.course_id IN(c.id,COALESCE(c.master_course_id,c.id)) AND ct.teacher_id=$2)
+    OR (c.master_course_id IS NULL AND EXISTS(
+      SELECT 1 FROM courses section
+      WHERE section.master_course_id=c.id AND (section.teacher_id=$2 OR EXISTS(
+        SELECT 1 FROM course_teachers section_teacher WHERE section_teacher.course_id=section.id AND section_teacher.teacher_id=$2
+      ))
+    )))`;
   const staff = user => { if (!['admin','teacher'].includes(user.role)) throw fail(403, 'Only teachers can post self-study notices.'); };
   async function courses(user) {
     staff(user); const school = await scope(user);
-    return (await pool.query(`SELECT c.id,c.title FROM courses c WHERE ${courseScope} AND ($3='admin' OR ${teacherAccess}) ORDER BY c.title,c.id`, [school,user.id,user.role])).rows;
+    return (await pool.query(`SELECT c.id,c.title,c.master_course_id,
+      EXISTS(SELECT 1 FROM courses section WHERE section.master_course_id=c.id) AS is_master_class
+      FROM courses c WHERE ${courseScope} AND ($3='admin' OR ${teacherAccess})
+      ORDER BY COALESCE(c.master_course_id,c.id),c.master_course_id NULLS FIRST,c.title,c.id`, [school,user.id,user.role])).rows;
   }
   async function authorizeCourse(user, courseId, school) {
     const allowed = await pool.query(`SELECT c.id FROM courses c WHERE c.id=$4 AND ${courseScope} AND ($3='admin' OR ${teacherAccess})`, [school,user.id,user.role,courseId]);

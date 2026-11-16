@@ -11,8 +11,17 @@ test('range posts include both dates, preserve other teachers, and reject invali
  CREATE TABLE courses(id INT PRIMARY KEY,title TEXT,school_id INT,teacher_id INT,master_course_id INT);
  CREATE TABLE course_teachers(course_id INT,teacher_id INT);
  INSERT INTO users VALUES(1,2,'One','',''),(2,2,'Two','',''),(3,3,'Other school','','');
- INSERT INTO courses VALUES(10,'Example course',2,1,NULL);INSERT INTO course_teachers VALUES(10,2);`);
+ INSERT INTO courses VALUES
+  (10,'Example course',2,1,NULL),
+  (20,'Shared Master Class',2,NULL,NULL),
+  (21,'Shared Section A',2,1,20),
+  (22,'Shared Section B',2,NULL,20);
+ INSERT INTO course_teachers VALUES(10,2),(22,2);`);
  const service=createSelfStudyNotices(pool),one={id:1,role:'teacher'},two={id:2,role:'teacher'};
+ const oneCourses=await service.courses(one),twoCourses=await service.courses(two);
+ assert.equal(oneCourses.find(course=>course.id===20)?.is_master_class,true);
+ assert.equal(twoCourses.find(course=>course.id===20)?.is_master_class,true);
+ assert.equal(oneCourses.find(course=>course.id===21)?.master_course_id,20);
  const body={course_id:10,ipad_status:'needed',notes:'Online practice',start_date:'2026-12-31',end_date:'2027-01-02'};
  assert.equal((await service.save(one,body)).count,3);assert.equal((await service.list(one,'2026-12-31','2027-01-02')).length,3);
  await service.save(two,{...body,start_date:'2027-01-01',end_date:'2027-01-01',notes:'Other teacher'});
