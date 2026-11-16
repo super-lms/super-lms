@@ -1,4 +1,5 @@
 import AssignmentCard from "../AssignmentCard.jsx"
+import { FormattedText } from "../RichText.jsx"
 
 export default function AssignmentCardsView({
   assignments,
@@ -36,9 +37,10 @@ export default function AssignmentCardsView({
           <p>
             <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not linked"}
           </p>
-          <p>
-            <strong>Description:</strong> {assignment.description || "No description"}
-          </p>
+          <div>
+            <strong>Description:</strong>
+            <FormattedText value={assignment.description} fallback="No description" style={{ marginTop: "6px" }} />
+          </div>
           <p>
             <strong>Weight:</strong> {formatPercent(assignment.calculated_weight)}
           </p>
