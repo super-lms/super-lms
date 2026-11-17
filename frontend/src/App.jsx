@@ -1,3 +1,4 @@
+import StudentReadAloudPage from "./pages/StudentReadAloudPage.jsx";
 import SelfStudyPage from "./pages/SelfStudyPage.jsx";
 import StockGamePage from "./pages/StockGamePage.jsx";
 import FitnessTrackerPage from "./pages/FitnessTrackerPage.jsx";
@@ -230,6 +231,8 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      <Route path="/student-read-aloud" element={<ProtectedRoute allowedRoles={["student", "teacher", "admin"]}><StudentReadAloudPage /></ProtectedRoute>} />
 
       <Route path="/announcements" element={<ProtectedRoute allowedRoles={["admin", "teacher", "student"]}><AnnouncementsPage /></ProtectedRoute>} />
 

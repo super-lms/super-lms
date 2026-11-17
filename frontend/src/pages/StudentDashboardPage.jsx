@@ -1,3 +1,6 @@
+import {readableFile} from "../services/documentReader.js"
+import {StudentWhatIfControls, StudentWhatIfScore} from "../components/student/StudentWhatIfGrades.jsx"
+import {whatIfGrades} from "../services/whatIfGrades.js"
 import { mapStudentReads, needsStudentAttention } from "../services/studentPortalData.js"
 import StudentStatusBadge from "../components/student/StudentStatusBadge.jsx"
 import StudentAssignmentList, { AssignmentViewToggle } from "../components/student/StudentAssignmentList.jsx"
@@ -770,6 +773,14 @@ export default function StudentDashboardPage() {
     if (savedStanding !== null && savedStanding !== undefined && Number.isFinite(Number(savedStanding))) return Number(savedStanding)
     return weightedCourseStanding(list, submissionStateByAssignmentId)
   }, [assignments, dashboard, filteredAssignments, selectedCourseId, submissionStateByAssignmentId])
+
+  const [whatIfDraft, setWhatIfDraft] = useState({courseId:"", open:false, scores:{}})
+  const whatIfLoading = loading || courseProgressLoading || String(dashboard?.courseId) !== String(selectedCourseId)
+  const whatIfOpen = String(whatIfDraft.courseId) === String(selectedCourseId) && whatIfDraft.open && !whatIfLoading
+  const whatIfScores = String(whatIfDraft.courseId) === String(selectedCourseId) ? whatIfDraft.scores : {}
+  const whatIfResult = useMemo(() => whatIfGrades(filteredAssignments, submissionStateByAssignmentId, whatIfScores, dashboard?.raw?.gradebook), [filteredAssignments, submissionStateByAssignmentId, whatIfScores, dashboard])
+  const toggleWhatIf = () => setWhatIfDraft(current => String(current.courseId) === String(selectedCourseId) ? {...current,open:!current.open} : {courseId:selectedCourseId,open:true,scores:{}})
+  const renderWhatIfScore = assignment => whatIfOpen ? <StudentWhatIfScore assignment={assignment} state={submissionStateByAssignmentId[String(assignment.id)]} value={whatIfScores[String(assignment.id)]} error={whatIfResult.errors[String(assignment.id)]} onChange={value=>setWhatIfDraft(current=>({...current,scores:{...current.scores,[String(assignment.id)]:value}}))} /> : null
 
   const missingAssignments = useMemo(() => {
     const list = selectedCourseId ? filteredAssignments : assignments
@@ -1684,6 +1695,7 @@ export default function StudentDashboardPage() {
 
         {selectedCourseId ? (
           <>
+            <div style={{display:showPortalSection("dashboard","courses","marks","feedback","assignments","missing")?undefined:"none"}}><StudentWhatIfControls open={whatIfOpen} onToggle={toggleWhatIf} onReset={()=>setWhatIfDraft({courseId:selectedCourseId,open:true,scores:{}})} result={whatIfResult} standing={formatAverage(gradedAverage)} disabled={whatIfLoading} /></div>
             <section
               className="panel"
               ref={courseWorkspaceRef}
@@ -1753,6 +1765,7 @@ export default function StudentDashboardPage() {
               {classResources.map((resource) => (
                 <div key={resource.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", padding: "12px 14px", border: "1px solid #cfd8e3", borderRadius: "10px" }}>
                   <span style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{resource.original_name}</span>
+                  {readableFile(resource.original_name) && <ActionButton quiet onClick={()=>navigate('/student-read-aloud',{state:{readerDocument:{original_name:resource.original_name,file_path:resource.file_path}}})}>Read aloud</ActionButton>}
                   <a href={`${API_BASE}${resource.file_path}`} download={resource.original_name || true} style={{ padding: "9px 12px", borderRadius: "8px", background: "#111827", color: "white", fontWeight: 800, textDecoration: "none" }}>Download to Device</a>
                 </div>
               ))}
@@ -1803,7 +1816,7 @@ export default function StudentDashboardPage() {
           ) : resultAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
           ) : assignmentLayout === "list" ? (
-            <StudentAssignmentList visible={showPortalSection("dashboard", "marks", "feedback")} assignments={resultAssignments} states={submissionStateByAssignmentId} showResults showFeedbackFiles={showPortalSection("dashboard", "marks", "feedback")} formatDate={formatDueDate} formatStatus={formatSubmissionStatus} onOpen={openSubmissionEditor} />
+            <StudentAssignmentList renderWhatIfScore={renderWhatIfScore} visible={showPortalSection("dashboard", "marks", "feedback")} assignments={resultAssignments} states={submissionStateByAssignmentId} showResults showFeedbackFiles={showPortalSection("dashboard", "marks", "feedback")} formatDate={formatDueDate} formatStatus={formatSubmissionStatus} onOpen={openSubmissionEditor} />
           ) : (
             <div className="student-table-region" role="region" aria-label="My results table. Scroll horizontally for more assignments." tabIndex={0} style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
               <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
@@ -1850,6 +1863,7 @@ export default function StudentDashboardPage() {
                           {submission?.score === null || submission?.score === undefined
                             ? "Not graded"
                             : submission.score}
+                          {renderWhatIfScore(assignment)}
                         </td>
                       )
                     })}
@@ -1927,7 +1941,7 @@ export default function StudentDashboardPage() {
           ) : filteredAssignments.length === 0 ? (
             <NoticeBox>No assignments found for this course.</NoticeBox>
           ) : assignmentLayout === "list" ? (
-            <StudentAssignmentList visible={showPortalSection("assignments")} assignments={filteredAssignments} states={submissionStateByAssignmentId} attachmentMessages={attachmentSuccessByAssignmentId} formatDate={formatDueDate} formatStatus={formatSubmissionStatus} onOpen={openSubmissionEditor} />
+            <StudentAssignmentList renderWhatIfScore={renderWhatIfScore} visible={showPortalSection("assignments")} assignments={filteredAssignments} states={submissionStateByAssignmentId} attachmentMessages={attachmentSuccessByAssignmentId} formatDate={formatDueDate} formatStatus={formatSubmissionStatus} onOpen={openSubmissionEditor} />
           ) : (
             <div className="student-table-region" role="region" aria-label="Course assignments table. Scroll horizontally for more assignments." tabIndex={0} style={{ overflowX: "auto", border: "1px solid #d7dce5", borderRadius: "12px" }}>
               <table style={{ width: "max-content", minWidth: "100%", borderCollapse: "collapse" }}>
@@ -1965,6 +1979,7 @@ export default function StudentDashboardPage() {
                       )
                     })}
                   </tr>
+                  {whatIfOpen && <tr><th scope="row" style={assignmentSheetLabelStyle}>What-if score</th>{filteredAssignments.map(assignment=><td key={assignment.id} style={assignmentSheetCellStyle}>{renderWhatIfScore(assignment)}</td>)}</tr>}
                   <tr style={{ borderTop: "1px solid #e5e7eb" }}>
                     <th scope="row" style={assignmentSheetLabelStyle}>Access</th>
                     {filteredAssignments.map((assignment) => (

@@ -1,0 +1,12 @@
+.student-what-if{margin:0 0 16px;padding:12px 14px;background:#fff;border:1px solid #d7dce5;border-radius:10px;color:#172b40}
+.student-what-if-heading,.student-what-if-bar,.student-what-if-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.student-what-if button{font:inherit;min-height:40px;padding:8px 12px;border:1px solid #aebfce;border-radius:7px;background:#fff;color:#172b40;cursor:pointer}
+.student-what-if button:disabled{cursor:default;opacity:.6}
+.student-what-if button[aria-expanded=true]{background:#243f59;color:#fff}
+.student-what-if-bar{margin-top:12px;padding-top:12px;border-top:1px solid #d7dce5;font-size:.9rem}
+.student-what-if-actions{justify-content:flex-start}
+.student-what-if-bar[hidden]{display:none}
+.student-what-if-score{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:10px;font-size:.9rem}
+.student-what-if-score input{width:80px;min-height:40px;font:inherit;font-size:16px;padding:8px;border:1px solid #9fb3c5;border-radius:6px;background:#fff;color:#172b40}
+.student-what-if-score input[aria-invalid=true]{border-color:#b02d1e}
+.student-what-if-error{color:#a42619;flex-basis:100%}

@@ -6731,7 +6731,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
       earnedCoursePoints += average * weight / 100;
       gradedWeightPercent += weight;
-      groupBreakdown.set(key, { average_score: Number(average.toFixed(2)), course_weight_percent: weight });
+      groupBreakdown.set(key, { subcategory_id: assignment.subcategory_id, score_total: scores.reduce((sum, value) => sum + value, 0), graded_count: scores.length, average_score: Number(average.toFixed(2)), course_weight_percent: weight });
     });
     const currentPercent = gradedWeightPercent > 0
       ? Number((earnedCoursePoints / gradedWeightPercent * 100).toFixed(2))

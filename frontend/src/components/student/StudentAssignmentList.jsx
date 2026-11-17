@@ -8,7 +8,7 @@ export function AssignmentViewToggle({ value, onChange }) {
   </div>
 }
 
-export default function StudentAssignmentList({ visible = true, assignments, states, showResults = false, showFeedbackFiles = false, attachmentMessages = {}, formatDate, formatStatus, onOpen }) {
+export default function StudentAssignmentList({ visible = true, assignments, states, showResults = false, showFeedbackFiles = false, attachmentMessages = {}, formatDate, formatStatus, onOpen, renderWhatIfScore }) {
   if (!visible) return null
   return <div className="student-assignment-list">
     {assignments.map(assignment => {
@@ -25,6 +25,7 @@ export default function StudentAssignmentList({ visible = true, assignments, sta
           <p style={{whiteSpace:"pre-wrap"}}><strong>Teacher feedback:</strong> {submission.feedback || "No feedback yet."}</p>
           {showFeedbackFiles ? <FeedbackFiles assignmentId={assignment.id} /> : null}
         </> : null}
+        {renderWhatIfScore?.(assignment)}
         {attachmentMessages[String(assignment.id)] ? <p role="status">{attachmentMessages[String(assignment.id)]}</p> : null}
         <button type="button" aria-label={`Open assignment ${assignment.title || "Untitled Assignment"}`} onClick={() => onOpen(assignment)}>
           {assignment.submission_required === false ? "View Mark" : showResults ? "View Submission" : "Open Assignment"}

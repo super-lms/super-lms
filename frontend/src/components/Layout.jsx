@@ -381,6 +381,7 @@ export default function Layout() {
             <NavItem to="/student" style={getNavLinkStyle("/student")} icon={BookOpen}>
               My Learning
             </NavItem>
+            <NavItem to="/student-read-aloud" style={getNavLinkStyle("/student-read-aloud")} icon={BookOpen}>Read aloud</NavItem>
             <NavItem to="/student-progress" style={getNavLinkStyle("/student-progress")} icon={BarChart3}>
               My Progress
             </NavItem>
