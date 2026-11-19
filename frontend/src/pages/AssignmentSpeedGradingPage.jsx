@@ -185,7 +185,7 @@ function getSavedKduSummary(row) {
   if (row?.rubric_selection?.excused === true) return {isGraded:false,label:"EX — Excused",percent:null,scoreOutOfSix:null};
   const rubricSelection = row?.rubric_selection || {};
 
-  if (rubricSelection.source === "teacher_designed_rubric_ho" && Number.isFinite(rubricSelection.overallScore)) {
+  if (["teacher_designed_rubric_ho", "teacher_rubric_single_score"].includes(rubricSelection.source) && Number.isFinite(rubricSelection.overallScore)) {
     const percent = rubricSelection.overallScore;
     const scoreOutOfSix = percent / 100 * 6;
     return { isGraded: true, percent, scoreOutOfSix, label: `${getProficiencyLabel(scoreOutOfSix)} (${percent.toFixed(1)}%)` };
@@ -376,7 +376,7 @@ export default function AssignmentSpeedGradingPage() {
   const [teacherRubricError, setTeacherRubricError] = useState("");
   const [teacherRubricLoading, setTeacherRubricLoading] = useState(true);
   const [teacherSelections, setTeacherSelections] = useState({});
-  const isTeacherRubric = assignment?.submission_required !== false && assignment?.scoring_method === "teacher_designed_rubric_ho";
+  const isTeacherRubric = assignment?.submission_required !== false && ["teacher_designed_rubric_ho", "teacher_rubric_single_score"].includes(assignment?.scoring_method);
   const teacherCalculation = useMemo(() => {
     if (!teacherRubric) return { error: "No teacher rubric is saved. Open Edit Assignment and save the teacher rubric." };
     try { return calculateTeacherRubric(teacherRubric, teacherSelections); }
@@ -1907,7 +1907,7 @@ export default function AssignmentSpeedGradingPage() {
                       </span>
 
                       <span style={contextPillStyle}>
-                        {isTeacherRubric ? "Teacher Designed Rubric" : isOneScoreAssignment ? "Single Score KDU" : "KDU Rubric"}
+                        {isTeacherRubric ? (assignment?.scoring_method === "teacher_rubric_single_score" ? "Teacher Rubric → Single Score" : "Teacher Designed Rubric") : isOneScoreAssignment ? "Single Score KDU" : "KDU Rubric"}
                       </span>
                     </div>
 
@@ -2323,7 +2323,7 @@ export default function AssignmentSpeedGradingPage() {
                           {teacherCalculation.complete && selectedRow?.rubric_selection?.teacherRubric && selectedRow.rubric_selection.teacherRubric.scoringVersion !== 'numbered_level_labels' && Math.abs(Number(selectedRow.rubric_selection.overallScore) - teacherCalculation.percent) > 0.01 && <p role="status">Saved grade: {Number(selectedRow.rubric_selection.overallScore).toFixed(2)}%. The printed level numbers calculate to {teacherCalculation.percent.toFixed(2)}%. Review the selections and save to update this older grade. Saved marks have not been changed automatically.</p>}
                           {(teacherRubric?.criteria_json || []).map(criterion => (
                             <fieldset key={criterion.id} disabled={savingKduScores} style={{ marginBottom: "14px", border: "1px solid #d7dce5", borderRadius: "10px" }}>
-                              <legend>{criterion.name} — {criterion.weight}% — {criterion.competency_bucket || "KDU not mapped"}</legend>
+                              <legend>{criterion.name} — {criterion.weight}% — {assignment?.scoring_method === "teacher_rubric_single_score" ? "Single Score" : criterion.competency_bucket || "KDU not mapped"}</legend>
                               <div className="rubric-criterion-row"><div className="rubric-levels">
                                 {Array.from({ length: teacherRubric.level_count }, (_, i) => i + 1).map(level => (
                                   <button key={level} type="button" aria-pressed={Number(teacherSelections[criterion.id]) === level}
@@ -2336,12 +2336,12 @@ export default function AssignmentSpeedGradingPage() {
                             </fieldset>
                           ))}
                           <p className="rubric-total" aria-live="polite"><strong>Overall:</strong> {teacherCalculation.complete ? `${teacherCalculation.percent.toFixed(2)}%` : teacherCalculation.partialPercent !== undefined ? `${teacherCalculation.partialPercent.toFixed(2)}% from ${teacherCalculation.selectedCount} of ${teacherCalculation.criterionCount} criteria selected. Select every criterion to save.` : "Select a level for every criterion"}</p>
-                          {teacherCalculation.unmappedWeight > 0 && <p role="status">The overall grade can be saved without KDU mappings. Map every criterion to DO, KNOW or UNDERSTAND in Edit Assignment to enable the KDU breakdown. Currently {teacherCalculation.unmappedWeight}% of the rubric is unmapped.</p>}
-                          {teacherCalculation.buckets ? ["DO", "KNOW", "UNDERSTAND"].map(bucket => {
+                          {assignment?.scoring_method !== "teacher_rubric_single_score" && teacherCalculation.unmappedWeight > 0 && <p role="status">The overall grade can be saved without KDU mappings. Map every criterion to DO, KNOW or UNDERSTAND in Edit Assignment to enable the KDU breakdown. Currently {teacherCalculation.unmappedWeight}% of the rubric is unmapped.</p>}
+                          {assignment?.scoring_method !== "teacher_rubric_single_score" && teacherCalculation.buckets ? ["DO", "KNOW", "UNDERSTAND"].map(bucket => {
                             const value = teacherCalculation.buckets[bucket];
                             return <p key={bucket}><strong>{bucket} ({value.weight}% weight):</strong> {value.percent === null ? (value.weight ? "—" : "Not assessed") : `${value.percent.toFixed(2)}% · ${value.level.toFixed(2)} / 6 · ${value.contribution.toFixed(2)} percentage points overall`}</p>;
                           }) : null}
-                          <p>Each criterion contributes its selected level ÷ {teacherRubric?.level_count || 6} × its weight. KDU scores average the mapped criteria using their weights.</p>
+                          <p>Each criterion contributes its selected level ÷ {teacherRubric?.level_count || 6} × its weight.{assignment?.scoring_method === "teacher_rubric_single_score" ? " The total is saved as one assignment score." : " KDU scores average the mapped criteria using their weights."}</p>
                           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                             <ActionButton onClick={() => saveKduScores()} disabled={savingKduScores || !teacherCalculation.complete}>Save Rubric Scores</ActionButton>
                             <ActionButton quiet onClick={() => saveKduScores({}, null, { advanceToNextStudent: true })} disabled={savingKduScores || !teacherCalculation.complete}>Save & Next Student</ActionButton>

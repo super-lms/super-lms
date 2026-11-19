@@ -5880,7 +5880,7 @@ app.put("/api/assignments/:assignmentId", authenticateJWT, requireRole("admin", 
       : Number(req.body.points_possible);
     const subcategoryId = req.body.subcategory_id ? Number(req.body.subcategory_id) : null;
 
-    const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu", "teacher_designed_rubric_ho"];
+    const allowedScoringMethods = ["rubric", "raw_sections", "single_score_kdu", "teacher_designed_rubric_ho", "teacher_rubric_single_score"];
     const scoringMethod = allowedScoringMethods.includes(String(req.body.scoring_method || "").trim())
       ? String(req.body.scoring_method || "").trim()
       : "rubric";
@@ -8127,7 +8127,7 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       percentScore = Number(Number(overallScore).toFixed(2));
       saveFeedback = `Direct spreadsheet mark: ${percentScore}%.`;
       saveContent = `Teacher-entered percentage mark: ${percentScore}%.`;
-    } else if (assignment.scoring_method === "teacher_designed_rubric_ho") {
+    } else if (["teacher_designed_rubric_ho", "teacher_rubric_single_score"].includes(assignment.scoring_method)) {
       const saved = await pool.query(
         "SELECT id, title, level_count, criteria_json, updated_at FROM teacher_designed_rubrics WHERE assignment_id = $1",
         [assignmentId]
@@ -8151,11 +8151,13 @@ app.post("/api/assignments/:assignmentId/kdu-scores", authenticateJWT, requireRo
       percentScore = calculated.percent;
       weightedScore = percentScore / 100 * 6;
       rubricSelection = {
-        DO: calculated.buckets.DO.level,
-        KNOW: calculated.buckets.KNOW.level,
-        UNDERSTAND: calculated.buckets.UNDERSTAND.level,
+        DO: assignment.scoring_method === "teacher_rubric_single_score" ? null : calculated.buckets.DO.level,
+        KNOW: assignment.scoring_method === "teacher_rubric_single_score" ? null : calculated.buckets.KNOW.level,
+        UNDERSTAND: assignment.scoring_method === "teacher_rubric_single_score" ? null : calculated.buckets.UNDERSTAND.level,
         overallScore: percentScore,
-        source: "teacher_designed_rubric_ho",
+        source: assignment.scoring_method,
+        ...(assignment.scoring_method === "teacher_rubric_single_score" && Number(assignment.points_possible) > 0
+          ? { pointsEarned: percentScore / 100 * Number(assignment.points_possible), pointsPossible: Number(assignment.points_possible) } : {}),
         teacherRubric: {
           id: teacherRubric.id,
           revision: new Date(teacherRubric.updated_at).toISOString(),
@@ -8406,12 +8408,12 @@ app.put("/api/assignments/:assignmentId/teacher-designed-rubric", authenticateJW
           updated_at = NOW()
         RETURNING id, assignment_id, title, level_count, criteria_json, created_at, updated_at
         ), linked AS (
-          UPDATE assignments SET scoring_method = 'teacher_designed_rubric_ho'
+          UPDATE assignments SET scoring_method = $5
           WHERE id = $1 RETURNING id
         )
         SELECT saved.* FROM saved JOIN linked ON linked.id = saved.assignment_id
       `,
-      [assignmentId, title, levelCount, JSON.stringify(criteria)]
+      [assignmentId, title, levelCount, JSON.stringify(criteria), req.body.scoring_method === "teacher_rubric_single_score" ? "teacher_rubric_single_score" : "teacher_designed_rubric_ho"]
     );
 
     return res.json({

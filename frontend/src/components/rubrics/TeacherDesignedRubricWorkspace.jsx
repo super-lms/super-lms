@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import authFetch from "../../services/authFetch";
 
-export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
+export default function TeacherDesignedRubricWorkspace({ assignmentId, scoringMethod = "teacher_designed_rubric_ho" }) {
   const [title, setTitle] = useState("");
   const [levelCount, setLevelCount] = useState("6");
   const [levelLabels, setLevelLabels] = useState([]);
@@ -117,6 +117,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            scoring_method: scoringMethod,
             title: cleanTitle,
             level_count: Number(levelCount || 4),
             criteria: criteria.map((criterion) => ({ ...criterion, level_labels: levelLabels })),
@@ -303,7 +304,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
                   </div>
                 </div>
 
-                <label style={labelStyle}>
+                {scoringMethod !== "teacher_rubric_single_score" && <label style={labelStyle}>
                   KDU Mapping
                   <select
                     value={criterion.competency_bucket || ""}
@@ -315,7 +316,7 @@ export default function TeacherDesignedRubricWorkspace({ assignmentId }) {
                     <option value="KNOW">KNOW</option>
                     <option value="UNDERSTAND">UNDERSTAND</option>
                   </select>
-                </label>
+                </label>}
                 <div style={{ ...descriptorGridStyle, gridTemplateColumns: `repeat(${numericLevelCount}, minmax(0, 1fr))` }}>
                   {Array.from({ length: numericLevelCount }, (_, index) => index + 1).map(
                     (level) => (

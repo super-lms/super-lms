@@ -1490,13 +1490,14 @@ export default function EditAssignmentPage() {
                 <select value={scoringMethod} onChange={(e) => setScoringMethod(e.target.value)} style={inputStyle}>
                   <option value="rubric">KDU Competency Rubric</option>
                   <option value="teacher_designed_rubric_ho">Teacher Designed Rubric (HO)</option>
+                  <option value="teacher_rubric_single_score">Teacher Rubric → Single Score</option>
                   <option value="single_score_kdu">Single Score → KDU</option>
                   <option value="raw_sections">Raw Marks → KDU</option>
                 </select>
               </div>
 
-              {scoringMethod === "teacher_designed_rubric_ho" ? (
-                <TeacherDesignedRubricWorkspace assignmentId={assignmentId} />
+              {["teacher_designed_rubric_ho", "teacher_rubric_single_score"].includes(scoringMethod) ? (
+                <TeacherDesignedRubricWorkspace assignmentId={assignmentId} scoringMethod={scoringMethod} />
               ) : null}
 
               {scoringMethod === "single_score_kdu" ? (
