@@ -4,7 +4,8 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
   let ready;
   async function ensure() {
     await deadlines.ensure();
-    if (!ready) ready = pool.query(`CREATE TABLE IF NOT EXISTS assignment_held_work (
+    if (!ready) ready = (async () => {
+      await pool.query(`CREATE TABLE IF NOT EXISTS assignment_held_work (
       id SERIAL PRIMARY KEY, assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
       student_id INTEGER NOT NULL REFERENCES users(id), student_email TEXT NOT NULL, student_name TEXT NOT NULL,
       due_at TIMESTAMPTZ NOT NULL, method TEXT NOT NULL CHECK(method IN ('text','attachment')),
@@ -12,8 +13,14 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), approved_at TIMESTAMPTZ,
       submission_id INTEGER REFERENCES submissions(id) ON DELETE SET NULL);
       ALTER TABLE assignment_held_work ADD COLUMN IF NOT EXISTS declined_at TIMESTAMPTZ;
-      CREATE INDEX IF NOT EXISTS assignment_held_work_pending ON assignment_held_work(assignment_id,student_id) WHERE approved_at IS NULL;`)
-      .catch(error => { ready = null; throw error; });
+      CREATE INDEX IF NOT EXISTS assignment_held_work_pending ON assignment_held_work(assignment_id,student_id) WHERE approved_at IS NULL;`);
+      // Prepare attachment storage before a late-work transaction starts.  In
+      // particular, a whole-class approval holds one transaction while it
+      // promotes several students; issuing schema setup from another pooled
+      // connection inside that transaction can cause the complete approval to
+      // roll back on a busy database.
+      await ensureAttachments();
+    })().catch(error => { ready = null; throw error; });
     await ready;
   }
   async function lock(client, assignmentId, studentId) {
@@ -34,7 +41,6 @@ function createHeldSubmissions(pool, deadlines, ensureAttachments) {
       FROM assignment_held_work
       WHERE assignment_id=$1 AND student_id=$2 AND approved_at IS NULL AND declined_at IS NULL ORDER BY id FOR UPDATE`, [assignmentId, studentId]);
     if (!held.rows.length) return 0;
-    await ensureAttachments();
     const first = held.rows[0];
     const existing = await client.query(`SELECT id FROM submissions WHERE assignment_id=$1
       AND (student_id=$2 OR LOWER(student_email)=$3) ORDER BY id LIMIT 1 FOR UPDATE`, [assignmentId, studentId, first.student_email]);
