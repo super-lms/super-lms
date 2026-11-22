@@ -1,3 +1,4 @@
+import StudentGradeCalculation from "../components/gradebook/StudentGradeCalculation.jsx";
 import { useAuth } from "../AuthContext.jsx";
 import { lookupStudentMatches } from "../services/teacherQuickLookup.js";
 import { displayAssignmentTime } from "../services/assignmentTime.js";
@@ -1049,6 +1050,14 @@ export default function GradebookPage() {
             </select>
           </div>
 
+          <div className="form-field" style={{maxWidth:"420px"}}>
+            <label htmlFor="gradebook-student-select" className="form-label">Student detail / Grade calculation</label>
+            <select id="gradebook-student-select" className="form-input" value={selectedStudentEmail}
+              onChange={event => {setSelectedStudentEmail(event.target.value); if(event.target.value) setActiveGradebookSection("selected-student");}}>
+              <option value="">Choose a student…</option>
+              {students.map(student => <option key={student.student_email} value={student.student_email}>{student.student_name}{student.section_title ? ` — ${student.section_title}` : ""}</option>)}
+            </select>
+          </div>
           {status ? <p className="form-message">{status}</p> : null}
 
           {fromQuickLookup && gradebook && (requestedStudentId || requestedStudentEmail) && !(gradebook.students || []).some(row => lookupStudentMatches(row, requestedStudentId, requestedStudentEmail)) && <p role="alert">This student is no longer in this class roster. Return to the dashboard to search again.</p>}
@@ -1593,8 +1602,9 @@ export default function GradebookPage() {
           {activeGradebookSection === "selected-student" ? (
           <section className="panel">
             <h2>Selected Student Detail</h2>
+            <StudentGradeCalculation student={selectedStudent} groups={assessmentGroups} />
             <p className="section-subtitle">
-              Click a student above to view one focused competency snapshot instead of a long scrolling list.
+              Choose a student using the selector beside Gradebook View to see their current standing and calculation.
             </p>
 
             <div style={{ display: "grid", gap: "18px" }}>
