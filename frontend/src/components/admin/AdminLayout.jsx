@@ -136,6 +136,11 @@ export default function AdminLayout() {
           <NavItem to="/admin" style={getNavLinkStyle("/admin")} icon={LayoutDashboard}>
             Dashboard
           </NavItem>
+          <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
+
 
           <div style={sectionDividerStyle} />
 
@@ -235,10 +240,6 @@ export default function AdminLayout() {
             Teacher Workspace
           </Link>
 
-          <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
-            <LogOut size={18} />
-            <span>Logout</span>
-          </button>
         </nav>
       </div>
 

@@ -265,6 +265,11 @@ export default function Layout() {
             >
               Dashboard
             </NavItem>
+            <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
+              <LogOut size={18} />
+              <span>Logout</span>
+            </button>
+
             <NavItem to={`/student-view${courseContextQuery}`} style={getNavLinkStyle("/student-view")} icon={Eye}>
               Student View
             </NavItem>
@@ -369,10 +374,6 @@ export default function Layout() {
               </Link>
             ) : null}
 
-            <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
-              <LogOut size={18} />
-              <span>Logout</span>
-            </button>
           </nav>
         )}
 
@@ -381,6 +382,11 @@ export default function Layout() {
             <NavItem to="/student" style={getNavLinkStyle("/student")} icon={BookOpen}>
               My Learning
             </NavItem>
+            <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
+              <LogOut size={18} />
+              <span>Logout</span>
+            </button>
+
             <NavItem to="/student-read-aloud" style={getNavLinkStyle("/student-read-aloud")} icon={BookOpen}>Read aloud</NavItem>
             <NavItem to="/student-progress" style={getNavLinkStyle("/student-progress")} icon={BarChart3}>
               My Progress
@@ -402,10 +408,6 @@ export default function Layout() {
               }}
             />
 
-            <button type="button" onClick={logout} style={logoutButtonStyle} title="Logout">
-              <LogOut size={18} />
-              <span>Logout</span>
-            </button>
           </nav>
         )}
       </div>
