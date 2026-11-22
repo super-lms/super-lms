@@ -1,3 +1,4 @@
+import StudentGradeCalculation from "../components/gradebook/StudentGradeCalculation.jsx";
 import {readableFile} from "../services/documentReader.js"
 import {StudentWhatIfControls, StudentWhatIfScore} from "../components/student/StudentWhatIfGrades.jsx"
 import {whatIfGrades} from "../services/whatIfGrades.js"
@@ -1696,6 +1697,11 @@ export default function StudentDashboardPage() {
         {selectedCourseId ? (
           <>
             <div style={{display:showPortalSection("dashboard","courses","marks","feedback","assignments","missing")?undefined:"none"}}><StudentWhatIfControls open={whatIfOpen} onToggle={toggleWhatIf} onReset={()=>setWhatIfDraft({courseId:selectedCourseId,open:true,scores:{}})} result={whatIfResult} standing={formatAverage(gradedAverage)} disabled={whatIfLoading} /></div>
+            {!whatIfLoading && <details key={`grade-calculation-${selectedCourseId}`} className="panel" style={{display:showPortalSection("dashboard","courses","marks","feedback","assignments","missing")?undefined:"none"}}>
+              <summary style={{cursor:"pointer",fontWeight:700,padding:"10px 0"}}>How is my grade calculated?</summary>
+              <StudentGradeCalculation student={{...dashboard?.raw?.gradebook, student_name:"My current course mark"}} groups={dashboard?.raw?.gradebook?.assessment_groups || []} />
+              <p>This uses your actual saved grades. What-if scores are shown separately and do not change this calculation.</p>
+            </details>}
             <section
               className="panel"
               ref={courseWorkspaceRef}

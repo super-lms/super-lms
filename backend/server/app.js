@@ -6642,7 +6642,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
     // never changes an already-calculated course mark.
     const standingAssignmentsResult = await pool.query(
       `
-      SELECT a.id, a.subcategory_id,
+      SELECT a.id, a.subcategory_id, cs.name AS subcategory_name, cc.name AS category_name,
         ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS course_weight_percent
       FROM assignments a
       LEFT JOIN category_subcategories cs ON cs.id = a.subcategory_id
@@ -6652,6 +6652,12 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       `,
       [contentCourseId, courseId]
     );
+
+    const standingGroupsResult = await pool.query(`
+      SELECT cs.id AS subcategory_id, cs.name AS subcategory_name, cc.name AS category_name,
+        ((cc.weight_percent * cs.weight_percent_of_parent) / 100.0) AS course_weight_percent
+      FROM course_categories cc JOIN category_subcategories cs ON cs.course_category_id = cc.id
+      WHERE cc.course_id = $1 ORDER BY cc.id, cs.id`, [contentCourseId]);
 
     const lessonsResult = await pool.query(
       `
@@ -6731,7 +6737,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
       earnedCoursePoints += average * weight / 100;
       gradedWeightPercent += weight;
-      groupBreakdown.set(key, { subcategory_id: assignment.subcategory_id, score_total: scores.reduce((sum, value) => sum + value, 0), graded_count: scores.length, average_score: Number(average.toFixed(2)), course_weight_percent: weight });
+      groupBreakdown.set(key, { category_name: assignment.category_name, subcategory_name: assignment.subcategory_name, earned_course_points: Number((average * weight / 100).toFixed(2)), subcategory_id: assignment.subcategory_id, score_total: scores.reduce((sum, value) => sum + value, 0), graded_count: scores.length, average_score: Number(average.toFixed(2)), course_weight_percent: weight });
     });
     const currentPercent = gradedWeightPercent > 0
       ? Number((earnedCoursePoints / gradedWeightPercent * 100).toFixed(2))
@@ -6745,6 +6751,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/dashboard", authenticateJ
       content_course_id: contentCourseId,
       submissionStatesByAssignmentId,
       gradebook: {
+        assessment_groups: standingGroupsResult.rows,
         group_breakdown: Array.from(groupBreakdown.values()),
         earned_course_points: Number(earnedCoursePoints.toFixed(2)),
         graded_weight_percent: Number(gradedWeightPercent.toFixed(2)),
