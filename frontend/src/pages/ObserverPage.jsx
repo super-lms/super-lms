@@ -1,3 +1,4 @@
+import HomeroomGradebook from "../components/HomeroomGradebook.jsx";
 import ObserverSpreadsheetGradebook from "../components/ObserverSpreadsheetGradebook.jsx"
 import HomeroomCourseSummary from "../components/HomeroomCourseSummary.jsx"
 import {loadHomeroomCourseSummaries} from "../services/homeroomCourseSummary.js"
@@ -915,6 +916,7 @@ export default function ObserverPage() {
         </div>
       </div>
 
+      <HomeroomGradebook />
       {loading ? <p>{t.loadingPortal}</p> : null}
       {error ? <p style={{ color: "#991b1b" }}>{error}</p> : null}
 

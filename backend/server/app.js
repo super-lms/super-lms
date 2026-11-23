@@ -13415,7 +13415,7 @@ app.get("/api/students/:studentEmail/courses/:courseId/report", authenticateJWT,
 
 
 /* GET KDU ASSESSMENT GROUP GRADEBOOK */
-app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
+async function readKduGradebook(req, res) {
   try {
     if (typeof submissionDeadlines !== "undefined") await submissionDeadlines.ensure();
     if (typeof heldSubmissions !== "undefined") await heldSubmissions.ensure();
@@ -13656,8 +13656,14 @@ const students = studentsResult.rows.map((student) => {
     console.error("GET /api/classes/:classId/kdu-gradebook failed:", err);
     return res.status(500).json({ error: "Failed to load KDU gradebook" });
   }
-});
+}
 
+
+
+app.get("/api/classes/:classId/kdu-gradebook", authenticateJWT, requireRole("admin", "teacher"), readKduGradebook);
+const homeroomGradebook = require('./homeroomGradebook').createHomeroomGradebook({pool,readGradebook:readKduGradebook});
+app.get('/api/homeroom/course-gradebooks', authenticateJWT, requireRole('observer'), homeroomGradebook.courses);
+app.get('/api/homeroom/course-gradebooks/:classId', authenticateJWT, requireRole('observer'), homeroomGradebook.gradebook);
 
 /* GET GRADEBOOK - 6 POINT RUBRIC TO PERCENT PIPELINE */
 app.get("/api/classes/:classId/gradebook", authenticateJWT, requireRole("admin", "teacher"), async (req, res) => {
