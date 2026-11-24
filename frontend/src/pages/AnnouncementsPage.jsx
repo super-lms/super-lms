@@ -8,6 +8,11 @@ import authFetch from '../services/authFetch.js';
 import './AnnouncementsPage.css';
 import AnnouncementGroupLookup from '../components/AnnouncementGroupLookup.jsx';
 const isImage = file => /\.(png|jpe?g)$/i.test(file.filename || file.name || '');
+const extensionOf = file => {
+  const name = file?.filename || file?.name || '';
+  const match = name.match(/(\.[^.]+)$/);
+  return match ? match[1].toLowerCase() : '';
+};
 function AnnouncementImage({file}) {
   const [url,setUrl]=useState(''),[failed,setFailed]=useState(false);
   useEffect(()=>{
@@ -95,12 +100,29 @@ export default function AnnouncementsPage() {
   async function openFile(file,download=false) {
     setError('');setBusy(true);
     try {
-      const res=await authFetch(`/api/announcements/files/${file.id}${download?'':'?preview=true'}`);
+      const extension=extensionOf(file);
+      // CSV, text and spreadsheets have structured, server-side previews. Word
+      // documents need their original bytes so Mammoth can preserve embedded
+      // images (for example, a QR code) in the reader view.
+      const structuredPreview=!download&&['.xlsx','.csv','.txt'].includes(extension);
+      const res=await authFetch(`/api/announcements/files/${file.id}${structuredPreview?'?preview=true':''}`);
       if(!res.ok)throw Error((await res.json()).error);
-      if(!download && res.headers.get('content-type')?.includes('application/json')) {setPreview({name:file.filename,...await res.json()});return;}
+      if(structuredPreview && res.headers.get('content-type')?.includes('application/json')) {setPreview({name:file.filename,...await res.json()});return;}
       const blob=await res.blob(),url=URL.createObjectURL(blob);
       if(download){const link=document.createElement('a');link.href=url;link.download=file.filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-      else setPreview({name:file.filename,url,type:blob.type});
+      else if(extension==='.docx') {
+        try {
+          const imported=await import('mammoth/mammoth.browser.js');
+          const mammoth=imported.default||imported;
+          const result=await mammoth.convertToHtml({arrayBuffer:await blob.arrayBuffer()});
+          if(!result.value.trim())throw Error('The document does not contain readable content.');
+          URL.revokeObjectURL(url);
+          setPreview({name:file.filename,html:result.value,messages:result.messages||[]});
+        } catch(previewError) {
+          URL.revokeObjectURL(url);
+          throw Error(`This Word document could not be previewed. Use Download to open the original file. ${previewError.message||''}`.trim());
+        }
+      } else setPreview({name:file.filename,url,type:blob.type});
     }catch(err){setError(err.message||'Unable to open this document.');}finally{setBusy(false);}
   }
   const visible=items.filter(item=>`${item.title} ${item.body} ${item.files.map(f=>f.filename).join(' ')}`.toLowerCase().includes(query.toLowerCase()));
@@ -142,6 +164,7 @@ export default function AnnouncementsPage() {
     </article>)}
     {preview&&<dialog ref={previewRef} className="announcement-preview" onClose={()=>setPreview(null)}><div className="announcement-actions"><h2>{preview.name}</h2><button autoFocus onClick={()=>setPreview(null)}>Close</button></div>
       {preview.text!==undefined&&<pre>{preview.text}</pre>}
+      {preview.html!==undefined&&<><p className="announcement-preview-note">This is a read-only preview. Use Download to keep the original Word formatting and editable file.</p><iframe className="announcement-docx-preview" title={`${preview.name} document preview`} sandbox="" srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.5;margin:24px;color:#172536}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #cbd5e1;padding:6px;text-align:left}</style></head><body>${preview.html}</body></html>`}/>{preview.messages?.length>0&&<p className="announcement-preview-note">Some Word layout details may differ in this browser preview. The downloaded file remains unchanged.</p>}</>}
       {!!preview.groupings?.length&&<AnnouncementGroupLookup groups={preview.groupings}/>}
       {preview.sheets&&<><p>{preview.note}</p>{preview.sheets.map(sheet=><section key={sheet.name}><h3>{sheet.name} — document preview</h3><div className="announcement-table"><table><tbody>{sheet.rows.map((row,i)=><tr key={i}>{row.map((cell,j)=>i===0?<th key={j}>{String(cell)}</th>:<td key={j}>{String(cell)}</td>)}</tr>)}</tbody></table></div></section>)}</>}
       {preview.url&&(preview.type?.startsWith('image/')?<img src={preview.url} alt={preview.name}/>:<iframe title={preview.name} src={preview.url}/>)}
