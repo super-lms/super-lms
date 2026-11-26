@@ -1311,6 +1311,8 @@ export default function GradebookPage() {
                           >
                             {assignment.title || "Untitled Assignment"}
                           </button>
+                          <details className="gradebook-column-details">
+                            <summary>Details / Fill all</summary>
                           <div
                             style={{ marginTop: "8px", marginBottom: "10px", padding: "10px", border: "1px solid #93c5fd", borderRadius: "8px", background: "#eff6ff", color: "#172033" }}
                             onDragStart={event => event.stopPropagation()}
@@ -1366,6 +1368,8 @@ export default function GradebookPage() {
                           <div style={spreadsheetAssignmentMetaStyle}>
                             <strong>Evidence Tier:</strong> {assignment.subcategory_name || "Not assigned"}
                           </div>
+
+                          </details>
 
                         </th>
                       ))}
@@ -1461,7 +1465,7 @@ export default function GradebookPage() {
                               ) : null}
                               <details style={{ marginTop: 4, fontSize: 12 }}>
                                 <summary style={{ cursor: "pointer", color: "#475569" }}>
-                                  Override missing-work status
+                                  Missing-work options
                                 </summary>
                                 <label style={{ display: "block", marginTop: 5 }}>
                                   <input

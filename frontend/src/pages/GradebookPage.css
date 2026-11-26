@@ -11,3 +11,15 @@
     display: table-header-group;
   }
 }
+
+/* Compact spreadsheet: preserve readable controls while exposing more students. */
+.spreadsheet-gradebook-scroll th,
+.spreadsheet-gradebook-scroll td { padding: 6px 8px !important; }
+.spreadsheet-gradebook-scroll thead th { vertical-align: top; }
+.spreadsheet-gradebook-scroll tbody td { font-size: 13px; }
+.spreadsheet-gradebook-scroll tbody select { width: auto; max-width: 108px; font-size: 12px; padding: 3px; }
+.spreadsheet-gradebook-scroll tbody input[type="text"] { padding: 4px; width: 58px; }
+.spreadsheet-gradebook-scroll tbody details { font-size: 11px !important; }
+.gradebook-column-details { margin-top: 6px; font-size: 12px; font-weight: normal; text-transform: none; }
+.gradebook-column-details > summary { cursor: pointer; padding: 4px 0; color: #475569; }
+@media print { .gradebook-column-details > summary { display: none; } }
