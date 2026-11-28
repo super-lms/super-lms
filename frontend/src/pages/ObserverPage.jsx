@@ -1,3 +1,4 @@
+import StudentTimetableLookup from "../components/StudentTimetableLookup.jsx";
 import HomeroomGradebook from "../components/HomeroomGradebook.jsx";
 import ObserverSpreadsheetGradebook from "../components/ObserverSpreadsheetGradebook.jsx"
 import HomeroomCourseSummary from "../components/HomeroomCourseSummary.jsx"
@@ -916,6 +917,7 @@ export default function ObserverPage() {
         </div>
       </div>
 
+      <StudentTimetableLookup />
       <HomeroomGradebook />
       {loading ? <p>{t.loadingPortal}</p> : null}
       {error ? <p style={{ color: "#991b1b" }}>{error}</p> : null}

@@ -1,0 +1,241 @@
+{
+  "schoolYear": "2026-2027",
+  "semester": "Semester 1",
+  "source": "3.09 Master Schedule 2026-27",
+  "entries": [
+    {
+      "block": 4,
+      "course": "Accounting 11 for 12s",
+      "teacher": "Dr. B",
+      "room": "201"
+    },
+    {
+      "block": 1,
+      "course": "PE 10B",
+      "teacher": "Mr. Nolan Hansen",
+      "room": "Gym"
+    },
+    {
+      "block": 2,
+      "course": "PE 10C",
+      "teacher": "Mr. Nolan Hansen",
+      "room": "Gym"
+    },
+    {
+      "block": 3,
+      "course": "PE 10D",
+      "teacher": "Mr. Nolan Hansen",
+      "room": "Gym"
+    },
+    {
+      "block": 4,
+      "course": "PE 10A",
+      "teacher": "Mr. Nolan Hansen",
+      "room": "Gym"
+    },
+    {
+      "block": 1,
+      "course": "CTS 10A",
+      "teacher": "Dr. Carrie Fang",
+      "room": "506"
+    },
+    {
+      "block": 2,
+      "course": "CTS 10D",
+      "teacher": "Dr. Carrie Fang",
+      "room": "506"
+    },
+    {
+      "block": 3,
+      "course": "CTS 10C",
+      "teacher": "Dr. Carrie Fang",
+      "room": "506"
+    },
+    {
+      "block": 4,
+      "course": "CTS 10B",
+      "teacher": "Dr. Carrie Fang",
+      "room": "506"
+    },
+    {
+      "block": 1,
+      "course": "Physics 11A",
+      "teacher": "Mr. Harry Feng",
+      "room": "502"
+    },
+    {
+      "block": 2,
+      "course": "Pre-Cal 11C",
+      "teacher": "Mr. Harry Feng",
+      "room": "502"
+    },
+    {
+      "block": 3,
+      "course": "Pre-Cal 11B",
+      "teacher": "Mr. Harry Feng",
+      "room": "502"
+    },
+    {
+      "block": 1,
+      "course": "Physics 12B",
+      "teacher": "Mr. Alan Robinson",
+      "room": "402"
+    },
+    {
+      "block": 2,
+      "course": "Physics 12C",
+      "teacher": "Mr. Alan Robinson",
+      "room": "402"
+    },
+    {
+      "block": 3,
+      "course": "Physics 12A",
+      "teacher": "Mr. Alan Robinson",
+      "room": "402"
+    },
+    {
+      "block": 1,
+      "course": "EFP 12A",
+      "teacher": "Ms. Charmaine Moses",
+      "room": "406"
+    },
+    {
+      "block": 2,
+      "course": "EFP 12B",
+      "teacher": "Ms. Charmaine Moses",
+      "room": "406"
+    },
+    {
+      "block": 3,
+      "course": "EFP 12C",
+      "teacher": "Ms. Charmaine Moses",
+      "room": "406"
+    },
+    {
+      "block": 1,
+      "course": "Physical GeoG 11B",
+      "teacher": "Ms. Nicoline Van der Watt",
+      "room": "302"
+    },
+    {
+      "block": 2,
+      "course": "Social Studies 10B",
+      "teacher": "Ms. Nicoline Van der Watt",
+      "room": "302"
+    },
+    {
+      "block": 3,
+      "course": "Social Studies 10A",
+      "teacher": "Ms. Nicoline Van der Watt",
+      "room": "302"
+    },
+    {
+      "block": 4,
+      "course": "Physical GeoG 11C",
+      "teacher": "Ms. Nicoline Van der Watt",
+      "room": "302"
+    },
+    {
+      "block": 1,
+      "course": "CLC 12C",
+      "teacher": "Mr. David Cheng",
+      "room": "204"
+    },
+    {
+      "block": 2,
+      "course": "CLC 12A",
+      "teacher": "Mr. David Cheng",
+      "room": "204"
+    },
+    {
+      "block": 3,
+      "course": "CLC 12B",
+      "teacher": "Mr. David Cheng",
+      "room": "204"
+    },
+    {
+      "block": 4,
+      "course": "Science 10D",
+      "teacher": "Mr. David Cheng",
+      "room": "204"
+    },
+    {
+      "block": 2,
+      "course": "ELSL 11B",
+      "teacher": "Mrs. Jennifer Boyd",
+      "room": "306"
+    },
+    {
+      "block": 3,
+      "course": "ELSL 11C",
+      "teacher": "Mrs. Jennifer Boyd",
+      "room": "306"
+    },
+    {
+      "block": 4,
+      "course": "ELSL 11A",
+      "teacher": "Mrs. Jennifer Boyd",
+      "room": "306"
+    },
+    {
+      "block": 1,
+      "course": "Spoken Language / New Media 10D",
+      "teacher": "Mr. Michael Samuels",
+      "room": "305"
+    },
+    {
+      "block": 2,
+      "course": "Spoken Language / New Media 10A",
+      "teacher": "Mr. Michael Samuels",
+      "room": "305"
+    },
+    {
+      "block": 3,
+      "course": "Spoken Language / New Media 10B",
+      "teacher": "Mr. Michael Samuels",
+      "room": "305"
+    },
+    {
+      "block": 4,
+      "course": "Spoken  Language / New Media 10C",
+      "teacher": "Mr. Michael Samuels",
+      "room": "305"
+    },
+    {
+      "block": 1,
+      "course": "Chemistry 11 C",
+      "teacher": "Dr. Vainer",
+      "room": "505"
+    },
+    {
+      "block": 3,
+      "course": "Chemistry 11A",
+      "teacher": "Dr. Vainer",
+      "room": "505"
+    },
+    {
+      "block": 4,
+      "course": "Chem 12C",
+      "teacher": "Dr. Vainer",
+      "room": "505"
+    },
+    {
+      "block": 1,
+      "course": "FMP 10C",
+      "teacher": "Mr. Niu",
+      "room": "405"
+    },
+    {
+      "block": 2,
+      "course": "Acct 11A team teach with Dr. B.",
+      "teacher": "Mr. Niu",
+      "room": "405"
+    },
+    {
+      "block": 4,
+      "course": "Accounting 11B",
+      "teacher": "Mr. Niu",
+      "room": "405"
+    }
+  ]
+}

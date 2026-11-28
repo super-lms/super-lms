@@ -1,3 +1,4 @@
+import StudentTimetableLookup from "../../components/StudentTimetableLookup.jsx";
 import AdminRiskAlerts from '../../components/AdminRiskAlerts.jsx'
 import { useNavigate } from "react-router-dom"
 
@@ -25,6 +26,7 @@ export default function AdminDashboardPage() {
         <AdminCard title="Safe Reports" value="Student safety review" onClick={() => navigate("/admin/safe-reports")} />
         <AdminCard title="Analytics" value="Pilot readiness" onClick={() => navigate("/admin/analytics")} />
       </div>
+      <StudentTimetableLookup />
       <AdminRiskAlerts />
     </div>
   )

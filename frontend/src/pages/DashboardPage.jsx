@@ -1,3 +1,4 @@
+import StudentTimetableLookup from "../components/StudentTimetableLookup.jsx";
 import SchoolCalendarPage from "./SchoolCalendarPage.jsx"
 import { getKduCellLabel, getKduCellDescriptor } from "../services/teacherHeatmapDisplay.js"
 import TeacherQuickLookup from "../components/TeacherQuickLookup.jsx"
@@ -727,6 +728,7 @@ export default function DashboardPage() {
 
       <div className="content-area" style={{ display: "grid", gap: "18px" }}>
         <SchoolCalendarPage embedded />
+        <StudentTimetableLookup />
         <TeacherQuickLookup students={students} courses={courses} teacherId={teacherId} onOpen={goTo} />
         <section className="panel">
           <h2 style={{ marginTop: 0, fontSize: "28px" }}>My Teaching Dashboard</h2>

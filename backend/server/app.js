@@ -13414,6 +13414,8 @@ app.get("/api/students/:studentEmail/courses/:courseId/report", authenticateJWT,
   require("./studentCourseReport").createStudentReportHandler({ pool, generateReport: generateCourseReport }));
 
 
+app.get('/api/student-timetable-lookup', authenticateJWT, requireRole('admin','teacher','observer'), require('./studentTimetable').createStudentTimetable({pool}));
+
 /* GET KDU ASSESSMENT GROUP GRADEBOOK */
 async function readKduGradebook(req, res) {
   try {
